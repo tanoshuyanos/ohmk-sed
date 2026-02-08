@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { RefreshCw, Phone, MessageCircle, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2 } from 'lucide-react';
 
-// ВАЖНО: Ссылка на ваш Google Script (та же самая)
+// ВАЖНО: Ссылка на ваш Google Script
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; 
 
 const supabase = createClient(
@@ -114,7 +114,6 @@ export default function SED() {
         else if (action === 'НА ДОРАБОТКУ') { nextStep = "KOMER_FIX"; newStatus = "ОДОБРЕНО"; }
         else { newStatus = "ОТКАЗ ФИН.ДИР"; nextStep = "CLOSED_REJECTED"; }
     }
-    // Для Юриста обновление идет через загрузку файла, но оставим для совместимости
     else if (role === 'LAWYER') {
         if (action === 'ЗАГРУЖЕН ПРОЕКТ') { newStatus = "В работе"; nextStep = "FINANCE_REVIEW"; }
         else if (action === 'ЗАГРУЖЕН ФИНАЛ') { newStatus = "Договор подписан"; nextStep = "FINANCE_DEAL"; }
@@ -147,7 +146,6 @@ export default function SED() {
       const file = fileInput.files[0];
       setUploadStatus('uploading');
       
-      // Имитация прогресса (так как fetch не дает честный прогресс при отправке base64)
       let progress = 0;
       const interval = setInterval(() => {
           progress += 10;
@@ -155,17 +153,14 @@ export default function SED() {
           setUploadProgress(progress);
       }, 300);
 
-      // 1. Читаем файл в Base64
       const reader = new FileReader();
       reader.readAsDataURL(file);
       reader.onload = async function() {
           const base64 = reader.result;
-
           try {
-              // 2. Отправляем в Google Script
-              const response = await fetch(STAND_URL, {
+              await fetch(STAND_URL, {
                   method: 'POST',
-                  mode: 'no-cors', // Важно для GAS
+                  mode: 'no-cors',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
                       file: base64,
@@ -173,7 +168,7 @@ export default function SED() {
                       reqNum: modal.req.req_number,
                       contractNum: contractNum,
                       amount: amount,
-                      type: modal.type // 'DRAFT' или 'FINAL'
+                      type: modal.type
                   })
               });
 
@@ -181,9 +176,6 @@ export default function SED() {
               setUploadProgress(100);
               setUploadStatus('success');
 
-              // 3. Обновляем статус в Supabase
-              // Мы не знаем точную ссылку, которую вернул GAS (из-за no-cors), 
-              // но GAS сам обновит Google таблицу, а мы обновим статус здесь.
               setTimeout(async () => {
                   if (modal.type === 'DRAFT') {
                       await updateStatus(modal.req, "ЗАГРУЖЕН ПРОЕКТ", { draft_url: "Загружено на Google Drive" });
@@ -194,7 +186,6 @@ export default function SED() {
                   setUploadStatus('');
                   setUploadProgress(0);
               }, 1500);
-
           } catch (e) {
               clearInterval(interval);
               setUploadStatus('error');
@@ -251,7 +242,6 @@ export default function SED() {
             </div>
          )}
 
-         {/* --- КНОПКИ ДЕЙСТВИЙ --- */}
          {viewMode === 'active' && (
              <div className="pl-3 flex flex-wrap gap-2">
                  {role === 'FIN_DIR' && (
@@ -268,19 +258,13 @@ export default function SED() {
                        <button onClick={()=>updateStatus(req, "Отсутствует")} className="flex-1 border border-red-500 text-red-500 py-2 rounded text-xs font-bold">НЕТ</button>
                      </>
                  )}
-                 
-                 {/* КНОПКИ ЮРИСТА - ВЫЗОВ ОКНА */}
+                 {/* КНОПКИ ЮРИСТА */}
                  {role === 'LAWYER' && req.current_step === "LAWYER_PROJECT" && (
-                     <button onClick={() => setModal({ open: true, req: req, type: 'DRAFT' })} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold flex justify-center items-center gap-2">
-                        <UploadCloud size={18}/> ЗАГРУЗИТЬ ПРОЕКТ
-                     </button>
+                     <button onClick={() => setModal({ open: true, req: req, type: 'DRAFT' })} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold flex justify-center items-center gap-2"><UploadCloud size={18}/> ЗАГРУЗИТЬ ПРОЕКТ</button>
                  )}
                  {role === 'LAWYER' && (req.current_step === "LAWYER_FINAL" || req.status === "Договор подписан") && !req.contract_url && (
-                     <button onClick={() => setModal({ open: true, req: req, type: 'FINAL' })} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold flex justify-center items-center gap-2">
-                        <UploadCloud size={18}/> ЗАГРУЗИТЬ ФИНАЛ
-                     </button>
+                     <button onClick={() => setModal({ open: true, req: req, type: 'FINAL' })} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold flex justify-center items-center gap-2"><UploadCloud size={18}/> ЗАГРУЗИТЬ ФИНАЛ</button>
                  )}
-
                  {role === 'FINANCE' && (
                     <>
                        <button onClick={()=>updateStatus(req, req.current_step==="FINANCE_REVIEW" ? "ПРОЕКТ СОГЛАСОВАН" : "ОДОБРЕНО")} className="flex-1 bg-green-600 py-2 rounded text-white text-xs font-bold">ОДОБРИТЬ</button>
@@ -301,6 +285,17 @@ export default function SED() {
     );
   };
 
+  // --- ЭКРАН ВХОДА ---
+  if (!role) return (
+    <div className="min-h-screen bg-[#0d1117] flex flex-col items-center justify-center p-4">
+      <div className="text-center mb-8"><h1 className="text-4xl font-bold text-blue-500 tracking-widest">ОХМК СЭД</h1><p className="text-gray-500 text-xs mt-2">CORPORATE SYSTEM</p></div>
+      <form onSubmit={handleLogin} className="flex flex-col gap-4 w-64">
+        <input type="password" value={pin} onChange={e => setPin(e.target.value)} className="bg-[#161b22] border-2 border-[#30363d] text-white text-4xl text-center p-4 rounded-2xl outline-none focus:border-blue-500 transition" placeholder="••••" autoFocus />
+        <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl text-lg shadow-lg shadow-blue-900/20 transition transform active:scale-95">ВОЙТИ</button>
+      </form>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-[#0d1117] text-gray-300 pb-20 p-2 max-w-xl mx-auto font-sans">
       
@@ -309,42 +304,28 @@ export default function SED() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
               <div className="bg-[#161b22] border border-gray-700 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
                   <div className="flex justify-between items-center mb-6">
-                      <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                          <UploadCloud className="text-blue-500"/> 
-                          {modal.type === 'DRAFT' ? 'Загрузка Проекта' : 'Загрузка Финала'}
-                      </h3>
+                      <h3 className="text-lg font-bold text-white flex items-center gap-2"><UploadCloud className="text-blue-500"/> {modal.type === 'DRAFT' ? 'Загрузка Проекта' : 'Загрузка Финала'}</h3>
                       <button onClick={()=>setModal({...modal, open:false})}><X className="text-gray-500 hover:text-white"/></button>
                   </div>
 
                   {uploadStatus === 'success' ? (
-                      <div className="text-center py-6">
-                          <CheckCircle size={48} className="text-green-500 mx-auto mb-2"/>
-                          <p className="text-white font-bold">Файл успешно загружен!</p>
-                      </div>
+                      <div className="text-center py-6"><CheckCircle size={48} className="text-green-500 mx-auto mb-2"/><p className="text-white font-bold">Файл успешно загружен!</p></div>
                   ) : (
                       <div className="space-y-4">
                           <div className="bg-[#0d1117] border border-dashed border-gray-600 rounded-xl p-6 text-center cursor-pointer hover:border-blue-500 transition relative">
                               <input type="file" id="file-upload" className="absolute inset-0 opacity-0 cursor-pointer"/>
                               <div className="text-gray-400 text-sm">Нажмите, чтобы выбрать файл<br/>(PDF, DOCX)</div>
                           </div>
-                          
                           {modal.type === 'FINAL' && (
                               <div className="space-y-2">
                                   <input id="contract-num" className="w-full bg-[#0d1117] border border-gray-700 rounded p-3 text-white text-sm" placeholder="№ Договора"/>
                                   <input id="contract-amount" type="number" className="w-full bg-[#0d1117] border border-gray-700 rounded p-3 text-white text-sm" placeholder="Сумма договора"/>
                               </div>
                           )}
-
                           {uploadStatus === 'uploading' && (
-                              <div className="w-full bg-gray-700 rounded-full h-2.5 mt-4 overflow-hidden">
-                                  <div className="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style={{width: `${uploadProgress}%`}}></div>
-                              </div>
+                              <div className="w-full bg-gray-700 rounded-full h-2.5 mt-4 overflow-hidden"><div className="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style={{width: `${uploadProgress}%`}}></div></div>
                           )}
-
-                          <button onClick={handleUpload} disabled={uploadStatus === 'uploading'} 
-                              className={`w-full py-3 rounded-xl font-bold text-white transition ${uploadStatus==='uploading' ? 'bg-gray-600 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500'}`}>
-                              {uploadStatus === 'uploading' ? `Загрузка ${uploadProgress}%...` : 'ОТПРАВИТЬ'}
-                          </button>
+                          <button onClick={handleUpload} disabled={uploadStatus === 'uploading'} className={`w-full py-3 rounded-xl font-bold text-white transition ${uploadStatus==='uploading' ? 'bg-gray-600 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500'}`}>{uploadStatus === 'uploading' ? `Загрузка ${uploadProgress}%...` : 'ОТПРАВИТЬ'}</button>
                       </div>
                   )}
               </div>
