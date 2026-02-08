@@ -3,10 +3,10 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { RefreshCw, Phone, MessageCircle, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, ExternalLink, AlertTriangle, Table } from 'lucide-react';
 
-// --- НАСТРОЙКИ ---
-const APP_VERSION = "v1.2 (Fix Links)"; // <--- ОБНОВИЛ ВЕРСИЮ
+const APP_VERSION = "v1.3 (Registry Auto-Fill)"; 
+// ВАЖНО: Ваша ссылка на скрипт
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; 
-const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВСТАВЬТЕ_ВАШУ_ССЫЛКУ.../edit"; // <--- НЕ ЗАБУДЬТЕ ВЕРНУТЬ ССЫЛКУ
+const SHEET_URL = "https://docs.google.com/spreadsheets/d/ВАША_ССЫЛКА_НА_ТАБЛИЦУ"; 
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -159,7 +159,7 @@ export default function SED() {
       reader.onload = async function() {
           const base64 = reader.result;
           try {
-              // ОТПРАВЛЯЕМ В ГУГЛ. ОН САМ ОБНОВИТ СУПАБЕЙЗ.
+              // ОТПРАВЛЯЕМ В ГУГЛ
               await fetch(STAND_URL, {
                   method: 'POST',
                   mode: 'no-cors',
@@ -179,14 +179,13 @@ export default function SED() {
               setUploadProgress(100);
               setUploadStatus('success');
 
-              // ЖДЕМ 4 СЕКУНДЫ (ДАЕМ ГУГЛУ ВРЕМЯ) И ПРОСТО ОБНОВЛЯЕМ ЭКРАН
-              // МЫ НЕ ПИШЕМ НИЧЕГО В БАЗУ САМИ!
+              // ЖДЕМ 5 СЕКУНД (Даем Гуглу время на запись в реестр и базу)
               setTimeout(async () => {
                   setModal({ open: false, req: null, type: '' });
                   setUploadStatus('');
                   setUploadProgress(0);
-                  fetchRequests(role, viewMode); // Просто тянем свежие данные
-              }, 4000);
+                  fetchRequests(role, viewMode);
+              }, 5000);
 
           } catch (e) {
               clearInterval(interval);
@@ -258,6 +257,7 @@ export default function SED() {
              </div>
          )}
 
+         {/* --- ПРАВКИ --- */}
          {role === 'LAWYER' && req.fix_comment && req.status === "НА ДОРАБОТКУ" && (
              <div className="pl-3 mb-3 p-3 bg-orange-900/20 border border-orange-800 rounded flex gap-2 items-start text-orange-200 text-xs">
                  <AlertTriangle size={16} className="shrink-0 mt-0.5"/>
@@ -341,7 +341,7 @@ export default function SED() {
 
   return (
     <div className="min-h-screen bg-[#0d1117] text-gray-300 pb-20 font-sans flex flex-col">
-      {/* ... (Модальное окно и остальной UI без изменений) ... */}
+      {/* ... (Модальное окно и остальной UI) ... */}
       {modal.open && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
               <div className="bg-[#161b22] border border-gray-700 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
