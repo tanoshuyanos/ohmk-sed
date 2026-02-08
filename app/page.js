@@ -5,7 +5,7 @@ import { RefreshCw, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X,
 
 const APP_VERSION = "v1.4 (Smart Forms)"; 
 // ВАЖНО: Ваша ссылка на скрипт (doPost)
-const STAND_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; 
+const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
 
 const supabase = createClient(
