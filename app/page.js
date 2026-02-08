@@ -1,12 +1,12 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { RefreshCw, Phone, MessageCircle, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, ExternalLink, AlertTriangle, LayoutGrid, Table } from 'lucide-react';
+import { RefreshCw, Phone, MessageCircle, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, ExternalLink, AlertTriangle, Table } from 'lucide-react';
 
 // --- НАСТРОЙКИ ---
-const APP_VERSION = "v1.1 (Update 08.02)"; // <--- МЕНЯЙТЕ ЭТО ПРИ КАЖДОМ ОБНОВЛЕНИИ
+const APP_VERSION = "v1.2 (Fix Links)"; // <--- ОБНОВИЛ ВЕРСИЮ
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; 
-const SHEET_URL = "https://docs.google.com/spreadsheets/d/ВАША_ССЫЛКА_НА_ТАБЛИЦУ"; // <--- ВСТАВЬТЕ ССЫЛКУ НА ГУГЛ ТАБЛИЦУ
+const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВСТАВЬТЕ_ВАШУ_ССЫЛКУ.../edit"; // <--- НЕ ЗАБУДЬТЕ ВЕРНУТЬ ССЫЛКУ
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -62,7 +62,6 @@ export default function SED() {
     const { data } = await query;
     let filtered = data || [];
 
-    // Фильтрация на клиенте (оставляем как было для точности)
     if (currentMode === 'active') {
         if (userRole === "KOMER") {
             filtered = filtered.filter(req => {
@@ -151,7 +150,7 @@ export default function SED() {
       let progress = 0;
       const interval = setInterval(() => {
           progress += 5;
-          if (progress > 85) progress = 85;
+          if (progress > 90) progress = 90;
           setUploadProgress(progress);
       }, 500);
 
@@ -160,6 +159,7 @@ export default function SED() {
       reader.onload = async function() {
           const base64 = reader.result;
           try {
+              // ОТПРАВЛЯЕМ В ГУГЛ. ОН САМ ОБНОВИТ СУПАБЕЙЗ.
               await fetch(STAND_URL, {
                   method: 'POST',
                   mode: 'no-cors',
@@ -179,17 +179,15 @@ export default function SED() {
               setUploadProgress(100);
               setUploadStatus('success');
 
+              // ЖДЕМ 4 СЕКУНДЫ (ДАЕМ ГУГЛУ ВРЕМЯ) И ПРОСТО ОБНОВЛЯЕМ ЭКРАН
+              // МЫ НЕ ПИШЕМ НИЧЕГО В БАЗУ САМИ!
               setTimeout(async () => {
-                  if (modal.type === 'DRAFT') {
-                      await updateStatus(modal.req, "ЗАГРУЖЕН ПРОЕКТ", { draft_url: "Загружено на Google Drive" });
-                  } else {
-                      await updateStatus(modal.req, "ЗАГРУЖЕН ФИНАЛ", { contract_url: "Загружено на Google Drive" });
-                  }
                   setModal({ open: false, req: null, type: '' });
                   setUploadStatus('');
                   setUploadProgress(0);
-                  fetchRequests(role, viewMode);
-              }, 3000);
+                  fetchRequests(role, viewMode); // Просто тянем свежие данные
+              }, 4000);
+
           } catch (e) {
               clearInterval(interval);
               setUploadStatus('error');
@@ -244,6 +242,7 @@ export default function SED() {
             )}
          </div>
 
+         {/* --- ДОКУМЕНТЫ (ССЫЛКИ) --- */}
          {(req.draft_url || req.contract_url) && (
              <div className="pl-3 mb-4 space-y-2">
                  {req.draft_url && (
@@ -342,6 +341,7 @@ export default function SED() {
 
   return (
     <div className="min-h-screen bg-[#0d1117] text-gray-300 pb-20 font-sans flex flex-col">
+      {/* ... (Модальное окно и остальной UI без изменений) ... */}
       {modal.open && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
               <div className="bg-[#161b22] border border-gray-700 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
