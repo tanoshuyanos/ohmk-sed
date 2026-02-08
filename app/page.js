@@ -1,12 +1,12 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { RefreshCw, Phone, MessageCircle, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, ExternalLink, AlertTriangle, Table } from 'lucide-react';
+import { RefreshCw, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, ExternalLink, AlertTriangle, Table, Truck, Wrench } from 'lucide-react';
 
-const APP_VERSION = "v1.3 (Registry Auto-Fill)"; 
-// ВАЖНО: Ваша ссылка на скрипт
+const APP_VERSION = "v1.4 (Smart Forms)"; 
+// ВАЖНО: Ваша ссылка на скрипт (doPost)
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; 
-const SHEET_URL = "https://docs.google.com/spreadsheets/d/ВАША_ССЫЛКА_НА_ТАБЛИЦУ"; 
+const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -179,13 +179,12 @@ export default function SED() {
               setUploadProgress(100);
               setUploadStatus('success');
 
-              // ЖДЕМ 5 СЕКУНД (Даем Гуглу время на запись в реестр и базу)
               setTimeout(async () => {
                   setModal({ open: false, req: null, type: '' });
                   setUploadStatus('');
                   setUploadProgress(0);
                   fetchRequests(role, viewMode);
-              }, 5000);
+              }, 4000);
 
           } catch (e) {
               clearInterval(interval);
@@ -224,20 +223,28 @@ export default function SED() {
             </div>
          </div>
 
+         {/* --- ПОЛНЫЕ ДАННЫЕ О ЗАЯВКЕ --- */}
          <div className="text-sm pl-3 mb-4 space-y-2 text-gray-300 flex-grow">
-            <div>
-                <b className="text-blue-400 text-[10px] uppercase block mb-1">{isService ? 'Услуга / Работа' : 'Товар'}</b>
-                <span className="text-white text-base font-bold">{req.item_name}</span>
+            <div className="flex items-start gap-2">
+                {isService ? <Wrench className="text-purple-400 shrink-0" size={18}/> : <Truck className="text-blue-400 shrink-0" size={18}/>}
+                <div>
+                    <b className={`${isService ? 'text-purple-400' : 'text-blue-400'} text-[10px] uppercase block mb-1`}>
+                        {isService ? 'Услуга / Работа' : 'Товар'}
+                    </b>
+                    <span className="text-white text-base font-bold leading-tight block">{req.item_name}</span>
+                </div>
             </div>
-            <div className="bg-[#0d1117] p-2 rounded border border-gray-800">
+            
+            <div className="bg-[#0d1117] p-3 rounded border border-gray-800 mt-2">
                 <span className="text-gray-300 text-xs whitespace-pre-wrap">{req.spec || "Нет описания"}</span>
             </div>
-            <div className="flex justify-between border-t border-gray-800 pt-2 mt-2">
-                <div className="flex flex-col"><span className="text-[10px] text-gray-500">ОБЪЕКТ</span><span className="text-xs text-white">{req.dept}</span></div>
-                <div className="flex flex-col text-right"><span className="text-[10px] text-gray-500">ИНИЦИАТОР</span><span className="text-xs text-white">{req.initiator}</span></div>
+
+            <div className="grid grid-cols-2 gap-2 border-t border-gray-800 pt-3 mt-2">
+                <div><span className="text-[10px] text-gray-500 block">ОБЪЕКТ</span><span className="text-xs text-white font-medium">{req.dept}</span></div>
+                <div className="text-right"><span className="text-[10px] text-gray-500 block">ИНИЦИАТОР</span><span className="text-xs text-white font-medium">{req.initiator}</span></div>
             </div>
             {!isService && (
-                 <div className="pt-1"><span className="text-[10px] text-gray-500">КОЛИЧЕСТВО:</span> <span className="text-white font-bold ml-2">{req.qty}</span></div>
+                 <div className="pt-2 border-t border-gray-800 mt-1"><span className="text-[10px] text-gray-500">КОЛИЧЕСТВО:</span> <span className="text-white font-bold ml-2 text-sm">{req.qty}</span></div>
             )}
          </div>
 
@@ -265,25 +272,72 @@ export default function SED() {
              </div>
          )}
 
+         {/* --- ФОРМА КОМЕРА (АДАПТИВНАЯ) --- */}
          {role === 'KOMER' && viewMode === 'active' && (
             <div className="pl-3 bg-pink-900/10 border-l-2 border-pink-500 p-3 rounded mb-3">
-               <div className="space-y-2">
-                   <input className="w-full bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" placeholder="Поставщик" value={formData.seller||''} onChange={e=>setFormData({...formData, seller: e.target.value})}/>
-                   <div className="flex gap-2">
-                       <input className="w-1/2 bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" type="number" placeholder="Цена" value={formData.price||''} onChange={e=>{const val=e.target.value; setFormData({...formData, price: val, total: (val*(req.qty||1)).toFixed(2)})}}/>
-                       <div className="w-1/2 p-2 text-right text-pink-400 font-bold text-sm">{formData.total} ₸</div>
-                   </div>
-                   <input className="w-full bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" placeholder="Условия оплаты" value={formData.payment||''} onChange={e=>setFormData({...formData, payment: e.target.value})}/>
-                   <input className="w-full bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" placeholder="Срок" value={formData.term||''} onChange={e=>setFormData({...formData, term: e.target.value})}/>
-                   <input className="w-full bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" placeholder="Гарантия" value={formData.warranty||''} onChange={e=>setFormData({...formData, warranty: e.target.value})}/>
+               <div className="flex items-center gap-2 mb-2">
+                   <span className="text-[10px] bg-pink-500 text-white px-1.5 py-0.5 rounded font-bold">КОММЕРЧЕСКИЙ</span>
                </div>
-               <div className="flex gap-2 mt-4">
-                  <button onClick={()=>updateStatus(req, "ОТКАЗ")} className="flex-1 bg-red-900/40 text-red-300 py-2 rounded text-xs border border-red-900">ОТКАЗ</button>
-                  <button onClick={()=>updateStatus(req, "ОДОБРЕНО", { legal_info: formData })} className="flex-[2] bg-green-600 text-white py-2 rounded text-xs font-bold">ОТПРАВИТЬ</button>
+               <div className="space-y-3">
+                   {/* ПОСТАВЩИК */}
+                   <div>
+                       <label className="text-[10px] text-gray-400 block mb-1">Поставщик</label>
+                       <input className="w-full bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs focus:border-pink-500 outline-none" 
+                           placeholder="Название..." value={formData.seller||''} onChange={e=>setFormData({...formData, seller: e.target.value})}/>
+                   </div>
+
+                   {/* ЦЕНА И СУММА */}
+                   <div className="flex gap-2">
+                       <div className="flex-1">
+                           <label className="text-[10px] text-gray-400 block mb-1">Цена {isService ? '(общая)' : 'за ед.'}</label>
+                           <input className="w-full bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs focus:border-pink-500 outline-none" type="number" 
+                               placeholder="0.00" value={formData.price||''} 
+                               onChange={e=>{
+                                   const val=e.target.value; 
+                                   // Если услуга - сумма равна цене. Если товар - умножаем на qty
+                                   const qty = isService ? 1 : (parseFloat(req.qty) || 1);
+                                   setFormData({...formData, price: val, total: (val*qty).toFixed(2)})
+                               }}/>
+                       </div>
+                       <div className="flex-1">
+                           <label className="text-[10px] text-gray-400 block mb-1">Итого (с НДС)</label>
+                           <div className="w-full p-2 text-right text-pink-400 font-bold text-sm bg-[#0d1117]/50 rounded border border-pink-900/30">
+                               {formData.total || '0.00'} ₸
+                           </div>
+                       </div>
+                   </div>
+
+                   {/* УСЛОВИЯ */}
+                   <div>
+                       <label className="text-[10px] text-gray-400 block mb-1">Условия оплаты</label>
+                       <input className="w-full bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs focus:border-pink-500 outline-none" 
+                           placeholder="Напр: 100% постоплата" value={formData.payment||''} onChange={e=>setFormData({...formData, payment: e.target.value})}/>
+                   </div>
+                   
+                   <div>
+                       <label className="text-[10px] text-gray-400 block mb-1">Срок {isService ? 'выполнения' : 'поставки'}</label>
+                       <input className="w-full bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs focus:border-pink-500 outline-none" 
+                           placeholder="Дней..." value={formData.term||''} onChange={e=>setFormData({...formData, term: e.target.value})}/>
+                   </div>
+
+                   {/* ГАРАНТИЯ (ТОЛЬКО ДЛЯ ТОВАРОВ) */}
+                   {!isService && (
+                       <div>
+                           <label className="text-[10px] text-gray-400 block mb-1">Гарантия</label>
+                           <input className="w-full bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs focus:border-pink-500 outline-none" 
+                               placeholder="Месяцев..." value={formData.warranty||''} onChange={e=>setFormData({...formData, warranty: e.target.value})}/>
+                       </div>
+                   )}
+               </div>
+
+               <div className="flex gap-2 mt-4 pt-2 border-t border-pink-900/30">
+                  <button onClick={()=>updateStatus(req, "ОТКАЗ")} className="flex-1 bg-red-900/20 text-red-300 py-2 rounded text-xs border border-red-900 hover:bg-red-900 hover:text-white transition">ОТКАЗ</button>
+                  <button onClick={()=>updateStatus(req, "ОДОБРЕНО", { legal_info: formData })} className="flex-[2] bg-gradient-to-r from-green-700 to-green-600 text-white py-2 rounded text-xs font-bold shadow-lg shadow-green-900/20 hover:from-green-600 hover:to-green-500 transform active:scale-95 transition">ОТПРАВИТЬ ➜</button>
                </div>
             </div>
          )}
 
+         {/* --- КНОПКИ ДЕЙСТВИЙ (ОСТАЛЬНЫЕ РОЛИ) --- */}
          {viewMode === 'active' && (
              <div className="pl-3 flex flex-wrap gap-2 mt-auto">
                  {role === 'FIN_DIR' && (
@@ -341,7 +395,6 @@ export default function SED() {
 
   return (
     <div className="min-h-screen bg-[#0d1117] text-gray-300 pb-20 font-sans flex flex-col">
-      {/* ... (Модальное окно и остальной UI) ... */}
       {modal.open && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
               <div className="bg-[#161b22] border border-gray-700 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
@@ -409,7 +462,6 @@ export default function SED() {
           {loading && requests.length === 0 ? (
               <div className="text-center py-20 text-gray-500 animate-pulse">Загрузка данных...</div> 
           ) : (
-              // ВОТ ОНО - АДАПТИВНАЯ СЕТКА
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {requests.filter(r => searchQuery ? String(r.req_number).includes(searchQuery) : true).map(req => (
                       <RequestCard key={req.id} req={req} />
