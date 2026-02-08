@@ -1,7 +1,7 @@
 "use client";
 import { useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { RefreshCw, Phone, MessageCircle, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2 } from 'lucide-react';
+import { RefreshCw, Phone, MessageCircle, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, ExternalLink } from 'lucide-react';
 
 // ВАЖНО: Ссылка на ваш Google Script
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; 
@@ -20,9 +20,9 @@ export default function SED() {
   const [viewMode, setViewMode] = useState('active'); 
 
   // --- ОКНО ЗАГРУЗКИ ---
-  const [modal, setModal] = useState({ open: false, req: null, type: '' }); // type: 'DRAFT' или 'FINAL'
+  const [modal, setModal] = useState({ open: false, req: null, type: '' });
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadStatus, setUploadStatus] = useState(''); // 'uploading', 'success', 'error'
+  const [uploadStatus, setUploadStatus] = useState('');
 
   const ROLES = {
     "2223": "DIRECTOR", "0500": "KOMER", "777": "FIN_DIR", 
@@ -89,7 +89,7 @@ export default function SED() {
   const switchMode = (mode) => { setViewMode(mode); fetchRequests(role, mode); };
 
   const updateStatus = async (req, action, extraUpdates = {}) => {
-    if (role !== 'LAWYER' && !confirm(`Выполнить: ${action}?`)) return; // Юристов не спрашиваем, у них свое окно
+    if (role !== 'LAWYER' && !confirm(`Выполнить: ${action}?`)) return;
     setLoading(true);
 
     let updates = { ...extraUpdates, last_role: role };
@@ -134,7 +134,6 @@ export default function SED() {
     setLoading(false);
   };
 
-  // --- ЛОГИКА ЗАГРУЗКИ ФАЙЛА НА GOOGLE DRIVE ---
   const handleUpload = async () => {
       const fileInput = document.getElementById('file-upload');
       const contractNum = document.getElementById('contract-num')?.value || '';
@@ -194,7 +193,6 @@ export default function SED() {
       };
   };
 
-
   const RequestCard = ({ req }) => {
     const [formData, setFormData] = useState(req.legal_info || {});
     const [paySum, setPaySum] = useState('');
@@ -209,6 +207,7 @@ export default function SED() {
     return (
       <div className={`bg-[#161b22] border ${borderColor} rounded-xl p-5 mb-6 shadow-xl relative overflow-hidden group`}>
          <div className={`absolute left-0 top-0 bottom-0 w-1 ${stripColor}`}></div>
+         
          <div className="flex justify-between items-start mb-4 pl-3">
             <div>
                <h3 className="text-xl font-bold flex items-center gap-2 text-white">#{req.req_number}</h3>
@@ -222,6 +221,32 @@ export default function SED() {
             <div><b className="text-gray-500 text-[10px] uppercase">Инициатор:</b> {req.initiator} ({req.dept})</div>
             <div><b className="text-gray-500 text-[10px] uppercase">Кол-во:</b> <span className="text-white font-bold">{req.qty}</span></div>
          </div>
+
+         {/* --- БЛОК ДОКУМЕНТОВ (ТЕПЕРЬ ВИДЕН ВСЕМ, ОСОБЕННО ФИНАНСИСТУ) --- */}
+         {(req.draft_url || req.contract_url) && (
+             <div className="pl-3 mb-4 space-y-2">
+                 {req.draft_url && (
+                     <a href={req.draft_url} target="_blank" className="flex items-center gap-2 bg-blue-900/20 text-blue-400 p-3 rounded-lg border border-blue-900/50 hover:bg-blue-900/40 transition">
+                         <FileText size={20}/>
+                         <div className="flex flex-col">
+                             <span className="text-xs font-bold">ПРОЕКТ ДОГОВОРА</span>
+                             <span className="text-[10px] text-gray-400">Нажмите, чтобы открыть</span>
+                         </div>
+                         <ExternalLink size={14} className="ml-auto"/>
+                     </a>
+                 )}
+                 {req.contract_url && (
+                     <a href={req.contract_url} target="_blank" className="flex items-center gap-2 bg-green-900/20 text-green-400 p-3 rounded-lg border border-green-900/50 hover:bg-green-900/40 transition">
+                         <CheckCircle size={20}/>
+                         <div className="flex flex-col">
+                             <span className="text-xs font-bold">ПОДПИСАННЫЙ СКАН</span>
+                             <span className="text-[10px] text-gray-400">Нажмите, чтобы открыть</span>
+                         </div>
+                         <ExternalLink size={14} className="ml-auto"/>
+                     </a>
+                 )}
+             </div>
+         )}
 
          {role === 'KOMER' && viewMode === 'active' && (
             <div className="pl-3 bg-pink-900/10 border-l-2 border-pink-500 p-3 rounded mb-3">
@@ -258,7 +283,6 @@ export default function SED() {
                        <button onClick={()=>updateStatus(req, "Отсутствует")} className="flex-1 border border-red-500 text-red-500 py-2 rounded text-xs font-bold">НЕТ</button>
                      </>
                  )}
-                 {/* КНОПКИ ЮРИСТА */}
                  {role === 'LAWYER' && req.current_step === "LAWYER_PROJECT" && (
                      <button onClick={() => setModal({ open: true, req: req, type: 'DRAFT' })} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold flex justify-center items-center gap-2"><UploadCloud size={18}/> ЗАГРУЗИТЬ ПРОЕКТ</button>
                  )}
@@ -285,7 +309,6 @@ export default function SED() {
     );
   };
 
-  // --- ЭКРАН ВХОДА ---
   if (!role) return (
     <div className="min-h-screen bg-[#0d1117] flex flex-col items-center justify-center p-4">
       <div className="text-center mb-8"><h1 className="text-4xl font-bold text-blue-500 tracking-widest">ОХМК СЭД</h1><p className="text-gray-500 text-xs mt-2">CORPORATE SYSTEM</p></div>
@@ -298,8 +321,6 @@ export default function SED() {
 
   return (
     <div className="min-h-screen bg-[#0d1117] text-gray-300 pb-20 p-2 max-w-xl mx-auto font-sans">
-      
-      {/* МОДАЛЬНОЕ ОКНО ЗАГРУЗКИ */}
       {modal.open && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
               <div className="bg-[#161b22] border border-gray-700 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
@@ -307,7 +328,6 @@ export default function SED() {
                       <h3 className="text-lg font-bold text-white flex items-center gap-2"><UploadCloud className="text-blue-500"/> {modal.type === 'DRAFT' ? 'Загрузка Проекта' : 'Загрузка Финала'}</h3>
                       <button onClick={()=>setModal({...modal, open:false})}><X className="text-gray-500 hover:text-white"/></button>
                   </div>
-
                   {uploadStatus === 'success' ? (
                       <div className="text-center py-6"><CheckCircle size={48} className="text-green-500 mx-auto mb-2"/><p className="text-white font-bold">Файл успешно загружен!</p></div>
                   ) : (
@@ -331,8 +351,6 @@ export default function SED() {
               </div>
           </div>
       )}
-
-      {/* ШАПКА */}
       <div className="sticky top-0 z-20 bg-[#0d1117]/80 backdrop-blur pb-2">
           <div className="flex flex-col gap-3 mb-2 p-3 bg-[#161b22] border border-gray-700 rounded-xl shadow-lg">
              <div className="flex justify-between items-center border-b border-gray-700 pb-2 mb-1">
@@ -345,7 +363,6 @@ export default function SED() {
              </div>
           </div>
       </div>
-      
       {loading && requests.length === 0 ? <div className="text-center py-20 text-gray-500 animate-pulse">Загрузка...</div> : requests.map(req => <RequestCard key={req.id} req={req} />)}
       {!loading && requests.length === 0 && <div className="text-center py-20 opacity-30 flex flex-col items-center"><Archive size={48} className="mb-2"/><div>Пусто</div></div>}
     </div>
