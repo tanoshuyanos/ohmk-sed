@@ -1,9 +1,9 @@
 "use client";
 import { useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { RefreshCw, Phone, MessageCircle, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, ExternalLink } from 'lucide-react';
+import { RefreshCw, Phone, MessageCircle, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, ExternalLink, Calendar, Box, Truck } from 'lucide-react';
 
-// ВАЖНО: Ссылка на ваш Google Script
+// ВАЖНО: Ссылка на ваш Google Script (Новая версия!)
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; 
 
 const supabase = createClient(
@@ -115,8 +115,7 @@ export default function SED() {
         else { newStatus = "ОТКАЗ ФИН.ДИР"; nextStep = "CLOSED_REJECTED"; }
     }
     else if (role === 'LAWYER') {
-        if (action === 'ЗАГРУЖЕН ПРОЕКТ') { newStatus = "В работе"; nextStep = "FINANCE_REVIEW"; }
-        else if (action === 'ЗАГРУЖЕН ФИНАЛ') { newStatus = "Договор подписан"; nextStep = "FINANCE_DEAL"; }
+        // Статусы обновляются через загрузку файла, это резерв
     }
     else if (role === 'FINANCE') {
         if (action === 'ПРОЕКТ СОГЛАСОВАН') nextStep = "LAWYER_FINAL";
@@ -147,16 +146,17 @@ export default function SED() {
       
       let progress = 0;
       const interval = setInterval(() => {
-          progress += 10;
-          if (progress > 90) progress = 90;
+          progress += 5;
+          if (progress > 85) progress = 85;
           setUploadProgress(progress);
-      }, 300);
+      }, 500);
 
       const reader = new FileReader();
       reader.readAsDataURL(file);
       reader.onload = async function() {
           const base64 = reader.result;
           try {
+              // Отправляем в GAS, который обновит Supabase
               await fetch(STAND_URL, {
                   method: 'POST',
                   mode: 'no-cors',
@@ -165,6 +165,7 @@ export default function SED() {
                       file: base64,
                       fileName: file.name,
                       reqNum: modal.req.req_number,
+                      reqId: modal.req.id, // ID для Supabase
                       contractNum: contractNum,
                       amount: amount,
                       type: modal.type
@@ -175,16 +176,14 @@ export default function SED() {
               setUploadProgress(100);
               setUploadStatus('success');
 
+              // Ждем 3 секунды, пока GAS обновит базу, и обновляем экран
               setTimeout(async () => {
-                  if (modal.type === 'DRAFT') {
-                      await updateStatus(modal.req, "ЗАГРУЖЕН ПРОЕКТ", { draft_url: "Загружено на Google Drive" });
-                  } else {
-                      await updateStatus(modal.req, "ЗАГРУЖЕН ФИНАЛ", { contract_url: "Загружено на Google Drive" });
-                  }
                   setModal({ open: false, req: null, type: '' });
                   setUploadStatus('');
                   setUploadProgress(0);
-              }, 1500);
+                  fetchRequests(role, viewMode); // Обновляем данные с сервера
+              }, 3000);
+
           } catch (e) {
               clearInterval(interval);
               setUploadStatus('error');
@@ -196,6 +195,8 @@ export default function SED() {
   const RequestCard = ({ req }) => {
     const [formData, setFormData] = useState(req.legal_info || {});
     const [paySum, setPaySum] = useState('');
+    
+    const isService = (req.item_name || "").toLowerCase().includes("услуг");
 
     let borderColor = 'border-[#30363d]';
     let stripColor = 'bg-blue-600';
@@ -216,13 +217,31 @@ export default function SED() {
             <div className="text-right"><div className="bg-gray-800 text-gray-400 px-2 py-1 rounded text-xs border border-gray-700">{req.status}</div></div>
          </div>
 
-         <div className="text-sm pl-3 mb-4 space-y-1 text-gray-300">
-            <div><b className="text-gray-500 text-[10px] uppercase">Товар:</b> {req.item_name}</div>
-            <div><b className="text-gray-500 text-[10px] uppercase">Инициатор:</b> {req.initiator} ({req.dept})</div>
-            <div><b className="text-gray-500 text-[10px] uppercase">Кол-во:</b> <span className="text-white font-bold">{req.qty}</span></div>
+         {/* --- ПОЛНЫЕ ДАННЫЕ О ЗАЯВКЕ --- */}
+         <div className="text-sm pl-3 mb-4 space-y-2 text-gray-300">
+            <div>
+                <b className="text-blue-400 text-[10px] uppercase block mb-1">{isService ? 'Услуга / Работа' : 'Товар'}</b>
+                <span className="text-white text-base font-bold">{req.item_name}</span>
+            </div>
+            
+            <div className="bg-[#0d1117] p-2 rounded border border-gray-800">
+                <b className="text-gray-500 text-[10px] uppercase block">Описание / Спецификация:</b>
+                <span className="text-gray-300 text-xs whitespace-pre-wrap">{req.spec || "Нет описания"}</span>
+            </div>
+
+            <div className="flex gap-4">
+                <div><b className="text-gray-500 text-[10px] uppercase block">Объект:</b> <span className="text-white text-xs">{req.dept}</span></div>
+                <div><b className="text-gray-500 text-[10px] uppercase block">Инициатор:</b> <span className="text-white text-xs">{req.initiator}</span></div>
+            </div>
+            
+            {!isService && (
+                 <div><b className="text-gray-500 text-[10px] uppercase block">Количество:</b> <span className="text-white font-bold">{req.qty}</span></div>
+            )}
+            
+            {req.urgency && <div><b className="text-red-400 text-[10px] uppercase block">Срочность:</b> <span className="text-red-300 text-xs">{req.urgency}</span></div>}
          </div>
 
-         {/* --- БЛОК ДОКУМЕНТОВ (ТЕПЕРЬ ВИДЕН ВСЕМ, ОСОБЕННО ФИНАНСИСТУ) --- */}
+         {/* --- ДОКУМЕНТЫ (ССЫЛКИ) --- */}
          {(req.draft_url || req.contract_url) && (
              <div className="pl-3 mb-4 space-y-2">
                  {req.draft_url && (
@@ -240,7 +259,7 @@ export default function SED() {
                          <CheckCircle size={20}/>
                          <div className="flex flex-col">
                              <span className="text-xs font-bold">ПОДПИСАННЫЙ СКАН</span>
-                             <span className="text-[10px] text-gray-400">Нажмите, чтобы открыть</span>
+                             <span className="text-[10px] text-gray-400">№ {req.contractNum || '...'}</span>
                          </div>
                          <ExternalLink size={14} className="ml-auto"/>
                      </a>
@@ -248,12 +267,13 @@ export default function SED() {
              </div>
          )}
 
+         {/* --- ФОРМА КОМЕРА --- */}
          {role === 'KOMER' && viewMode === 'active' && (
             <div className="pl-3 bg-pink-900/10 border-l-2 border-pink-500 p-3 rounded mb-3">
                <div className="space-y-2">
                    <input className="w-full bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" placeholder="Поставщик" value={formData.seller||''} onChange={e=>setFormData({...formData, seller: e.target.value})}/>
                    <div className="flex gap-2">
-                       <input className="w-1/2 bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" type="number" placeholder="Цена" value={formData.price||''} onChange={e=>{const val=e.target.value; setFormData({...formData, price: val, total: (val*(req.qty||0)).toFixed(2)})}}/>
+                       <input className="w-1/2 bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" type="number" placeholder="Цена" value={formData.price||''} onChange={e=>{const val=e.target.value; setFormData({...formData, price: val, total: (val*(req.qty||1)).toFixed(2)})}}/>
                        <div className="w-1/2 p-2 text-right text-pink-400 font-bold text-sm">{formData.total} ₸</div>
                    </div>
                    <input className="w-full bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" placeholder="Условия оплаты" value={formData.payment||''} onChange={e=>setFormData({...formData, payment: e.target.value})}/>
@@ -267,6 +287,7 @@ export default function SED() {
             </div>
          )}
 
+         {/* --- КНОПКИ ДЕЙСТВИЙ --- */}
          {viewMode === 'active' && (
              <div className="pl-3 flex flex-wrap gap-2">
                  {role === 'FIN_DIR' && (
@@ -283,12 +304,14 @@ export default function SED() {
                        <button onClick={()=>updateStatus(req, "Отсутствует")} className="flex-1 border border-red-500 text-red-500 py-2 rounded text-xs font-bold">НЕТ</button>
                      </>
                  )}
+                 {/* ЮРИСТ */}
                  {role === 'LAWYER' && req.current_step === "LAWYER_PROJECT" && (
                      <button onClick={() => setModal({ open: true, req: req, type: 'DRAFT' })} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold flex justify-center items-center gap-2"><UploadCloud size={18}/> ЗАГРУЗИТЬ ПРОЕКТ</button>
                  )}
                  {role === 'LAWYER' && (req.current_step === "LAWYER_FINAL" || req.status === "Договор подписан") && !req.contract_url && (
                      <button onClick={() => setModal({ open: true, req: req, type: 'FINAL' })} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold flex justify-center items-center gap-2"><UploadCloud size={18}/> ЗАГРУЗИТЬ ФИНАЛ</button>
                  )}
+                 {/* ФИНАНСИСТ */}
                  {role === 'FINANCE' && (
                     <>
                        <button onClick={()=>updateStatus(req, req.current_step==="FINANCE_REVIEW" ? "ПРОЕКТ СОГЛАСОВАН" : "ОДОБРЕНО")} className="flex-1 bg-green-600 py-2 rounded text-white text-xs font-bold">ОДОБРИТЬ</button>
