@@ -3,8 +3,8 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { RefreshCw, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, ExternalLink, AlertTriangle, Table, Truck, Wrench, Info, DollarSign, Calendar, MapPin, Eye } from 'lucide-react';
 
-const APP_VERSION = "v2.4 (Shared Data & Fin Review)"; 
-// ВАША ССЫЛКА НА СКРИПТ (НЕ МЕНЯЙТЕ)
+const APP_VERSION = "v2.5 (Fin Review Fix)"; 
+// ВАША ССЫЛКА
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
 
@@ -49,24 +49,27 @@ export default function SED() {
 
     if (currentMode === 'history') query = query.limit(100);
     else {
+        // --- ФИЛЬТРЫ ОЧЕРЕДЕЙ (ИСПРАВЛЕНЫ) ---
         if (userRole === "DIRECTOR") query = query.or('current_step.eq.DIRECTOR_CHECK,status.eq.В ОБРАБОТКЕ,status.eq.new,status.eq.director_review');
         else if (userRole === "FIN_DIR") query = query.eq('status', 'ДОГОВОР').neq('fin_dir_status', 'ОДОБРЕНО').neq('fin_dir_status', 'ОТКАЗ');
         else if (userRole === "KOMER") query = query.or('status.eq.ОДОБРЕНО,fin_dir_status.eq.НА ДОРАБОТКУ');
         else if (userRole && userRole.includes("SKLAD")) query = query.eq('status', 'ОДОБРЕНО');
         
-        // ЮРИСТЫ: Видят свою очередь (Проект, Финал, Правки)
+        // ЮРИСТЫ: Видят по шагам (Проект, Финал, Правки)
         else if (userRole === "LAWYER") query = query.or('current_step.eq.LAWYER_PROJECT,current_step.eq.LAWYER_FINAL,current_step.eq.LAWYER_FIX');
         
-        // ФИНАНСЫ: Видят, когда есть ДРАФТ, но нет Финала (проверка условий)
-        else if (userRole === "FINANCE") query = query.neq('draft_url', null).is('contract_url', null).neq('status', 'ОДОБРЕНО');
+        // ФИНАНСЫ: Видят по шагам (Проверка проекта, Проверка сделки)
+        // Исправили: Теперь ищем по current_step, а не по наличию ссылок
+        else if (userRole === "FINANCE") query = query.or('current_step.eq.FINANCE_REVIEW,current_step.eq.FINANCE_DEAL');
         
         // БУХГАЛТЕР: Видит готовые к оплате
-        else if (userRole === "ACCOUNTANT") query = query.eq('status', 'ОДОБРЕНО К ОПЛАТЕ');
+        else if (userRole === "ACCOUNTANT") query = query.eq('status', 'ОДОБРЕНО К ОПЛАТЕ').or('current_step.eq.ACCOUNTANT_PAY');
     }
 
     const { data } = await query;
     let filtered = data || [];
 
+    // Дополнительная фильтрация на клиенте (на всякий случай)
     if (currentMode === 'active') {
         if (userRole === "KOMER") {
             filtered = filtered.filter(req => {
@@ -86,8 +89,10 @@ export default function SED() {
                 return !req.warehouse_status || req.warehouse_status === "ВЫБРАТЬ";
             });
         }
+        // Финансист: убираем уже одобренные
         if (userRole === "FINANCE") filtered = filtered.filter(req => req.status !== "ОДОБРЕНО");
-        if (userRole === "LAWYER") filtered = filtered.filter(req => !req.contract_url);
+        // Юрист: убираем, если договор уже подписан (сделано)
+        if (userRole === "LAWYER") filtered = filtered.filter(req => req.status !== "ДОГОВОР ПОДПИСАН");
     }
     setRequests(filtered);
     setLoading(false);
@@ -200,12 +205,9 @@ export default function SED() {
         </div>
     );
 
-    // --- ОБЩИЙ КОМПОНЕНТ "ДАННЫЕ СДЕЛКИ" (ДЛЯ ВСЕХ) ---
     const DealInfoBlock = () => (
         <div className="w-full bg-[#0d1117] border border-gray-700/50 rounded-lg p-3 mb-3 mt-2">
-           <div className="text-[10px] text-gray-400 font-bold mb-2 uppercase tracking-wider flex items-center gap-2 border-b border-gray-800 pb-1">
-               <FileText size={12}/> Детали Сделки
-           </div>
+           <div className="text-[10px] text-gray-400 font-bold mb-2 uppercase tracking-wider flex items-center gap-2 border-b border-gray-800 pb-1"><FileText size={12}/> Детали Сделки</div>
            <div className="space-y-3">
                <div className="bg-gray-800/30 p-2 rounded border border-gray-700/50">
                    <div className="flex justify-between items-end mb-1"><span className="text-gray-500 text-[10px]">Поставщик</span><span className="text-blue-300 font-bold text-xs">{req.legal_info?.seller || "Не указан"}</span></div>
@@ -224,30 +226,16 @@ export default function SED() {
     return (
       <div className={`bg-[#161b22] border ${borderColor} rounded-xl p-5 shadow-xl relative overflow-hidden group flex flex-col h-full`}>
          <div className={`absolute left-0 top-0 bottom-0 w-1 ${stripColor}`}></div>
-         
          <div className="flex justify-between items-start mb-4 pl-3">
-            <div>
-               <h3 className="text-xl font-bold flex items-center gap-2 text-white">#{req.req_number}</h3>
-               <div className="text-xs text-gray-500">{new Date(req.created_at).toLocaleDateString()}</div>
-            </div>
-            <div className="text-right">
-                <div className={`px-2 py-1 rounded text-xs border font-bold ${req.status.includes('ОТКАЗ') ? 'bg-red-900/40 text-red-400 border-red-800' : 'bg-gray-800 text-gray-400 border-gray-700'}`}>
-                    {req.status}
-                </div>
-            </div>
+            <div><h3 className="text-xl font-bold flex items-center gap-2 text-white">#{req.req_number}</h3><div className="text-xs text-gray-500">{new Date(req.created_at).toLocaleDateString()}</div></div>
+            <div className="text-right"><div className={`px-2 py-1 rounded text-xs border font-bold ${req.status.includes('ОТКАЗ') ? 'bg-red-900/40 text-red-400 border-red-800' : 'bg-gray-800 text-gray-400 border-gray-700'}`}>{req.status}</div></div>
          </div>
-
          <div className="text-sm pl-3 mb-4 space-y-2 text-gray-300 flex-grow">
             <div className="flex items-start gap-2">
                 {isService ? <Wrench className="text-purple-400 shrink-0" size={18}/> : <Truck className="text-blue-400 shrink-0" size={18}/>}
-                <div>
-                    <b className={`${isService ? 'text-purple-400' : 'text-blue-400'} text-[10px] uppercase block mb-1`}>{isService ? 'Услуга / Работа' : 'Товар'}</b>
-                    <span className="text-white text-base font-bold leading-tight block">{req.item_name}</span>
-                </div>
+                <div><b className={`${isService ? 'text-purple-400' : 'text-blue-400'} text-[10px] uppercase block mb-1`}>{isService ? 'Услуга / Работа' : 'Товар'}</b><span className="text-white text-base font-bold leading-tight block">{req.item_name}</span></div>
             </div>
-            <div className="bg-[#0d1117] p-3 rounded border border-gray-800 mt-2">
-                <span className="text-gray-300 text-xs whitespace-pre-wrap">{req.spec || "Нет описания"}</span>
-            </div>
+            <div className="bg-[#0d1117] p-3 rounded border border-gray-800 mt-2"><span className="text-gray-300 text-xs whitespace-pre-wrap">{req.spec || "Нет описания"}</span></div>
             <div className="grid grid-cols-2 gap-2 border-t border-gray-800 pt-3 mt-2">
                 <div><span className="text-[10px] text-gray-500 block">ОБЪЕКТ</span><span className="text-xs text-white font-medium">{req.dept}</span></div>
                 <div className="text-right"><span className="text-[10px] text-gray-500 block">ИНИЦИАТОР</span><span className="text-xs text-white font-medium">{req.initiator}</span></div>
@@ -255,11 +243,10 @@ export default function SED() {
             {!isService && <div className="pt-2 border-t border-gray-800 mt-1"><span className="text-[10px] text-gray-500">КОЛИЧЕСТВО:</span> <span className="text-white font-bold ml-2 text-sm">{req.qty}</span></div>}
          </div>
 
-         {/* --- ВСТАВКА ДАННЫХ ДЛЯ ПРОСМОТРА (ЮРИСТ, ФИНАНС, БУХ, ФИНДИР) --- */}
-         { (role === 'FIN_DIR' || role === 'LAWYER' || role === 'FINANCE' || role === 'ACCOUNTANT') && req.legal_info && (
-             <div className="pl-3 mb-3"><DealInfoBlock/></div>
-         )}
+         {/* --- БЛОК ПРОСМОТРА ДЕТАЛЕЙ (ДЛЯ ВСЕХ) --- */}
+         { (role === 'FIN_DIR' || role === 'LAWYER' || role === 'FINANCE' || role === 'ACCOUNTANT') && req.legal_info && (<div className="pl-3 mb-3"><DealInfoBlock/></div>)}
 
+         {/* --- ДОКУМЕНТЫ (ФИНАНСИСТ И ЮРИСТ ВИДЯТ ЭТО) --- */}
          {(req.draft_url || req.contract_url) && (
              <div className="pl-3 mb-4 space-y-2">
                  {req.draft_url && <a href={req.draft_url} target="_blank" className="flex items-center gap-2 bg-blue-900/20 text-blue-400 p-2 rounded border border-blue-900/50 hover:bg-blue-900/40 transition"><FileText size={16}/> <span className="text-xs font-bold">Проект договора</span> <ExternalLink size={12} className="ml-auto"/></a>}
@@ -270,11 +257,13 @@ export default function SED() {
          {req.fix_comment && req.status === "НА ДОРАБОТКУ" && <div className="pl-3 mb-3 p-3 bg-orange-900/20 border border-orange-800 rounded flex gap-2 items-start text-orange-200 text-xs"><AlertTriangle size={16} className="shrink-0 mt-0.5"/><div><b>ПРАВКИ:</b> {req.fix_comment}</div></div>}
          {role === 'KOMER' && req.warehouse_status === 'Частично' && req.fix_comment && <div className="pl-3 mb-3 p-3 bg-blue-900/20 border border-blue-500 rounded flex gap-2 items-start text-blue-300 text-xs"><Info size={16} className="shrink-0 mt-0.5"/><div><b>{req.fix_comment}</b></div></div>}
 
+         {/* --- ФОРМА КОМЕРА --- */}
          {role === 'KOMER' && viewMode === 'active' && (
             <div className="pl-3 bg-pink-900/10 border-l-2 border-pink-500 p-3 rounded mb-3">
+               {/* Форма Коммерческого (сокращена для краткости, она такая же как в v2.1) */}
                <div className="flex items-center gap-2 mb-2"><span className="text-[10px] bg-pink-500 text-white px-1.5 py-0.5 rounded font-bold">АНКЕТА ПОСТАВЩИКА</span></div>
                <div className="grid grid-cols-2 gap-2 text-xs">
-                   <div className="col-span-2"><label className="text-[9px] text-gray-400 block">Продавец</label><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" placeholder="ТОО/ИП..." value={formData.seller||''} onChange={e=>setFormData({...formData, seller: e.target.value})}/></div>
+                   <div className="col-span-2"><label className="text-[9px] text-gray-400 block">Продавец</label><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.seller||''} onChange={e=>setFormData({...formData, seller: e.target.value})}/></div>
                    <div><label className="text-[9px] text-gray-400 block">Покупатель</label><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.buyer||''} onChange={e=>setFormData({...formData, buyer: e.target.value})}/></div>
                    <div><label className="text-[9px] text-gray-400 block">НДС</label><select className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.vat} onChange={e=>setFormData({...formData, vat: e.target.value})}><option value="Да">Да</option><option value="Нет">Нет</option></select></div>
                    <div className="col-span-2"><label className="text-[9px] text-gray-400 block">Предмет договора</label><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.subject||''} onChange={e=>setFormData({...formData, subject: e.target.value})}/></div>
@@ -339,6 +328,7 @@ export default function SED() {
                  )}
                  {role === 'FINANCE' && (
                     <>
+                       {/* ФИНАНСИСТ ТЕПЕРЬ ВИДИТ ДАННЫЕ ВВЕРХУ (DealInfoBlock) */}
                        <button onClick={()=>updateStatus(req, "ПРОЕКТ СОГЛАСОВАН")} className="w-full bg-green-600 py-3 rounded-lg text-white text-xs font-bold mb-2">✅ СОГЛАСОВАТЬ ПРОЕКТ</button>
                        <div className="flex gap-2">
                            <button onClick={()=>{const r=prompt("Что исправить?"); if(r) updateStatus(req, "НА ДОРАБОТКУ", {fix_comment: r})}} className="flex-1 bg-orange-600 py-2 rounded text-white text-xs font-bold">ПРАВКИ</button>
@@ -372,7 +362,6 @@ export default function SED() {
 
   return (
     <div className="min-h-screen bg-[#0d1117] text-gray-300 pb-20 font-sans flex flex-col">
-      {/* МОДАЛКА И ШАПКА БЕЗ ИЗМЕНЕНИЙ */}
       {modal.open && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
               <div className="bg-[#161b22] border border-gray-700 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
