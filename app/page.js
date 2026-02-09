@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { RefreshCw, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, ExternalLink, AlertTriangle, Table, Truck, Wrench, Info, DollarSign, Calendar, MapPin } from 'lucide-react';
 
-const APP_VERSION = "v2.2 (Boss View)"; 
+const APP_VERSION = "v2.3 (Lawyer Fix)"; 
 // ВАША ССЫЛКА
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
@@ -53,7 +53,11 @@ export default function SED() {
         else if (userRole === "FIN_DIR") query = query.eq('status', 'ДОГОВОР').neq('fin_dir_status', 'ОДОБРЕНО').neq('fin_dir_status', 'ОТКАЗ');
         else if (userRole === "KOMER") query = query.or('status.eq.ОДОБРЕНО,fin_dir_status.eq.НА ДОРАБОТКУ');
         else if (userRole && userRole.includes("SKLAD")) query = query.eq('status', 'ОДОБРЕНО');
-        else if (userRole === "LAWYER") query = query.eq('fin_dir_status', 'ОДОБРЕНО').is('contract_url', null);
+        
+        // --- ИСПРАВЛЕНИЕ ДЛЯ ЮРИСТОВ ---
+        // Ищем четко по шагам, где очередь Юриста
+        else if (userRole === "LAWYER") query = query.or('current_step.eq.LAWYER_PROJECT,current_step.eq.LAWYER_FINAL,current_step.eq.LAWYER_FIX');
+        
         else if (userRole === "FINANCE") query = query.neq('draft_url', null).is('contract_url', null).neq('status', 'ОДОБРЕНО');
         else if (userRole === "ACCOUNTANT") query = query.eq('status', 'ОДОБРЕНО К ОПЛАТЕ');
     }
@@ -81,6 +85,8 @@ export default function SED() {
             });
         }
         if (userRole === "FINANCE") filtered = filtered.filter(req => req.status !== "ОДОБРЕНО");
+        // Юрист: не показываем уже подписанные (на всякий случай)
+        if (userRole === "LAWYER") filtered = filtered.filter(req => !req.contract_url);
     }
     setRequests(filtered);
     setLoading(false);
@@ -128,6 +134,7 @@ export default function SED() {
     }
     else if (role === 'FIN_DIR') {
         updates.fin_dir_status = action;
+        // ВАЖНО: Если ОДОБРЕНО -> Ставим шаг LAWYER_PROJECT
         if (action === 'ОДОБРЕНО') nextStep = "LAWYER_PROJECT";
         else if (action === 'НА ДОРАБОТКУ') { nextStep = "KOMER_FIX"; newStatus = "ОДОБРЕНО"; }
         else { newStatus = "ОТКАЗ ФИН.ДИР"; nextStep = "CLOSED_REJECTED"; }
@@ -172,6 +179,10 @@ export default function SED() {
       reader.onload = async function() {
           const base64 = reader.result;
           try {
+              // --- ОТПРАВЛЯЕМ ЮРИДИЧЕСКИЙ ШАГ В ГУГЛ ---
+              // Если это ПРОЕКТ (DRAFT), гугл поставит шаг FINANCE_REVIEW
+              // Если это ФИНАЛ (FINAL), гугл поставит шаг ОДОБРЕНО К ОПЛАТЕ
+              
               await fetch(STAND_URL, {
                   method: 'POST',
                   mode: 'no-cors',
@@ -266,7 +277,6 @@ export default function SED() {
             {!isService && <div className="pt-2 border-t border-gray-800 mt-1"><span className="text-[10px] text-gray-500">КОЛИЧЕСТВО:</span> <span className="text-white font-bold ml-2 text-sm">{req.qty}</span></div>}
          </div>
 
-         {/* --- ДОКУМЕНТЫ И ПРАВКИ --- */}
          {(req.draft_url || req.contract_url) && (
              <div className="pl-3 mb-4 space-y-2">
                  {req.draft_url && <a href={req.draft_url} target="_blank" className="flex items-center gap-2 bg-blue-900/20 text-blue-400 p-2 rounded border border-blue-900/50 hover:bg-blue-900/40 transition"><FileText size={16}/> <span className="text-xs font-bold">Проект договора</span> <ExternalLink size={12} className="ml-auto"/></a>}
@@ -276,7 +286,6 @@ export default function SED() {
          {req.fix_comment && req.status === "НА ДОРАБОТКУ" && <div className="pl-3 mb-3 p-3 bg-orange-900/20 border border-orange-800 rounded flex gap-2 items-start text-orange-200 text-xs"><AlertTriangle size={16} className="shrink-0 mt-0.5"/><div><b>ПРАВКИ:</b> {req.fix_comment}</div></div>}
          {role === 'KOMER' && req.warehouse_status === 'Частично' && req.fix_comment && <div className="pl-3 mb-3 p-3 bg-blue-900/20 border border-blue-500 rounded flex gap-2 items-start text-blue-300 text-xs"><Info size={16} className="shrink-0 mt-0.5"/><div><b>{req.fix_comment}</b></div></div>}
 
-         {/* --- ПОЛНАЯ ФОРМА КОМЕРА --- */}
          {role === 'KOMER' && viewMode === 'active' && (
             <div className="pl-3 bg-pink-900/10 border-l-2 border-pink-500 p-3 rounded mb-3">
                <div className="flex items-center gap-2 mb-2"><span className="text-[10px] bg-pink-500 text-white px-1.5 py-0.5 rounded font-bold">АНКЕТА ПОСТАВЩИКА</span></div>
@@ -301,7 +310,6 @@ export default function SED() {
             </div>
          )}
 
-         {/* --- КНОПКИ ДЕЙСТВИЙ (ОСТАЛЬНЫЕ) --- */}
          {viewMode === 'active' && (
              <div className="pl-3 flex flex-wrap gap-2 mt-auto">
                  {role === 'DIRECTOR' && (
@@ -312,25 +320,13 @@ export default function SED() {
                  )}
                  {role === 'FIN_DIR' && (
                      <>
-                       {/* --- BOSS VIEW ДЛЯ ФИН. ДИРЕКТОРА --- */}
                        <div className="w-full bg-[#0d1117] border border-purple-500/30 rounded-lg p-3 mb-3">
-                           <div className="text-[10px] text-purple-400 font-bold mb-2 uppercase tracking-wider flex items-center gap-2">
-                               <FileText size={12}/> Данные по сделке
-                           </div>
+                           <div className="text-[10px] text-purple-400 font-bold mb-2 uppercase tracking-wider flex items-center gap-2"><FileText size={12}/> Данные по сделке</div>
                            <div className="space-y-3">
-                               {/* БЛОК ДЕНЕГ */}
                                <div className="bg-purple-900/10 p-2 rounded border border-purple-500/20">
-                                   <div className="flex justify-between items-end mb-1">
-                                       <span className="text-gray-400 text-[10px]">Поставщик</span>
-                                       <span className="text-white font-bold text-xs">{req.legal_info?.seller}</span>
-                                   </div>
-                                   <div className="flex justify-between items-end">
-                                       <span className="text-gray-400 text-[10px]">ИТОГО (с НДС: {req.legal_info?.vat})</span>
-                                       <span className="text-purple-300 font-bold text-lg">{req.legal_info?.total} ₸</span>
-                                   </div>
+                                   <div className="flex justify-between items-end mb-1"><span className="text-gray-400 text-[10px]">Поставщик</span><span className="text-white font-bold text-xs">{req.legal_info?.seller}</span></div>
+                                   <div className="flex justify-between items-end"><span className="text-gray-400 text-[10px]">ИТОГО (с НДС: {req.legal_info?.vat})</span><span className="text-purple-300 font-bold text-lg">{req.legal_info?.total} ₸</span></div>
                                </div>
-                               
-                               {/* БЛОК ДЕТАЛЕЙ */}
                                <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                                    <DataRow label="Цена за ед." val={req.legal_info?.price} highlight/>
                                    <DataRow label="Количество" val={req.legal_info?.qty} highlight/>
@@ -341,7 +337,6 @@ export default function SED() {
                                </div>
                            </div>
                        </div>
-
                        <div className="flex gap-2">
                            <button onClick={()=>updateStatus(req, "ОДОБРЕНО")} className="flex-[2] bg-gradient-to-r from-green-600 to-green-500 py-3 rounded-lg text-white text-xs font-bold shadow-lg shadow-green-900/20 transform active:scale-95 transition">УТВЕРДИТЬ</button>
                            <button onClick={()=>{const r=prompt("Комментарий:"); if(r) updateStatus(req, "НА ДОРАБОТКУ", {fix_comment: r})}} className="flex-1 bg-orange-600 py-3 rounded-lg text-white text-xs font-bold transform active:scale-95 transition">ПРАВКИ</button>
@@ -409,7 +404,6 @@ export default function SED() {
 
   return (
     <div className="min-h-screen bg-[#0d1117] text-gray-300 pb-20 font-sans flex flex-col">
-      {/* ... МОДАЛКА И ШАПКА ТЕ ЖЕ ... */}
       {modal.open && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
               <div className="bg-[#161b22] border border-gray-700 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
@@ -457,6 +451,7 @@ export default function SED() {
                      <button onClick={() => setRole(null)} className="text-[10px] text-red-400 border border-red-900/30 px-3 py-2 rounded-lg bg-red-900/10 hover:bg-red-900/20">ВЫХОД</button>
                  </div>
              </div>
+             
              <div className="flex gap-2">
                  <div className="flex-1 flex bg-[#161b22] p-1 rounded-lg border border-gray-700">
                      <button onClick={() => switchMode('active')} className={`flex-1 py-1.5 text-xs font-bold rounded flex justify-center items-center gap-1 transition ${viewMode==='active' ? 'bg-blue-600 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}><Zap size={14}/> <span className="hidden sm:inline">В РАБОТЕ</span></button>
