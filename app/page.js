@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { RefreshCw, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, ExternalLink, AlertTriangle, Table, Truck, Wrench, Info } from 'lucide-react';
 
-const APP_VERSION = "v2.0 (Full Komer Form)"; 
+const APP_VERSION = "v2.1 (Editable Total + VAT Select)"; 
 // ВАША ССЫЛКА
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
@@ -98,7 +98,6 @@ export default function SED() {
         if (!comments) return; 
     }
 
-    // Optimistic UI (удаляем сразу)
     setRequests(prev => prev.filter(r => r.id !== req.id));
 
     let updates = { ...extraUpdates, last_role: role };
@@ -209,7 +208,7 @@ export default function SED() {
   };
 
   const RequestCard = ({ req }) => {
-    // Инициализация формы из сохраненных данных или дефолтных значений
+    // --- ДЕФОЛТНЫЕ ЗНАЧЕНИЯ ФОРМЫ ---
     const [formData, setFormData] = useState(req.legal_info || {
         seller: '',
         buyer: 'ТОО ОХМК',
@@ -223,7 +222,7 @@ export default function SED() {
         term: '10 рабочих дней',
         quality: 'Новое',
         warranty: '12 мес',
-        vat: '12%',
+        vat: 'Да', // НДС по умолчанию
         person: req.initiator,
         reqNum: req.req_number
     });
@@ -279,7 +278,7 @@ export default function SED() {
             )}
          </div>
 
-         {/* --- ДОКУМЕНТЫ И ПРАВКИ --- */}
+         {/* --- ДОКУМЕНТЫ --- */}
          {(req.draft_url || req.contract_url) && (
              <div className="pl-3 mb-4 space-y-2">
                  {req.draft_url && <a href={req.draft_url} target="_blank" className="flex items-center gap-2 bg-blue-900/20 text-blue-400 p-2 rounded border border-blue-900/50 hover:bg-blue-900/40 transition"><FileText size={16}/> <span className="text-xs font-bold">Проект договора</span> <ExternalLink size={12} className="ml-auto"/></a>}
@@ -289,7 +288,7 @@ export default function SED() {
          {req.fix_comment && req.status === "НА ДОРАБОТКУ" && <div className="pl-3 mb-3 p-3 bg-orange-900/20 border border-orange-800 rounded flex gap-2 items-start text-orange-200 text-xs"><AlertTriangle size={16} className="shrink-0 mt-0.5"/><div><b>ПРАВКИ:</b> {req.fix_comment}</div></div>}
          {role === 'KOMER' && req.warehouse_status === 'Частично' && req.fix_comment && <div className="pl-3 mb-3 p-3 bg-blue-900/20 border border-blue-500 rounded flex gap-2 items-start text-blue-300 text-xs"><Info size={16} className="shrink-0 mt-0.5"/><div><b>{req.fix_comment}</b></div></div>}
 
-         {/* --- ПОЛНАЯ ФОРМА КОМЕРА --- */}
+         {/* --- ПОЛНАЯ ФОРМА КОМЕРА (V2.1) --- */}
          {role === 'KOMER' && viewMode === 'active' && (
             <div className="pl-3 bg-pink-900/10 border-l-2 border-pink-500 p-3 rounded mb-3">
                <div className="flex items-center gap-2 mb-2"><span className="text-[10px] bg-pink-500 text-white px-1.5 py-0.5 rounded font-bold">АНКЕТА ПОСТАВЩИКА</span></div>
@@ -307,7 +306,11 @@ export default function SED() {
                    </div>
                    <div>
                        <label className="text-[9px] text-gray-400 block">НДС</label>
-                       <input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.vat||''} onChange={e=>setFormData({...formData, vat: e.target.value})}/>
+                       {/* ИЗМЕНЕНО: Селектор Да/Нет */}
+                       <select className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.vat} onChange={e=>setFormData({...formData, vat: e.target.value})}>
+                           <option value="Да">Да</option>
+                           <option value="Нет">Нет</option>
+                       </select>
                    </div>
 
                    <div className="col-span-2">
@@ -322,12 +325,18 @@ export default function SED() {
                            onChange={e=>{
                                const val=e.target.value; 
                                const qty = parseFloat(formData.qty) || 1;
+                               // Авторасчет, но его можно будет исправить вручную
                                setFormData({...formData, price: val, total: (val*qty).toFixed(2)})
                            }}/>
                    </div>
                    <div>
                        <label className="text-[9px] text-gray-400 block">Итого</label>
-                       <input className="w-full bg-[#0d1117] border border-pink-900/50 p-1.5 rounded text-pink-400 font-bold" value={formData.total||''} readOnly/>
+                       {/* ИЗМЕНЕНО: Поле редактируемое (убрали readOnly, добавили onChange) */}
+                       <input className="w-full bg-[#0d1117] border border-pink-900/50 p-1.5 rounded text-pink-400 font-bold" 
+                           type="number"
+                           value={formData.total||''} 
+                           onChange={e=>setFormData({...formData, total: e.target.value})}
+                       />
                    </div>
 
                    <div>
@@ -390,7 +399,6 @@ export default function SED() {
                  )}
                  {role === 'FIN_DIR' && (
                      <>
-                       {/* ДЛЯ ФИН ДИРЕКТОРА ПОКАЗЫВАЕМ ЗАПОЛНЕННУЮ АНКЕТУ */}
                        <div className="w-full bg-[#0d1117] p-2 rounded border border-gray-700 mb-2 text-xs">
                            <div className="grid grid-cols-2 gap-1 text-gray-400">
                                <div>Поставщик: <b className="text-white">{req.legal_info?.seller}</b></div>
@@ -463,7 +471,7 @@ export default function SED() {
 
   return (
     <div className="min-h-screen bg-[#0d1117] text-gray-300 pb-20 font-sans flex flex-col">
-      {/* МОДАЛКА БЕЗ ИЗМЕНЕНИЙ */}
+      {/* ... МОДАЛКА БЕЗ ИЗМЕНЕНИЙ ... */}
       {modal.open && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
               <div className="bg-[#161b22] border border-gray-700 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
@@ -495,7 +503,7 @@ export default function SED() {
           </div>
       )}
       
-      {/* ШАПКА */}
+      {/* ... ШАПКА ... */}
       <div className="sticky top-0 z-20 bg-[#0d1117]/90 backdrop-blur border-b border-gray-800">
           <div className="max-w-7xl mx-auto p-3">
              <div className="flex justify-between items-center mb-3">
@@ -512,6 +520,7 @@ export default function SED() {
                      <button onClick={() => setRole(null)} className="text-[10px] text-red-400 border border-red-900/30 px-3 py-2 rounded-lg bg-red-900/10 hover:bg-red-900/20">ВЫХОД</button>
                  </div>
              </div>
+             
              <div className="flex gap-2">
                  <div className="flex-1 flex bg-[#161b22] p-1 rounded-lg border border-gray-700">
                      <button onClick={() => switchMode('active')} className={`flex-1 py-1.5 text-xs font-bold rounded flex justify-center items-center gap-1 transition ${viewMode==='active' ? 'bg-blue-600 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}><Zap size={14}/> <span className="hidden sm:inline">В РАБОТЕ</span></button>
@@ -525,7 +534,7 @@ export default function SED() {
           </div>
       </div>
       
-      {/* СЕТКА */}
+      {/* ... СЕТКА ... */}
       <div className="max-w-7xl mx-auto w-full p-4 flex-grow">
           {loading && requests.length === 0 ? (
               <div className="text-center py-20 text-gray-500 animate-pulse">Загрузка данных...</div> 
