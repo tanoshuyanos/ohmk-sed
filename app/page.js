@@ -3,8 +3,8 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { RefreshCw, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, ExternalLink, AlertTriangle, Table, Truck, Wrench } from 'lucide-react';
 
-const APP_VERSION = "v1.4.2 (Smart Forms)"; 
-// ВАЖНО: Ваша ссылка на скрипт (doPost)
+const APP_VERSION = "v1.6 (PRO Workflow)"; 
+// ВАША ССЫЛКА
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
 
@@ -50,12 +50,20 @@ export default function SED() {
 
     if (currentMode === 'history') query = query.limit(100);
     else {
+        // --- ФИЛЬТРЫ ВИДИМОСТИ (PRO LOGIC) ---
         if (userRole === "FIN_DIR") query = query.eq('status', 'ДОГОВОР').neq('fin_dir_status', 'ОДОБРЕНО').neq('fin_dir_status', 'ОТКАЗ');
         else if (userRole === "KOMER") query = query.or('status.eq.ОДОБРЕНО,fin_dir_status.eq.НА ДОРАБОТКУ');
         else if (userRole && userRole.includes("SKLAD")) query = query.eq('status', 'ОДОБРЕНО');
-        else if (userRole === "LAWYER") query = query.eq('fin_dir_status', 'ОДОБРЕНО');
-        else if (userRole === "FINANCE") query = query.or('status.eq.В работе,status.eq.Договор подписан,status.eq.ИСПРАВЛЕНО,status.eq.НА ДОРАБОТКУ');
-        else if (userRole === "ACCOUNTANT") query = query.eq('status', 'ОДОБРЕНО К ОПЛАТЕ');
+        
+        // ЮРИСТ: Видит, когда Фин.Дир одобрил, но договор еще не подписан (нет contract_url)
+        else if (userRole === "LAWYER") query = query.eq('fin_dir_status', 'ОДОБРЕНО').is('contract_url', null);
+        
+        // ФИНАНСЫ: Видят только когда есть ДРАФТ (draft_url), но еще нет ФИНАЛА (contract_url) и статус не "ОДОБРЕНО"
+        else if (userRole === "FINANCE") query = query.neq('draft_url', null).is('contract_url', null).neq('status', 'ОДОБРЕНО');
+        
+        // БУХГАЛТЕР: Видит, когда статус ОДОБРЕНО (автоматом после загрузки финала)
+        else if (userRole === "ACCOUNTANT") query = query.eq('status', 'ОДОБРЕНО К ОПЛАТЕ'); // Или статус "ОДОБРЕНО"
+        
         else if (userRole === "DIRECTOR") query = query.eq('current_step', 'DIRECTOR_CHECK');
     }
 
@@ -81,8 +89,8 @@ export default function SED() {
                 return !req.warehouse_status || req.warehouse_status === "ВЫБРАТЬ";
             });
         }
-        if (userRole === "FINANCE") filtered = filtered.filter(req => req.status !== "ОДОБРЕНО К ОПЛАТЕ");
-        if (userRole === "LAWYER") filtered = filtered.filter(req => req.status !== "ОПЛАЧЕНО" && req.status !== "ОДОБРЕНО К ОПЛАТЕ");
+        // Доп фильтр для финансов (на всякий случай)
+        if (userRole === "FINANCE") filtered = filtered.filter(req => req.status !== "ОДОБРЕНО");
     }
     setRequests(filtered);
     setLoading(false);
@@ -116,13 +124,14 @@ export default function SED() {
         else if (action === 'НА ДОРАБОТКУ') { nextStep = "KOMER_FIX"; newStatus = "ОДОБРЕНО"; }
         else { newStatus = "ОТКАЗ ФИН.ДИР"; nextStep = "CLOSED_REJECTED"; }
     }
-    else if (role === 'LAWYER') {
-        if (action === 'ЗАГРУЖЕН ПРОЕКТ') { newStatus = "ИСПРАВЛЕНО"; nextStep = "FINANCE_REVIEW"; }
-        else if (action === 'ЗАГРУЖЕН ФИНАЛ') { newStatus = "Договор подписан"; nextStep = "FINANCE_DEAL"; }
-    }
     else if (role === 'FINANCE') {
-        if (action === 'ПРОЕКТ СОГЛАСОВАН') nextStep = "LAWYER_FINAL";
-        else if (action === 'ОДОБРЕНО') { newStatus = "ОДОБРЕНО К ОПЛАТЕ"; nextStep = "ACCOUNTANT_PAY"; }
+        // Финансист проверяет ТОЛЬКО проект
+        if (action === 'ПРОЕКТ СОГЛАСОВАН') {
+             // Мы ставим спец статус, чтобы Юрист увидел кнопку "Финал"
+             // В базе это поле status или отдельное поле? Используем status пока
+             newStatus = "ПРОЕКТ СОГЛАСОВАН"; 
+             nextStep = "LAWYER_FINAL";
+        }
         else if (action === 'НА ДОРАБОТКУ') { newStatus = "НА ДОРАБОТКУ"; nextStep = "LAWYER_FIX"; }
         else if (action === 'ОТКЛОНЕНО') { newStatus = "ОТКЛОНЕНО ФИН"; nextStep = "CLOSED_REJECTED"; }
     }
@@ -159,7 +168,6 @@ export default function SED() {
       reader.onload = async function() {
           const base64 = reader.result;
           try {
-              // ОТПРАВЛЯЕМ В ГУГЛ
               await fetch(STAND_URL, {
                   method: 'POST',
                   mode: 'no-cors',
@@ -184,7 +192,7 @@ export default function SED() {
                   setUploadStatus('');
                   setUploadProgress(0);
                   fetchRequests(role, viewMode);
-              }, 4000);
+              }, 5000); // 5 секунд, чтобы GAS успел записать в базу
 
           } catch (e) {
               clearInterval(interval);
@@ -223,7 +231,7 @@ export default function SED() {
             </div>
          </div>
 
-         {/* --- ПОЛНЫЕ ДАННЫЕ О ЗАЯВКЕ --- */}
+         {/* --- ДАННЫЕ О ЗАЯВКЕ --- */}
          <div className="text-sm pl-3 mb-4 space-y-2 text-gray-300 flex-grow">
             <div className="flex items-start gap-2">
                 {isService ? <Wrench className="text-purple-400 shrink-0" size={18}/> : <Truck className="text-blue-400 shrink-0" size={18}/>}
@@ -248,7 +256,7 @@ export default function SED() {
             )}
          </div>
 
-         {/* --- ДОКУМЕНТЫ (ССЫЛКИ) --- */}
+         {/* --- ДОКУМЕНТЫ --- */}
          {(req.draft_url || req.contract_url) && (
              <div className="pl-3 mb-4 space-y-2">
                  {req.draft_url && (
@@ -265,28 +273,25 @@ export default function SED() {
          )}
 
          {/* --- ПРАВКИ --- */}
-         {role === 'LAWYER' && req.fix_comment && req.status === "НА ДОРАБОТКУ" && (
+         {req.fix_comment && req.status === "НА ДОРАБОТКУ" && (
              <div className="pl-3 mb-3 p-3 bg-orange-900/20 border border-orange-800 rounded flex gap-2 items-start text-orange-200 text-xs">
                  <AlertTriangle size={16} className="shrink-0 mt-0.5"/>
                  <div><b>ПРАВКИ:</b> {req.fix_comment}</div>
              </div>
          )}
 
-         {/* --- ФОРМА КОМЕРА (АДАПТИВНАЯ) --- */}
+         {/* --- ФОРМА КОМЕРА --- */}
          {role === 'KOMER' && viewMode === 'active' && (
             <div className="pl-3 bg-pink-900/10 border-l-2 border-pink-500 p-3 rounded mb-3">
                <div className="flex items-center gap-2 mb-2">
                    <span className="text-[10px] bg-pink-500 text-white px-1.5 py-0.5 rounded font-bold">КОММЕРЧЕСКИЙ</span>
                </div>
                <div className="space-y-3">
-                   {/* ПОСТАВЩИК */}
                    <div>
                        <label className="text-[10px] text-gray-400 block mb-1">Поставщик</label>
                        <input className="w-full bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs focus:border-pink-500 outline-none" 
                            placeholder="Название..." value={formData.seller||''} onChange={e=>setFormData({...formData, seller: e.target.value})}/>
                    </div>
-
-                   {/* ЦЕНА И СУММА */}
                    <div className="flex gap-2">
                        <div className="flex-1">
                            <label className="text-[10px] text-gray-400 block mb-1">Цена {isService ? '(общая)' : 'за ед.'}</label>
@@ -294,7 +299,6 @@ export default function SED() {
                                placeholder="0.00" value={formData.price||''} 
                                onChange={e=>{
                                    const val=e.target.value; 
-                                   // Если услуга - сумма равна цене. Если товар - умножаем на qty
                                    const qty = isService ? 1 : (parseFloat(req.qty) || 1);
                                    setFormData({...formData, price: val, total: (val*qty).toFixed(2)})
                                }}/>
@@ -306,21 +310,16 @@ export default function SED() {
                            </div>
                        </div>
                    </div>
-
-                   {/* УСЛОВИЯ */}
                    <div>
                        <label className="text-[10px] text-gray-400 block mb-1">Условия оплаты</label>
                        <input className="w-full bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs focus:border-pink-500 outline-none" 
                            placeholder="Напр: 100% постоплата" value={formData.payment||''} onChange={e=>setFormData({...formData, payment: e.target.value})}/>
                    </div>
-                   
                    <div>
                        <label className="text-[10px] text-gray-400 block mb-1">Срок {isService ? 'выполнения' : 'поставки'}</label>
                        <input className="w-full bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs focus:border-pink-500 outline-none" 
                            placeholder="Дней..." value={formData.term||''} onChange={e=>setFormData({...formData, term: e.target.value})}/>
                    </div>
-
-                   {/* ГАРАНТИЯ (ТОЛЬКО ДЛЯ ТОВАРОВ) */}
                    {!isService && (
                        <div>
                            <label className="text-[10px] text-gray-400 block mb-1">Гарантия</label>
@@ -329,7 +328,6 @@ export default function SED() {
                        </div>
                    )}
                </div>
-
                <div className="flex gap-2 mt-4 pt-2 border-t border-pink-900/30">
                   <button onClick={()=>updateStatus(req, "ОТКАЗ")} className="flex-1 bg-red-900/20 text-red-300 py-2 rounded text-xs border border-red-900 hover:bg-red-900 hover:text-white transition">ОТКАЗ</button>
                   <button onClick={()=>updateStatus(req, "ОДОБРЕНО", { legal_info: formData })} className="flex-[2] bg-gradient-to-r from-green-700 to-green-600 text-white py-2 rounded text-xs font-bold shadow-lg shadow-green-900/20 hover:from-green-600 hover:to-green-500 transform active:scale-95 transition">ОТПРАВИТЬ ➜</button>
@@ -354,21 +352,45 @@ export default function SED() {
                        <button onClick={()=>updateStatus(req, "Отсутствует")} className="flex-1 border border-red-500 text-red-500 py-2 rounded text-xs font-bold">НЕТ</button>
                      </>
                  )}
-                 {role === 'LAWYER' && (req.current_step === "LAWYER_PROJECT" || req.current_step === "LAWYER_FIX") && (
-                     <button onClick={() => setModal({ open: true, req: req, type: 'DRAFT' })} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold flex justify-center items-center gap-2">
-                        <UploadCloud size={18}/> {req.current_step === "LAWYER_FIX" ? "ОБНОВИТЬ" : "ЗАГРУЗИТЬ"}
-                     </button>
+                 
+                 {/* --- ЮРИСТ (ДВЕ СТАДИИ) --- */}
+                 {role === 'LAWYER' && (
+                     <>
+                        {/* Стадия 1: Загрузка Проекта (Пока нет финала) */}
+                        {(!req.contract_url) && (
+                            <button onClick={() => setModal({ open: true, req: req, type: 'DRAFT' })} 
+                                className={`w-full py-3 rounded-lg font-bold flex justify-center items-center gap-2 ${req.status === 'ПРОЕКТ СОГЛАСОВАН' ? 'bg-gray-700 text-gray-400 cursor-not-allowed' : 'bg-blue-600 text-white'}`}
+                                disabled={req.status === 'ПРОЕКТ СОГЛАСОВАН'}>
+                                <UploadCloud size={18}/> {req.draft_url ? 'ОБНОВИТЬ ПРОЕКТ' : 'ЗАГРУЗИТЬ ПРОЕКТ'}
+                            </button>
+                        )}
+                        
+                        {/* Стадия 2: Загрузка Финала (Только если Проект согласован) */}
+                        {req.status === 'ПРОЕКТ СОГЛАСОВАН' && !req.contract_url && (
+                            <button onClick={() => setModal({ open: true, req: req, type: 'FINAL' })} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold flex justify-center items-center gap-2 mt-2">
+                                <UploadCloud size={18}/> ЗАГРУЗИТЬ ФИНАЛ
+                            </button>
+                        )}
+                        
+                        {/* Информационное сообщение */}
+                        {req.draft_url && req.status !== 'ПРОЕКТ СОГЛАСОВАН' && !req.contract_url && (
+                            <div className="w-full text-center text-[10px] text-orange-400 mt-2 bg-orange-900/20 p-1 rounded border border-orange-900/50">
+                                ⏳ Ждем согласования проекта Финансистом
+                            </div>
+                        )}
+                     </>
                  )}
-                 {role === 'LAWYER' && (req.current_step === "LAWYER_FINAL" || req.status === "Договор подписан") && !req.contract_url && (
-                     <button onClick={() => setModal({ open: true, req: req, type: 'FINAL' })} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold flex justify-center items-center gap-2"><UploadCloud size={18}/> ФИНАЛ</button>
-                 )}
+
+                 {/* --- ФИНАНСИСТ (ПРОВЕРКА ПРОЕКТА) --- */}
                  {role === 'FINANCE' && (
                     <>
-                       <button onClick={()=>updateStatus(req, req.current_step==="FINANCE_REVIEW" ? "ПРОЕКТ СОГЛАСОВАН" : "ОДОБРЕНО")} className="flex-1 bg-green-600 py-2 rounded text-white text-xs font-bold">ОК</button>
+                       <div className="w-full text-center text-xs text-blue-300 mb-2">Проверьте проект договора</div>
+                       <button onClick={()=>updateStatus(req, "ПРОЕКТ СОГЛАСОВАН")} className="flex-1 bg-green-600 py-2 rounded text-white text-xs font-bold">СОГЛАСОВАТЬ</button>
                        <button onClick={()=>{const r=prompt("Что исправить?"); if(r) updateStatus(req, "НА ДОРАБОТКУ", {fix_comment: r})}} className="flex-1 bg-orange-600 py-2 rounded text-white text-xs font-bold">ПРАВКИ</button>
                        <button onClick={()=>updateStatus(req, "ОТКЛОНЕНО")} className="flex-1 bg-red-600 py-2 rounded text-white text-xs font-bold">ОТКАЗ</button>
                     </>
                  )}
+
                  {role === 'ACCOUNTANT' && (
                      <div className="w-full flex gap-2">
                          <input type="number" placeholder="Сумма" className="w-1/3 bg-[#0d1117] border border-gray-700 rounded text-xs text-white p-2" value={paySum} onChange={e=>setPaySum(e.target.value)}/>
@@ -395,6 +417,7 @@ export default function SED() {
 
   return (
     <div className="min-h-screen bg-[#0d1117] text-gray-300 pb-20 font-sans flex flex-col">
+      {/* ... МОДАЛКА (БЕЗ ИЗМЕНЕНИЙ) ... */}
       {modal.open && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
               <div className="bg-[#161b22] border border-gray-700 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
@@ -426,7 +449,7 @@ export default function SED() {
           </div>
       )}
       
-      {/* --- ШАПКА --- */}
+      {/* ... ШАПКА ... */}
       <div className="sticky top-0 z-20 bg-[#0d1117]/90 backdrop-blur border-b border-gray-800">
           <div className="max-w-7xl mx-auto p-3">
              <div className="flex justify-between items-center mb-3">
@@ -457,7 +480,7 @@ export default function SED() {
           </div>
       </div>
       
-      {/* --- СЕТКА (GRID) КОНТЕНТА --- */}
+      {/* ... СЕТКА ... */}
       <div className="max-w-7xl mx-auto w-full p-4 flex-grow">
           {loading && requests.length === 0 ? (
               <div className="text-center py-20 text-gray-500 animate-pulse">Загрузка данных...</div> 
