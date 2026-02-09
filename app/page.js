@@ -3,8 +3,8 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { RefreshCw, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, ExternalLink, AlertTriangle, Table, Truck, Wrench, Info, DollarSign, Calendar, MapPin, Eye, Clock } from 'lucide-react';
 
-const APP_VERSION = "v3.0 (Payment Loop + Calendar)"; 
-// ВАША ССЫЛКА (Оставляем ту же)
+const APP_VERSION = "v3.1 (Fix Filters + Direct Calendar)"; 
+// ВАША ССЫЛКА
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
 
@@ -55,16 +55,20 @@ export default function SED() {
         else if (userRole && userRole.includes("SKLAD")) query = query.eq('status', 'ОДОБРЕНО');
         else if (userRole === "LAWYER") query = query.or('current_step.eq.LAWYER_PROJECT,current_step.eq.LAWYER_FINAL,current_step.eq.LAWYER_FIX,current_step.eq.FINANCE_REVIEW,status.eq.В РАБОТЕ');
         
-        // ФИНАНСИСТ ВИДИТ: И обычные проверки, и НОВЫЙ статус "НА СОГЛАСОВАНИИ ОПЛАТЫ"
         else if (userRole === "FINANCE") query = query.or('current_step.eq.FINANCE_REVIEW,current_step.eq.FINANCE_DEAL,status.eq.В РАБОТЕ,status.eq.Договор подписан,status.eq.НА СОГЛАСОВАНИИ ОПЛАТЫ');
         
-        // БУХГАЛТЕР ВИДИТ: Готовые к оплате И Вернувшиеся от Финансиста
-        else if (userRole === "ACCOUNTANT") query = query.or('status.eq.ОДОБРЕНО К ОПЛАТЕ,status.eq.ОДОБРЕНО,status.eq.СОГЛАСОВАНО НА ОПЛАТУ').neq('status', 'ОПЛАЧЕНО');
+        // --- ИСПРАВЛЕННЫЙ ФИЛЬТР ДЛЯ БУХГАЛТЕРА ---
+        // Видит только те, где шаг явно ACCOUNTANT_PAY (от Финансиста) или ACCOUNTANT_EXECUTE (после согласования даты)
+        // Статус "ОДОБРЕНО" сам по себе игнорируем, если шаг не наш.
+        else if (userRole === "ACCOUNTANT") {
+            query = query.or('current_step.eq.ACCOUNTANT_PAY,current_step.eq.ACCOUNTANT_EXECUTE,status.eq.СОГЛАСОВАНО НА ОПЛАТУ').neq('status', 'ОПЛАЧЕНО');
+        }
     }
 
     const { data } = await query;
     let filtered = data || [];
 
+    // Дополнительная фильтрация на клиенте (для надежности)
     if (currentMode === 'active') {
         if (userRole === "KOMER") {
             filtered = filtered.filter(req => {
@@ -84,7 +88,6 @@ export default function SED() {
                 return !req.warehouse_status || req.warehouse_status === "ВЫБРАТЬ";
             });
         }
-        // Финансист фильтрует лишнее
         if (userRole === "FINANCE") filtered = filtered.filter(req => req.status !== "ОПЛАЧЕНО" && req.status !== "ОДОБРЕНО К ОПЛАТЕ" && req.status !== "ОДОБРЕНО"); 
         if (userRole === "LAWYER") filtered = filtered.filter(req => req.status !== "ОПЛАЧЕНО" && req.status !== "ОДОБРЕНО К ОПЛАТЕ");
     }
@@ -94,32 +97,17 @@ export default function SED() {
 
   const switchMode = (mode) => { setViewMode(mode); fetchRequests(role, mode); };
 
-  // === ГЕНЕРАТОР КАЛЕНДАРЯ (.ics) ===
-  const downloadCalendarEvent = (req) => {
-    const dateStr = req.payment_date ? req.payment_date.replace(/-/g, '') : '';
-    const title = `Оплата: ${req.item_name}`;
-    const desc = `Сумма: ${req.final_pay_sum} ₸\nЗаявка №${req.req_number}\nКонтрагент: ${req.legal_info?.seller || ''}`;
+  // === ПРЯМАЯ ССЫЛКА НА GOOGLE CALENDAR ===
+  const openGoogleCalendar = (req) => {
+    const title = encodeURIComponent(`Оплата: ${req.item_name} (${req.final_pay_sum} ₸)`);
+    const details = encodeURIComponent(`Заявка №${req.req_number}\nКонтрагент: ${req.legal_info?.seller || ''}\nСумма: ${req.final_pay_sum}`);
     
-    // Формат iCalendar
-    const icsContent = `BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//Ohmk//SED//RU
-BEGIN:VEVENT
-UID:${req.req_number}@ohmk.sed
-DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').split('.')[0]}Z
-DTSTART;VALUE=DATE:${dateStr}
-SUMMARY:${title}
-DESCRIPTION:${desc}
-END:VEVENT
-END:VCALENDAR`;
+    // Формат даты YYYYMMDD
+    const dateStr = req.payment_date ? req.payment_date.replace(/-/g, '') : new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const dates = `${dateStr}/${dateStr}`; // Весь день
 
-    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
-    const link = document.createElement('a');
-    link.href = window.URL.createObjectURL(blob);
-    link.setAttribute('download', `payment_${req.req_number}.ics`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&dates=${dates}`;
+    window.open(url, '_blank');
   };
 
   const updateStatus = async (req, action, extraUpdates = {}) => {
@@ -131,7 +119,6 @@ END:VCALENDAR`;
         if (!comments) return; 
     }
 
-    // Оптимистичное обновление UI
     if (role !== 'LAWYER') setRequests(prev => prev.filter(r => r.id !== req.id));
 
     let updates = { ...extraUpdates, last_role: role };
@@ -165,16 +152,11 @@ END:VCALENDAR`;
     else if (role === 'FINANCE') {
         if (action === 'ПРОЕКТ СОГЛАСОВАН') { newStatus = "ПРОЕКТ СОГЛАСОВАН"; nextStep = "LAWYER_FINAL"; }
         else if (action === 'НА ДОРАБОТКУ') { newStatus = "НА ДОРАБОТКУ"; nextStep = "LAWYER_FIX"; }
-        
-        // --- НОВОЕ: ФИНАНСИСТ ПОДТВЕРЖДАЕТ ОПЛАТУ ---
         else if (action === 'ОПЛАТА СОГЛАСОВАНА') { newStatus = "СОГЛАСОВАНО НА ОПЛАТУ"; nextStep = "ACCOUNTANT_EXECUTE"; }
-        
         else if (action === 'ОТКЛОНЕНО') { newStatus = "ОТКЛОНЕНО ФИН"; nextStep = "CLOSED_REJECTED"; }
     }
     else if (role === 'ACCOUNTANT') {
-        // ШАГ 1: ОТПРАВИТЬ ФИНАНСИСТУ
         if (action === 'НА СОГЛАСОВАНИЕ') { newStatus = "НА СОГЛАСОВАНИИ ОПЛАТЫ"; nextStep = "FINANCE_PAY_APPROVE"; }
-        // ШАГ 2: ФИНАЛЬНАЯ ПРОВОДКА
         else if (action === 'ОПЛАЧЕНО') { newStatus = "ОПЛАЧЕНО"; nextStep = "FINISH"; }
         else { newStatus = "ОТКАЗ БУХ"; nextStep = "CLOSED_REJECTED"; }
     }
@@ -185,8 +167,7 @@ END:VCALENDAR`;
   };
 
   const handleUpload = async () => {
-     // ... (Логика загрузки без изменений, она работает) ...
-     const fileInput = document.getElementById('file-upload');
+      const fileInput = document.getElementById('file-upload');
       const contractNum = document.getElementById('contract-num')?.value || '';
       const amount = document.getElementById('contract-amount')?.value || '';
 
@@ -264,7 +245,6 @@ END:VCALENDAR`;
 
          { (role === 'FIN_DIR' || role === 'LAWYER' || role === 'FINANCE' || role === 'ACCOUNTANT') && req.legal_info && (<div className="pl-3 mb-3"><DealInfoBlock/></div>)}
 
-         {/* ССЫЛКИ НА ДОКУМЕНТЫ */}
          {(req.draft_url || req.contract_url) && (
              <div className="pl-3 mb-4 space-y-2">
                  {req.draft_url && <a href={req.draft_url} target="_blank" className="flex items-center gap-2 bg-blue-900/20 text-blue-400 p-2 rounded border border-blue-900/50 hover:bg-blue-900/40 transition"><FileText size={16}/> <span className="text-xs font-bold">Проект договора</span> <ExternalLink size={12} className="ml-auto"/></a>}
@@ -272,7 +252,7 @@ END:VCALENDAR`;
              </div>
          )}
 
-         {/* БЛОК ДЛЯ ФИНАНСИСТА (КОГДА БУХ ПРИСЛАЛ НА ОДОБРЕНИЕ) */}
+         {/* ДЛЯ ФИНАНСИСТА */}
          {role === 'FINANCE' && req.status === "НА СОГЛАСОВАНИИ ОПЛАТЫ" && (
              <div className="pl-3 mb-4 bg-purple-900/20 border border-purple-500 rounded p-3">
                  <div className="text-[10px] text-purple-300 font-bold mb-2">ЗАПРОС НА ОПЛАТУ</div>
@@ -320,10 +300,8 @@ END:VCALENDAR`;
                     </>
                  )}
                  
-                 {/* --- БУХГАЛТЕР: НОВАЯ ЛОГИКА --- */}
                  {role === 'ACCOUNTANT' && (
                      <div className="w-full flex flex-col gap-2">
-                         {/* ЭТАП 1: ВВОД ДАННЫХ И ОТПРАВКА ФИНАНСИСТУ */}
                          {req.status === "ОДОБРЕНО К ОПЛАТЕ" || req.status === "ОДОБРЕНО" ? (
                              <>
                                  <div className="flex gap-2">
@@ -333,14 +311,16 @@ END:VCALENDAR`;
                                  <button onClick={()=>{if(!paySum || !payDate)return alert("Заполните Сумму и Дату!"); updateStatus(req, "НА СОГЛАСОВАНИЕ", {final_pay_sum:paySum, payment_date: payDate})}} className="w-full bg-blue-600 py-3 rounded text-white text-xs font-bold">ОТПРАВИТЬ НА СОГЛАСОВАНИЕ</button>
                              </>
                          ) : req.status === "СОГЛАСОВАНО НА ОПЛАТУ" ? (
-                             // ЭТАП 2: КОГДА ФИНАНСИСТ ОДОБРИЛ
                              <>
                                  <div className="bg-yellow-900/20 border border-yellow-500/50 p-2 rounded text-center mb-2">
                                      <div className="text-[10px] text-yellow-500">ОДОБРЕНО ФИНАНСИСТОМ</div>
                                      <div className="text-white font-bold">{req.payment_date} / {req.final_pay_sum} ₸</div>
                                  </div>
-                                 <button onClick={()=>downloadCalendarEvent(req)} className="w-full border border-gray-600 text-gray-300 py-2 rounded flex items-center justify-center gap-2 hover:bg-gray-800 transition"><Calendar size={14}/> ДОБАВИТЬ В КАЛЕНДАРЬ</button>
-                                 <button onClick={()=>updateStatus(req, "ОПЛАЧЕНО")} className="w-full bg-green-600 py-3 rounded text-white text-xs font-bold mt-1">✅ ПРОВЕДЕНО (ЗАКРЫТЬ)</button>
+                                 {/* ПРЯМАЯ КНОПКА GOOGLE CALENDAR */}
+                                 <button onClick={()=>openGoogleCalendar(req)} className="w-full border border-blue-600 text-blue-400 py-2 rounded flex items-center justify-center gap-2 hover:bg-blue-900/30 transition mb-1">
+                                     <Calendar size={14}/> В GOOGLE CALENDAR
+                                 </button>
+                                 <button onClick={()=>updateStatus(req, "ОПЛАЧЕНО")} className="w-full bg-green-600 py-3 rounded text-white text-xs font-bold">✅ ПРОВЕДЕНО (ЗАКРЫТЬ)</button>
                              </>
                          ) : (
                             <div className="text-center text-gray-500 text-xs">Ждет действий...</div>
@@ -352,8 +332,7 @@ END:VCALENDAR`;
       </div>
     );
   };
-  
-  // ... (ОСТАЛЬНОЕ БЕЗ ИЗМЕНЕНИЙ: LOGIN, LAYOUT и т.д.)
+
   if (!role) return (
     <div className="min-h-screen bg-[#0d1117] flex flex-col items-center justify-center p-4 relative">
       <div className="text-center mb-8"><h1 className="text-4xl font-bold text-blue-500 tracking-widest">ОХМК СЭД</h1><p className="text-gray-500 text-xs mt-2">CORPORATE SYSTEM</p></div>
@@ -367,6 +346,7 @@ END:VCALENDAR`;
 
   return (
     <div className="min-h-screen bg-[#0d1117] text-gray-300 pb-20 font-sans flex flex-col">
+      {/* МОДАЛКА И ШАПКА ... */}
       {modal.open && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
               <div className="bg-[#161b22] border border-gray-700 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
