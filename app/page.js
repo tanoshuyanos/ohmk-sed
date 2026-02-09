@@ -4,11 +4,10 @@ import { createClient } from '@supabase/supabase-js';
 import { 
   RefreshCw, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, 
   ExternalLink, AlertTriangle, Table, Truck, Wrench, Info, DollarSign, Calendar, 
-  MapPin, Eye, Clock, BarChart3, Phone, User, Factory, AlertCircle 
+  MapPin, Eye, Clock, BarChart3, Phone, User, Factory, AlertCircle, Briefcase, FileSignature
 } from 'lucide-react';
 
-const APP_VERSION = "v4.0 (Full Data Display)"; 
-// ВАША ССЫЛКА НА СКРИПТ (Та же самая)
+const APP_VERSION = "v4.1 (Full Commercial Form)"; 
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
 
@@ -78,12 +77,8 @@ export default function SED() {
         if (userRole && userRole.includes("SKLAD")) {
             filtered = filtered.filter(req => {
                 if (req.request_type === 'service') return false; 
-                const wId = req.target_warehouse_code || "central"; // Используем новое поле
-                
-                // Простая логика складов (можно донастроить под ваши коды E/W/Y)
-                // Если код склада пустой - показываем всем или Центральному
+                const wId = req.target_warehouse_code || "central"; 
                 if (!wId) return userRole === "SKLAD_CENTRAL";
-                
                 return !req.warehouse_status || req.warehouse_status === "ВЫБРАТЬ";
             });
         }
@@ -104,7 +99,6 @@ export default function SED() {
     window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&dates=${dates}`, '_blank');
   };
 
-  // ... (updateStatus и handleUpload БЕЗ ИЗМЕНЕНИЙ, копируйте их из старого кода или они ниже) ...
   const updateStatus = async (req, action, extraUpdates = {}) => {
     if (role !== 'LAWYER' && role !== 'ECONOMIST' && !confirm(`Выполнить: ${action}?`)) return;
     
@@ -165,7 +159,6 @@ export default function SED() {
   };
 
   const handleUpload = async () => {
-     // ... (Логика загрузки стандартная) ...
       const fileInput = document.getElementById('file-upload');
       const contractNum = document.getElementById('contract-num')?.value || '';
       const amount = document.getElementById('contract-amount')?.value || '';
@@ -195,6 +188,7 @@ export default function SED() {
   };
 
   const RequestCard = ({ req }) => {
+    // Состояние формы для Комера
     const [formData, setFormData] = useState(req.legal_info || {});
     const [paySum, setPaySum] = useState(req.final_pay_sum || '');
     const [payDate, setPayDate] = useState(req.payment_date || '');
@@ -209,7 +203,7 @@ export default function SED() {
     else if (req.status === 'НА СОГЛАСОВАНИИ ОПЛАТЫ') { borderColor = 'border-purple-800'; stripColor = 'bg-purple-500'; }
     else if (req.status === 'СОГЛАСОВАНО НА ОПЛАТУ') { borderColor = 'border-yellow-800'; stripColor = 'bg-yellow-500'; }
     if (req.economist_status === 'ВНЕ ПЛАНА') { borderColor = 'border-orange-800'; stripColor = 'bg-orange-500'; }
-    if (isUrgent) { borderColor = 'border-red-500'; } // Красная рамка для срочных
+    if (isUrgent) { borderColor = 'border-red-500'; }
 
     const DealInfoBlock = () => (
         <div className="w-full bg-[#0d1117] border border-gray-700/50 rounded-lg p-3 mb-3 mt-2">
@@ -218,7 +212,9 @@ export default function SED() {
                <div className="bg-gray-800/30 p-2 rounded border border-gray-700/50">
                    <div className="flex justify-between items-end mb-1"><span className="text-gray-500 text-[10px]">Поставщик</span><span className="text-blue-300 font-bold text-xs">{req.legal_info?.seller || "Не указан"}</span></div>
                    <div className="flex justify-between items-end"><span className="text-gray-500 text-[10px]">Сумма договора</span><span className="text-green-400 font-bold text-base">{req.legal_info?.total || "0"} ₸</span></div>
+                   <div className="flex justify-between items-end border-t border-gray-700 mt-1 pt-1"><span className="text-gray-500 text-[10px]">Условия</span><span className="text-gray-300 text-[10px]">{req.legal_info?.terms || "-"}</span></div>
                </div>
+               {req.legal_info?.comment && <div className="text-[10px] text-gray-400 italic">"{req.legal_info.comment}"</div>}
            </div>
         </div>
     );
@@ -227,7 +223,6 @@ export default function SED() {
       <div className={`bg-[#161b22] border ${borderColor} rounded-xl p-5 shadow-xl relative overflow-hidden group flex flex-col h-full`}>
          <div className={`absolute left-0 top-0 bottom-0 w-1 ${stripColor}`}></div>
          
-         {/* ШАПКА: Номер, Дата и СРОЧНОСТЬ */}
          <div className="flex justify-between items-start mb-2 pl-3">
             <div>
                 <h3 className="text-xl font-bold flex items-center gap-2 text-white">#{req.req_number}</h3>
@@ -239,7 +234,6 @@ export default function SED() {
             </div>
          </div>
 
-         {/* БЛОК ИНИЦИАТОРА (НОВЫЙ) */}
          <div className="pl-3 mb-3 flex items-center gap-3 bg-[#0d1117] p-2 rounded border border-gray-800">
              <div className="bg-gray-800 p-1.5 rounded-full"><User size={14} className="text-gray-400"/></div>
              <div className="flex-1">
@@ -257,14 +251,11 @@ export default function SED() {
                 <div>
                     <b className={`${isService ? 'text-purple-400' : 'text-blue-400'} text-[10px] uppercase block mb-1`}>{isService ? 'Услуга / Работа' : 'Товар'}</b>
                     <span className="text-white text-base font-bold leading-tight block">{req.item_name}</span>
-                    
-                    {/* ДОПОЛНИТЕЛЬНЫЕ ПОЛЯ (ЗАВОД / ТИП УСЛУГИ) */}
                     {req.manufacturer && !isService && <div className="text-xs text-gray-400 mt-1 flex items-center gap-1"><Factory size={10}/> {req.manufacturer}</div>}
                     {req.service_type && isService && <div className="text-xs text-gray-400 mt-1 flex items-center gap-1"><Info size={10}/> {req.service_type}</div>}
                 </div>
             </div>
 
-            {/* ЦЕЛЬ (PURPOSE) ИЗ СТОЛБЦА M */}
             {req.purpose && (
                 <div className="bg-[#0d1117] p-2 rounded border border-gray-800 mt-2">
                     <div className="text-[10px] text-gray-500 mb-0.5">Цель приобретения:</div>
@@ -272,7 +263,6 @@ export default function SED() {
                 </div>
             )}
             
-            {/* ОПИСАНИЕ (SPEC) */}
             {req.spec && <div className="text-xs text-gray-400 pl-6">{req.spec}</div>}
             
             {req.warehouse_status && !isService && (
@@ -352,17 +342,74 @@ export default function SED() {
                        <button onClick={()=>updateStatus(req, "Отсутствует")} className="flex-1 border border-red-500 text-red-500 py-2 rounded text-xs font-bold">НЕТ</button>
                      </>
                  )}
+                 
+                 {/* ПОЛНАЯ ФОРМА КОМЕРЧЕСКОГО ДИРЕКТОРА */}
                  {role === 'KOMER' && (
                     <div className="pl-3 bg-pink-900/10 border-l-2 border-pink-500 p-3 rounded mb-3 w-full">
-                        <div className="flex items-center gap-2 mb-2"><span className="text-[10px] bg-pink-500 text-white px-1.5 py-0.5 rounded font-bold">АНКЕТА ПОСТАВЩИКА</span></div>
-                        <div className="grid grid-cols-2 gap-2 text-xs mb-3">
-                            <div className="col-span-2"><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" placeholder="Продавец" value={formData.seller||''} onChange={e=>setFormData({...formData, seller: e.target.value})}/></div>
-                            <div><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" placeholder="Цена" type="number" value={formData.price||''} onChange={e=>{const val=e.target.value; const qty = parseFloat(req.qty) || 1; setFormData({...formData, price: val, total: (val*qty).toFixed(2)})}}/></div>
-                            <div><input className="w-full bg-[#0d1117] border border-pink-900/50 p-1.5 rounded text-pink-400 font-bold" type="number" placeholder="Итого" value={formData.total||''} onChange={e=>setFormData({...formData, total: e.target.value})}/></div>
+                        <div className="flex items-center gap-2 mb-3">
+                            <Briefcase size={14} className="text-pink-500"/>
+                            <span className="text-xs font-bold text-pink-400">АНКЕТА ПОСТАВЩИКА</span>
                         </div>
+                        
+                        <div className="space-y-3 mb-4">
+                            {/* Поле 1: Поставщик */}
+                            <div>
+                                <label className="text-[10px] text-gray-500 block mb-1">Наименование контрагента (ТОО/ИП)</label>
+                                <input className="w-full bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs focus:border-pink-500 outline-none" 
+                                    placeholder="Например: ТОО Ромашка" 
+                                    value={formData.seller||''} 
+                                    onChange={e=>setFormData({...formData, seller: e.target.value})}
+                                />
+                            </div>
+
+                            {/* Поле 2: Сумма */}
+                            <div>
+                                <label className="text-[10px] text-gray-500 block mb-1">Сумма сделки (Цена договора)</label>
+                                <div className="relative">
+                                    <input className="w-full bg-[#0d1117] border border-gray-700 p-2 pl-7 rounded text-white text-xs font-bold focus:border-green-500 outline-none" 
+                                        type="number" 
+                                        placeholder="0" 
+                                        value={formData.total||''} 
+                                        onChange={e=>setFormData({...formData, total: e.target.value})}
+                                    />
+                                    <DollarSign size={12} className="absolute left-2 top-2.5 text-green-500"/>
+                                </div>
+                            </div>
+
+                            {/* Поле 3: Условия оплаты */}
+                            <div>
+                                <label className="text-[10px] text-gray-500 block mb-1">Условия оплаты</label>
+                                <select className="w-full bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs focus:border-blue-500 outline-none"
+                                    value={formData.terms||''}
+                                    onChange={e=>setFormData({...formData, terms: e.target.value})}
+                                >
+                                    <option value="">Выберите условия...</option>
+                                    <option value="100% Предоплата">100% Предоплата</option>
+                                    <option value="50% / 50%">50% Предоплата / 50% Факт</option>
+                                    <option value="По факту поставки">По факту поставки</option>
+                                    <option value="Отсрочка платежа">Отсрочка платежа</option>
+                                </select>
+                            </div>
+
+                            {/* Поле 4: Комментарий */}
+                            <div>
+                                <label className="text-[10px] text-gray-500 block mb-1">Комментарий / Обоснование</label>
+                                <textarea className="w-full bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs focus:border-pink-500 outline-none h-16 resize-none" 
+                                    placeholder="Почему этот поставщик? Сроки?" 
+                                    value={formData.comment||''} 
+                                    onChange={e=>setFormData({...formData, comment: e.target.value})}
+                                />
+                            </div>
+                        </div>
+
                         <div className="flex gap-2">
-                            <button onClick={()=>updateStatus(req, "ОТКАЗ")} className="flex-1 bg-red-900/20 text-red-300 py-2 rounded text-xs border border-red-900 hover:bg-red-900 hover:text-white transition">ОТКАЗ</button>
-                            <button onClick={()=>{ if(!formData.seller || !formData.price) return alert("Заполните Продавца и Цену!"); updateStatus(req, "ОДОБРЕНО", { legal_info: formData }); }} className="flex-[2] bg-gradient-to-r from-green-700 to-green-600 text-white py-2 rounded text-xs font-bold hover:from-green-600 hover:to-green-500">ОТПРАВИТЬ ➜</button>
+                            <button onClick={()=>updateStatus(req, "ОТКАЗ")} className="flex-1 bg-red-900/20 text-red-300 py-2.5 rounded text-xs border border-red-900 hover:bg-red-900 hover:text-white transition font-bold">ОТКАЗ</button>
+                            <button onClick={()=>{ 
+                                if(!formData.seller || !formData.total) return alert("Заполните Поставщика и Сумму!"); 
+                                updateStatus(req, "ОДОБРЕНО", { legal_info: formData }); 
+                            }} className="flex-[2] bg-gradient-to-r from-pink-700 to-pink-600 text-white py-2.5 rounded text-xs font-bold hover:from-pink-600 hover:to-pink-500 flex items-center justify-center gap-2 shadow-lg shadow-pink-900/20">
+                                <FileSignature size={14}/> ОТПРАВИТЬ ЮРИСТУ
+                            </button>
                         </div>
                     </div>
                  )}
