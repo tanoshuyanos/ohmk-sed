@@ -1,9 +1,9 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { RefreshCw, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, ExternalLink, AlertTriangle, Table, Truck, Wrench, Info } from 'lucide-react';
+import { RefreshCw, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, ExternalLink, AlertTriangle, Table, Truck, Wrench, Info, DollarSign, Calendar, MapPin } from 'lucide-react';
 
-const APP_VERSION = "v2.1 (Editable Total + VAT Select)"; 
+const APP_VERSION = "v2.2 (Boss View)"; 
 // ВАША ССЫЛКА
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
@@ -21,7 +21,6 @@ export default function SED() {
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState('active'); 
 
-  // --- ОКНО ЗАГРУЗКИ ---
   const [modal, setModal] = useState({ open: false, req: null, type: '' });
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState('');
@@ -208,23 +207,11 @@ export default function SED() {
   };
 
   const RequestCard = ({ req }) => {
-    // --- ДЕФОЛТНЫЕ ЗНАЧЕНИЯ ФОРМЫ ---
     const [formData, setFormData] = useState(req.legal_info || {
-        seller: '',
-        buyer: 'ТОО ОХМК',
-        subject: req.item_name,
-        qty: req.qty,
-        price: '',
-        total: '',
-        payment: 'Постоплата',
-        delivery: 'Склад ОХМК',
-        pickup: 'Нет',
-        term: '10 рабочих дней',
-        quality: 'Новое',
-        warranty: '12 мес',
-        vat: 'Да', // НДС по умолчанию
-        person: req.initiator,
-        reqNum: req.req_number
+        seller: '', buyer: 'ТОО ОХМК', subject: req.item_name, qty: req.qty,
+        price: '', total: '', payment: 'Постоплата', delivery: 'Склад ОХМК',
+        pickup: 'Нет', term: '10 рабочих дней', quality: 'Новое',
+        warranty: '12 мес', vat: 'Да', person: req.initiator, reqNum: req.req_number
     });
     
     const [paySum, setPaySum] = useState('');
@@ -237,6 +224,13 @@ export default function SED() {
     else if (req.status === 'НА ДОРАБОТКУ') { borderColor = 'border-orange-800'; stripColor = 'bg-orange-500'; }
     else if (role === 'KOMER') stripColor = 'bg-pink-500';
     else if (role === 'FIN_DIR') stripColor = 'bg-purple-500';
+
+    const DataRow = ({ label, val, highlight }) => (
+        <div className="flex justify-between items-start border-b border-gray-800/50 pb-1 mb-1 last:border-0 last:mb-0">
+            <span className="text-[10px] text-gray-500">{label}</span>
+            <span className={`text-[11px] text-right font-medium ${highlight ? 'text-white' : 'text-gray-300'}`}>{val || '-'}</span>
+        </div>
+    );
 
     return (
       <div className={`bg-[#161b22] border ${borderColor} rounded-xl p-5 shadow-xl relative overflow-hidden group flex flex-col h-full`}>
@@ -258,27 +252,21 @@ export default function SED() {
             <div className="flex items-start gap-2">
                 {isService ? <Wrench className="text-purple-400 shrink-0" size={18}/> : <Truck className="text-blue-400 shrink-0" size={18}/>}
                 <div>
-                    <b className={`${isService ? 'text-purple-400' : 'text-blue-400'} text-[10px] uppercase block mb-1`}>
-                        {isService ? 'Услуга / Работа' : 'Товар'}
-                    </b>
+                    <b className={`${isService ? 'text-purple-400' : 'text-blue-400'} text-[10px] uppercase block mb-1`}>{isService ? 'Услуга / Работа' : 'Товар'}</b>
                     <span className="text-white text-base font-bold leading-tight block">{req.item_name}</span>
                 </div>
             </div>
-            
             <div className="bg-[#0d1117] p-3 rounded border border-gray-800 mt-2">
                 <span className="text-gray-300 text-xs whitespace-pre-wrap">{req.spec || "Нет описания"}</span>
             </div>
-
             <div className="grid grid-cols-2 gap-2 border-t border-gray-800 pt-3 mt-2">
                 <div><span className="text-[10px] text-gray-500 block">ОБЪЕКТ</span><span className="text-xs text-white font-medium">{req.dept}</span></div>
                 <div className="text-right"><span className="text-[10px] text-gray-500 block">ИНИЦИАТОР</span><span className="text-xs text-white font-medium">{req.initiator}</span></div>
             </div>
-            {!isService && (
-                 <div className="pt-2 border-t border-gray-800 mt-1"><span className="text-[10px] text-gray-500">КОЛИЧЕСТВО:</span> <span className="text-white font-bold ml-2 text-sm">{req.qty}</span></div>
-            )}
+            {!isService && <div className="pt-2 border-t border-gray-800 mt-1"><span className="text-[10px] text-gray-500">КОЛИЧЕСТВО:</span> <span className="text-white font-bold ml-2 text-sm">{req.qty}</span></div>}
          </div>
 
-         {/* --- ДОКУМЕНТЫ --- */}
+         {/* --- ДОКУМЕНТЫ И ПРАВКИ --- */}
          {(req.draft_url || req.contract_url) && (
              <div className="pl-3 mb-4 space-y-2">
                  {req.draft_url && <a href={req.draft_url} target="_blank" className="flex items-center gap-2 bg-blue-900/20 text-blue-400 p-2 rounded border border-blue-900/50 hover:bg-blue-900/40 transition"><FileText size={16}/> <span className="text-xs font-bold">Проект договора</span> <ExternalLink size={12} className="ml-auto"/></a>}
@@ -288,107 +276,32 @@ export default function SED() {
          {req.fix_comment && req.status === "НА ДОРАБОТКУ" && <div className="pl-3 mb-3 p-3 bg-orange-900/20 border border-orange-800 rounded flex gap-2 items-start text-orange-200 text-xs"><AlertTriangle size={16} className="shrink-0 mt-0.5"/><div><b>ПРАВКИ:</b> {req.fix_comment}</div></div>}
          {role === 'KOMER' && req.warehouse_status === 'Частично' && req.fix_comment && <div className="pl-3 mb-3 p-3 bg-blue-900/20 border border-blue-500 rounded flex gap-2 items-start text-blue-300 text-xs"><Info size={16} className="shrink-0 mt-0.5"/><div><b>{req.fix_comment}</b></div></div>}
 
-         {/* --- ПОЛНАЯ ФОРМА КОМЕРА (V2.1) --- */}
+         {/* --- ПОЛНАЯ ФОРМА КОМЕРА --- */}
          {role === 'KOMER' && viewMode === 'active' && (
             <div className="pl-3 bg-pink-900/10 border-l-2 border-pink-500 p-3 rounded mb-3">
                <div className="flex items-center gap-2 mb-2"><span className="text-[10px] bg-pink-500 text-white px-1.5 py-0.5 rounded font-bold">АНКЕТА ПОСТАВЩИКА</span></div>
                <div className="grid grid-cols-2 gap-2 text-xs">
-                   
-                   <div className="col-span-2">
-                       <label className="text-[9px] text-gray-400 block">Продавец</label>
-                       <input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" 
-                           placeholder="ТОО/ИП..." value={formData.seller||''} onChange={e=>setFormData({...formData, seller: e.target.value})}/>
-                   </div>
-                   
-                   <div>
-                       <label className="text-[9px] text-gray-400 block">Покупатель</label>
-                       <input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.buyer||''} onChange={e=>setFormData({...formData, buyer: e.target.value})}/>
-                   </div>
-                   <div>
-                       <label className="text-[9px] text-gray-400 block">НДС</label>
-                       {/* ИЗМЕНЕНО: Селектор Да/Нет */}
-                       <select className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.vat} onChange={e=>setFormData({...formData, vat: e.target.value})}>
-                           <option value="Да">Да</option>
-                           <option value="Нет">Нет</option>
-                       </select>
-                   </div>
-
-                   <div className="col-span-2">
-                       <label className="text-[9px] text-gray-400 block">Предмет договора</label>
-                       <input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.subject||''} onChange={e=>setFormData({...formData, subject: e.target.value})}/>
-                   </div>
-
-                   <div>
-                       <label className="text-[9px] text-gray-400 block">Цена за ед.</label>
-                       <input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white font-bold" type="number" 
-                           placeholder="0" value={formData.price||''} 
-                           onChange={e=>{
-                               const val=e.target.value; 
-                               const qty = parseFloat(formData.qty) || 1;
-                               // Авторасчет, но его можно будет исправить вручную
-                               setFormData({...formData, price: val, total: (val*qty).toFixed(2)})
-                           }}/>
-                   </div>
-                   <div>
-                       <label className="text-[9px] text-gray-400 block">Итого</label>
-                       {/* ИЗМЕНЕНО: Поле редактируемое (убрали readOnly, добавили onChange) */}
-                       <input className="w-full bg-[#0d1117] border border-pink-900/50 p-1.5 rounded text-pink-400 font-bold" 
-                           type="number"
-                           value={formData.total||''} 
-                           onChange={e=>setFormData({...formData, total: e.target.value})}
-                       />
-                   </div>
-
-                   <div>
-                       <label className="text-[9px] text-gray-400 block">Порядок оплаты</label>
-                       <input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.payment||''} onChange={e=>setFormData({...formData, payment: e.target.value})}/>
-                   </div>
-                   <div>
-                       <label className="text-[9px] text-gray-400 block">Срок поставки</label>
-                       <input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.term||''} onChange={e=>setFormData({...formData, term: e.target.value})}/>
-                   </div>
-
-                   <div>
-                       <label className="text-[9px] text-gray-400 block">Место доставки</label>
-                       <input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.delivery||''} onChange={e=>setFormData({...formData, delivery: e.target.value})}/>
-                   </div>
-                   <div>
-                       <label className="text-[9px] text-gray-400 block">Самовывоз</label>
-                       <select className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.pickup} onChange={e=>setFormData({...formData, pickup: e.target.value})}>
-                           <option value="Нет">Нет</option><option value="Да">Да</option>
-                       </select>
-                   </div>
-
-                   {!isService && (
-                       <>
-                           <div>
-                               <label className="text-[9px] text-gray-400 block">Качество</label>
-                               <input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.quality||''} onChange={e=>setFormData({...formData, quality: e.target.value})}/>
-                           </div>
-                           <div>
-                               <label className="text-[9px] text-gray-400 block">Гарантия</label>
-                               <input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.warranty||''} onChange={e=>setFormData({...formData, warranty: e.target.value})}/>
-                           </div>
-                       </>
-                   )}
-                   
-                   <div className="col-span-2">
-                       <label className="text-[9px] text-gray-400 block">Инициатор (ФИО)</label>
-                       <input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.person||''} onChange={e=>setFormData({...formData, person: e.target.value})}/>
-                   </div>
+                   <div className="col-span-2"><label className="text-[9px] text-gray-400 block">Продавец</label><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" placeholder="ТОО/ИП..." value={formData.seller||''} onChange={e=>setFormData({...formData, seller: e.target.value})}/></div>
+                   <div><label className="text-[9px] text-gray-400 block">Покупатель</label><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.buyer||''} onChange={e=>setFormData({...formData, buyer: e.target.value})}/></div>
+                   <div><label className="text-[9px] text-gray-400 block">НДС</label><select className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.vat} onChange={e=>setFormData({...formData, vat: e.target.value})}><option value="Да">Да</option><option value="Нет">Нет</option></select></div>
+                   <div className="col-span-2"><label className="text-[9px] text-gray-400 block">Предмет договора</label><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.subject||''} onChange={e=>setFormData({...formData, subject: e.target.value})}/></div>
+                   <div><label className="text-[9px] text-gray-400 block">Цена за ед.</label><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white font-bold" type="number" placeholder="0" value={formData.price||''} onChange={e=>{const val=e.target.value; const qty = parseFloat(formData.qty) || 1; setFormData({...formData, price: val, total: (val*qty).toFixed(2)})}}/></div>
+                   <div><label className="text-[9px] text-gray-400 block">Итого</label><input className="w-full bg-[#0d1117] border border-pink-900/50 p-1.5 rounded text-pink-400 font-bold" type="number" value={formData.total||''} onChange={e=>setFormData({...formData, total: e.target.value})}/></div>
+                   <div><label className="text-[9px] text-gray-400 block">Порядок оплаты</label><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.payment||''} onChange={e=>setFormData({...formData, payment: e.target.value})}/></div>
+                   <div><label className="text-[9px] text-gray-400 block">Срок поставки</label><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.term||''} onChange={e=>setFormData({...formData, term: e.target.value})}/></div>
+                   <div><label className="text-[9px] text-gray-400 block">Место доставки</label><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.delivery||''} onChange={e=>setFormData({...formData, delivery: e.target.value})}/></div>
+                   <div><label className="text-[9px] text-gray-400 block">Самовывоз</label><select className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.pickup} onChange={e=>setFormData({...formData, pickup: e.target.value})}><option value="Нет">Нет</option><option value="Да">Да</option></select></div>
+                   {!isService && <><div><label className="text-[9px] text-gray-400 block">Качество</label><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.quality||''} onChange={e=>setFormData({...formData, quality: e.target.value})}/></div><div><label className="text-[9px] text-gray-400 block">Гарантия</label><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.warranty||''} onChange={e=>setFormData({...formData, warranty: e.target.value})}/></div></>}
+                   <div className="col-span-2"><label className="text-[9px] text-gray-400 block">Инициатор (ФИО)</label><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.person||''} onChange={e=>setFormData({...formData, person: e.target.value})}/></div>
                </div>
-
                <div className="flex gap-2 mt-4 pt-2 border-t border-pink-900/30">
                   <button onClick={()=>updateStatus(req, "ОТКАЗ")} className="flex-1 bg-red-900/20 text-red-300 py-2 rounded text-xs border border-red-900 hover:bg-red-900 hover:text-white transition">ОТКАЗ</button>
-                  <button onClick={()=>{
-                      if(!formData.seller || !formData.price) return alert("Заполните Продавца и Цену!");
-                      updateStatus(req, "ОДОБРЕНО", { legal_info: formData });
-                  }} className="flex-[2] bg-gradient-to-r from-green-700 to-green-600 text-white py-2 rounded text-xs font-bold shadow-lg shadow-green-900/20 hover:from-green-600 hover:to-green-500 transform active:scale-95 transition">ОТПРАВИТЬ ➜</button>
+                  <button onClick={()=>{ if(!formData.seller || !formData.price) return alert("Заполните Продавца и Цену!"); updateStatus(req, "ОДОБРЕНО", { legal_info: formData }); }} className="flex-[2] bg-gradient-to-r from-green-700 to-green-600 text-white py-2 rounded text-xs font-bold shadow-lg shadow-green-900/20 hover:from-green-600 hover:to-green-500 transform active:scale-95 transition">ОТПРАВИТЬ ➜</button>
                </div>
             </div>
          )}
 
-         {/* --- КНОПКИ ДЛЯ ОСТАЛЬНЫХ --- */}
+         {/* --- КНОПКИ ДЕЙСТВИЙ (ОСТАЛЬНЫЕ) --- */}
          {viewMode === 'active' && (
              <div className="pl-3 flex flex-wrap gap-2 mt-auto">
                  {role === 'DIRECTOR' && (
@@ -399,16 +312,41 @@ export default function SED() {
                  )}
                  {role === 'FIN_DIR' && (
                      <>
-                       <div className="w-full bg-[#0d1117] p-2 rounded border border-gray-700 mb-2 text-xs">
-                           <div className="grid grid-cols-2 gap-1 text-gray-400">
-                               <div>Поставщик: <b className="text-white">{req.legal_info?.seller}</b></div>
-                               <div>Итого: <b className="text-white">{req.legal_info?.total}</b></div>
-                               <div>Условия: <span className="text-white">{req.legal_info?.payment}</span></div>
+                       {/* --- BOSS VIEW ДЛЯ ФИН. ДИРЕКТОРА --- */}
+                       <div className="w-full bg-[#0d1117] border border-purple-500/30 rounded-lg p-3 mb-3">
+                           <div className="text-[10px] text-purple-400 font-bold mb-2 uppercase tracking-wider flex items-center gap-2">
+                               <FileText size={12}/> Данные по сделке
+                           </div>
+                           <div className="space-y-3">
+                               {/* БЛОК ДЕНЕГ */}
+                               <div className="bg-purple-900/10 p-2 rounded border border-purple-500/20">
+                                   <div className="flex justify-between items-end mb-1">
+                                       <span className="text-gray-400 text-[10px]">Поставщик</span>
+                                       <span className="text-white font-bold text-xs">{req.legal_info?.seller}</span>
+                                   </div>
+                                   <div className="flex justify-between items-end">
+                                       <span className="text-gray-400 text-[10px]">ИТОГО (с НДС: {req.legal_info?.vat})</span>
+                                       <span className="text-purple-300 font-bold text-lg">{req.legal_info?.total} ₸</span>
+                                   </div>
+                               </div>
+                               
+                               {/* БЛОК ДЕТАЛЕЙ */}
+                               <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                                   <DataRow label="Цена за ед." val={req.legal_info?.price} highlight/>
+                                   <DataRow label="Количество" val={req.legal_info?.qty} highlight/>
+                                   <DataRow label="Оплата" val={req.legal_info?.payment}/>
+                                   <DataRow label="Срок" val={req.legal_info?.term}/>
+                                   <DataRow label="Доставка" val={req.legal_info?.delivery}/>
+                                   <DataRow label="Предмет" val={req.legal_info?.subject}/>
+                               </div>
                            </div>
                        </div>
-                       <button onClick={()=>updateStatus(req, "ОДОБРЕНО")} className="flex-1 bg-green-600 py-2 rounded text-white text-xs font-bold">УТВЕРДИТЬ</button>
-                       <button onClick={()=>{const r=prompt("Комментарий:"); if(r) updateStatus(req, "НА ДОРАБОТКУ", {fix_comment: r})}} className="flex-1 bg-orange-600 py-2 rounded text-white text-xs font-bold">ПРАВКИ</button>
-                       <button onClick={()=>updateStatus(req, "ОТКАЗ")} className="w-full bg-red-900/50 border border-red-800 text-red-300 py-2 rounded text-xs">ОТКАЗАТЬ</button>
+
+                       <div className="flex gap-2">
+                           <button onClick={()=>updateStatus(req, "ОДОБРЕНО")} className="flex-[2] bg-gradient-to-r from-green-600 to-green-500 py-3 rounded-lg text-white text-xs font-bold shadow-lg shadow-green-900/20 transform active:scale-95 transition">УТВЕРДИТЬ</button>
+                           <button onClick={()=>{const r=prompt("Комментарий:"); if(r) updateStatus(req, "НА ДОРАБОТКУ", {fix_comment: r})}} className="flex-1 bg-orange-600 py-3 rounded-lg text-white text-xs font-bold transform active:scale-95 transition">ПРАВКИ</button>
+                           <button onClick={()=>updateStatus(req, "ОТКАЗ")} className="flex-1 bg-red-900/50 border border-red-800 text-red-300 py-3 rounded-lg text-xs font-bold transform active:scale-95 transition">ОТКАЗ</button>
+                       </div>
                      </>
                  )}
                  {role && role.includes("SKLAD") && (
@@ -471,7 +409,7 @@ export default function SED() {
 
   return (
     <div className="min-h-screen bg-[#0d1117] text-gray-300 pb-20 font-sans flex flex-col">
-      {/* ... МОДАЛКА БЕЗ ИЗМЕНЕНИЙ ... */}
+      {/* ... МОДАЛКА И ШАПКА ТЕ ЖЕ ... */}
       {modal.open && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
               <div className="bg-[#161b22] border border-gray-700 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
@@ -503,7 +441,6 @@ export default function SED() {
           </div>
       )}
       
-      {/* ... ШАПКА ... */}
       <div className="sticky top-0 z-20 bg-[#0d1117]/90 backdrop-blur border-b border-gray-800">
           <div className="max-w-7xl mx-auto p-3">
              <div className="flex justify-between items-center mb-3">
@@ -520,7 +457,6 @@ export default function SED() {
                      <button onClick={() => setRole(null)} className="text-[10px] text-red-400 border border-red-900/30 px-3 py-2 rounded-lg bg-red-900/10 hover:bg-red-900/20">ВЫХОД</button>
                  </div>
              </div>
-             
              <div className="flex gap-2">
                  <div className="flex-1 flex bg-[#161b22] p-1 rounded-lg border border-gray-700">
                      <button onClick={() => switchMode('active')} className={`flex-1 py-1.5 text-xs font-bold rounded flex justify-center items-center gap-1 transition ${viewMode==='active' ? 'bg-blue-600 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}><Zap size={14}/> <span className="hidden sm:inline">В РАБОТЕ</span></button>
@@ -534,7 +470,6 @@ export default function SED() {
           </div>
       </div>
       
-      {/* ... СЕТКА ... */}
       <div className="max-w-7xl mx-auto w-full p-4 flex-grow">
           {loading && requests.length === 0 ? (
               <div className="text-center py-20 text-gray-500 animate-pulse">Загрузка данных...</div> 
