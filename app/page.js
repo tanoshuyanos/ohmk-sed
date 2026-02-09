@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { RefreshCw, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, ExternalLink, AlertTriangle, Table, Truck, Wrench, Info, DollarSign, Calendar, MapPin, Eye } from 'lucide-react';
 
-const APP_VERSION = "v2.6.1 (Visiblity Fix)"; 
+const APP_VERSION = "v2.8 (Accounting Full)"; 
 // ВАША ССЫЛКА
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
@@ -53,17 +53,9 @@ export default function SED() {
         else if (userRole === "FIN_DIR") query = query.eq('status', 'ДОГОВОР').neq('fin_dir_status', 'ОДОБРЕНО').neq('fin_dir_status', 'ОТКАЗ');
         else if (userRole === "KOMER") query = query.or('status.eq.ОДОБРЕНО,fin_dir_status.eq.НА ДОРАБОТКУ');
         else if (userRole && userRole.includes("SKLAD")) query = query.eq('status', 'ОДОБРЕНО');
-        
-        // --- ИСПРАВЛЕНИЕ: ЮРИСТЫ ---
-        // Видят: Свою очередь, ИЛИ когда они уже отправили Финансисту (FINANCE_REVIEW)
         else if (userRole === "LAWYER") query = query.or('current_step.eq.LAWYER_PROJECT,current_step.eq.LAWYER_FINAL,current_step.eq.LAWYER_FIX,current_step.eq.FINANCE_REVIEW,status.eq.В РАБОТЕ');
-        
-        // --- ИСПРАВЛЕНИЕ: ФИНАНСЫ ---
-        // Видят: Свою очередь (FINANCE_REVIEW/DEAL) ИЛИ статус "В РАБОТЕ" (который ставится при загрузке проекта)
         else if (userRole === "FINANCE") query = query.or('current_step.eq.FINANCE_REVIEW,current_step.eq.FINANCE_DEAL,status.eq.В РАБОТЕ,status.eq.Договор подписан');
-        
-        // БУХГАЛТЕР: Видит готовые к оплате
-        else if (userRole === "ACCOUNTANT") query = query.or('status.eq.ОДОБРЕНО К ОПЛАТЕ,status.eq.ОДОБРЕНО');
+        else if (userRole === "ACCOUNTANT") query = query.or('status.eq.ОДОБРЕНО К ОПЛАТЕ,status.eq.ОДОБРЕНО').neq('status', 'ОПЛАЧЕНО');
     }
 
     const { data } = await query;
@@ -88,13 +80,8 @@ export default function SED() {
                 return !req.warehouse_status || req.warehouse_status === "ВЫБРАТЬ";
             });
         }
-        
-        // Финансист: скрываем, если УЖЕ одобрил сам (статус ОДОБРЕНО К ОПЛАТЕ ставит бухгалтер или финал)
-        // Но если статус просто "ОДОБРЕНО" (от ФинДира) - это не то.
-        // Фильтруем так: Если статус "ОДОБРЕНО" (финальный для фин контрола) - скрываем.
+        // Финансы и Юристы - фильтры по статусам
         if (userRole === "FINANCE") filtered = filtered.filter(req => req.status !== "ОДОБРЕНО" && req.status !== "ОДОБРЕНО К ОПЛАТЕ" && req.status !== "ОПЛАЧЕНО");
-        
-        // Юрист: если статус "ОПЛАЧЕНО" или "ОДОБРЕНО К ОПЛАТЕ" (уже у буха) - скрываем
         if (userRole === "LAWYER") filtered = filtered.filter(req => req.status !== "ОПЛАЧЕНО" && req.status !== "ОДОБРЕНО К ОПЛАТЕ");
     }
     setRequests(filtered);
@@ -112,10 +99,7 @@ export default function SED() {
         if (!comments) return; 
     }
 
-    // Optimistic UI
-    if (role !== 'LAWYER') { // Юристу не удаляем сразу, ему может понадобиться обновить
-        setRequests(prev => prev.filter(r => r.id !== req.id));
-    }
+    if (role !== 'LAWYER') setRequests(prev => prev.filter(r => r.id !== req.id));
 
     let updates = { ...extraUpdates, last_role: role };
     if (comments) updates.fix_comment = "СКЛАД: " + comments; 
@@ -157,7 +141,7 @@ export default function SED() {
 
     const { error } = await supabase.from('requests').update({ status: newStatus, current_step: nextStep, ...updates }).eq('id', req.id);
     if (error) { alert("Ошибка сохранения!"); fetchRequests(role, viewMode); }
-    else if (role === 'LAWYER') fetchRequests(role, viewMode); // Обновляем юристу список, чтобы статус поменялся
+    else if (role === 'LAWYER') fetchRequests(role, viewMode); 
   };
 
   const handleUpload = async () => {
@@ -184,14 +168,7 @@ export default function SED() {
                   body: JSON.stringify({ file: base64, fileName: file.name, reqNum: modal.req.req_number, reqId: modal.req.id, contractNum: contractNum, amount: amount, type: modal.type })
               });
               clearInterval(interval); setUploadProgress(100); setUploadStatus('success');
-              
-              // Мгновенное обновление UI для Юриста
-              setTimeout(async () => { 
-                  setModal({ open: false, req: null, type: '' }); 
-                  setUploadStatus(''); 
-                  setUploadProgress(0); 
-                  fetchRequests(role, viewMode); 
-              }, 4000); 
+              setTimeout(async () => { setModal({ open: false, req: null, type: '' }); setUploadStatus(''); setUploadProgress(0); fetchRequests(role, viewMode); }, 4000); 
           } catch (e) { clearInterval(interval); setUploadStatus('error'); alert("Ошибка загрузки: " + e.message); }
       };
   };
@@ -201,7 +178,11 @@ export default function SED() {
         seller: '', buyer: 'ТОО ОХМК', subject: req.item_name, qty: req.qty, price: '', total: '', payment: 'Постоплата', delivery: 'Склад ОХМК',
         pickup: 'Нет', term: '10 рабочих дней', quality: 'Новое', warranty: '12 мес', vat: 'Да', person: req.initiator, reqNum: req.req_number
     });
+    
+    // Поля для Бухгалтера
     const [paySum, setPaySum] = useState('');
+    const [payDate, setPayDate] = useState('');
+
     const isService = (req.item_name || "").toLowerCase().includes("услуг") || (req.item_name || "").toLowerCase().includes("работ");
 
     let borderColor = 'border-[#30363d]';
@@ -274,17 +255,9 @@ export default function SED() {
                <div className="flex items-center gap-2 mb-2"><span className="text-[10px] bg-pink-500 text-white px-1.5 py-0.5 rounded font-bold">АНКЕТА ПОСТАВЩИКА</span></div>
                <div className="grid grid-cols-2 gap-2 text-xs">
                    <div className="col-span-2"><label className="text-[9px] text-gray-400 block">Продавец</label><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.seller||''} onChange={e=>setFormData({...formData, seller: e.target.value})}/></div>
-                   <div><label className="text-[9px] text-gray-400 block">Покупатель</label><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.buyer||''} onChange={e=>setFormData({...formData, buyer: e.target.value})}/></div>
-                   <div><label className="text-[9px] text-gray-400 block">НДС</label><select className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.vat} onChange={e=>setFormData({...formData, vat: e.target.value})}><option value="Да">Да</option><option value="Нет">Нет</option></select></div>
                    <div className="col-span-2"><label className="text-[9px] text-gray-400 block">Предмет договора</label><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.subject||''} onChange={e=>setFormData({...formData, subject: e.target.value})}/></div>
                    <div><label className="text-[9px] text-gray-400 block">Цена за ед.</label><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white font-bold" type="number" placeholder="0" value={formData.price||''} onChange={e=>{const val=e.target.value; const qty = parseFloat(formData.qty) || 1; setFormData({...formData, price: val, total: (val*qty).toFixed(2)})}}/></div>
                    <div><label className="text-[9px] text-gray-400 block">Итого</label><input className="w-full bg-[#0d1117] border border-pink-900/50 p-1.5 rounded text-pink-400 font-bold" type="number" value={formData.total||''} onChange={e=>setFormData({...formData, total: e.target.value})}/></div>
-                   <div><label className="text-[9px] text-gray-400 block">Порядок оплаты</label><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.payment||''} onChange={e=>setFormData({...formData, payment: e.target.value})}/></div>
-                   <div><label className="text-[9px] text-gray-400 block">Срок поставки</label><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.term||''} onChange={e=>setFormData({...formData, term: e.target.value})}/></div>
-                   <div><label className="text-[9px] text-gray-400 block">Место доставки</label><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.delivery||''} onChange={e=>setFormData({...formData, delivery: e.target.value})}/></div>
-                   <div><label className="text-[9px] text-gray-400 block">Самовывоз</label><select className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.pickup} onChange={e=>setFormData({...formData, pickup: e.target.value})}><option value="Нет">Нет</option><option value="Да">Да</option></select></div>
-                   {!isService && <><div><label className="text-[9px] text-gray-400 block">Качество</label><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.quality||''} onChange={e=>setFormData({...formData, quality: e.target.value})}/></div><div><label className="text-[9px] text-gray-400 block">Гарантия</label><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.warranty||''} onChange={e=>setFormData({...formData, warranty: e.target.value})}/></div></>}
-                   <div className="col-span-2"><label className="text-[9px] text-gray-400 block">Инициатор (ФИО)</label><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.person||''} onChange={e=>setFormData({...formData, person: e.target.value})}/></div>
                </div>
                <div className="flex gap-2 mt-4 pt-2 border-t border-pink-900/30">
                   <button onClick={()=>updateStatus(req, "ОТКАЗ")} className="flex-1 bg-red-900/20 text-red-300 py-2 rounded text-xs border border-red-900 hover:bg-red-900 hover:text-white transition">ОТКАЗ</button>
@@ -345,11 +318,18 @@ export default function SED() {
                        </div>
                     </>
                  )}
+                 
+                 {/* --- ВАЖНО: БУХГАЛТЕР ВИДИТ СУММУ И ДАТУ --- */}
                  {role === 'ACCOUNTANT' && (
-                     <div className="w-full flex gap-2">
-                         <input type="number" placeholder="Сумма" className="w-1/3 bg-[#0d1117] border border-gray-700 rounded text-xs text-white p-2" value={paySum} onChange={e=>setPaySum(e.target.value)}/>
-                         <button onClick={()=>{if(!paySum)return alert("Сумма?"); updateStatus(req, "ОПЛАЧЕНО", {payment_sum:paySum})}} className="flex-1 bg-green-600 py-2 rounded text-white text-xs font-bold">ОПЛАТИТЬ</button>
-                         <button onClick={()=>updateStatus(req, "ОТКАЗ")} className="bg-red-600 py-2 px-3 rounded text-white text-xs font-bold">Х</button>
+                     <div className="w-full flex flex-col gap-2">
+                         <div className="flex gap-2">
+                             <input type="number" placeholder="Сумма (₸)" className="w-1/2 bg-[#0d1117] border border-gray-700 rounded text-xs text-white p-2" value={paySum} onChange={e=>setPaySum(e.target.value)}/>
+                             <input type="date" className="w-1/2 bg-[#0d1117] border border-gray-700 rounded text-xs text-white p-2" value={payDate} onChange={e=>setPayDate(e.target.value)}/>
+                         </div>
+                         <div className="flex gap-2">
+                             <button onClick={()=>{if(!paySum || !payDate)return alert("Заполните Сумму и Дату!"); updateStatus(req, "ОПЛАЧЕНО", {payment_sum:paySum, payment_date: payDate})}} className="flex-[2] bg-green-600 py-2 rounded text-white text-xs font-bold">ОПЛАТИТЬ</button>
+                             <button onClick={()=>updateStatus(req, "ОТКАЗ")} className="flex-1 bg-red-600 py-2 rounded text-white text-xs font-bold">ОТКАЗ</button>
+                         </div>
                      </div>
                  )}
              </div>
@@ -371,7 +351,7 @@ export default function SED() {
 
   return (
     <div className="min-h-screen bg-[#0d1117] text-gray-300 pb-20 font-sans flex flex-col">
-      {/* ... МОДАЛКА И ШАПКА ... */}
+      {/* МОДАЛКА И ШАПКА ... */}
       {modal.open && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
               <div className="bg-[#161b22] border border-gray-700 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
