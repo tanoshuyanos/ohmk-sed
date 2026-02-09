@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { RefreshCw, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, ExternalLink, AlertTriangle, Table, Truck, Wrench, Info } from 'lucide-react';
 
-const APP_VERSION = "v1.8 (Sklad Partial Comment)"; 
+const APP_VERSION = "v1.9 (Instant Speed)"; 
 // ВАША ССЫЛКА НА СКРИПТ
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
@@ -51,9 +51,7 @@ export default function SED() {
     if (currentMode === 'history') query = query.limit(100);
     else {
         // --- ЛОГИКА ФИЛЬТРАЦИИ ---
-        if (userRole === "DIRECTOR") {
-             query = query.or('current_step.eq.DIRECTOR_CHECK,status.eq.В ОБРАБОТКЕ,status.eq.new,status.eq.director_review');
-        }
+        if (userRole === "DIRECTOR") query = query.or('current_step.eq.DIRECTOR_CHECK,status.eq.В ОБРАБОТКЕ,status.eq.new,status.eq.director_review');
         else if (userRole === "FIN_DIR") query = query.eq('status', 'ДОГОВОР').neq('fin_dir_status', 'ОДОБРЕНО').neq('fin_dir_status', 'ОТКАЗ');
         else if (userRole === "KOMER") query = query.or('status.eq.ОДОБРЕНО,fin_dir_status.eq.НА ДОРАБОТКУ');
         else if (userRole && userRole.includes("SKLAD")) query = query.eq('status', 'ОДОБРЕНО');
@@ -70,8 +68,14 @@ export default function SED() {
             filtered = filtered.filter(req => {
                 if (req.fin_dir_status === "НА ДОРАБОТКУ") return true;
                 if (req.status !== "ОДОБРЕНО") return false;
+                
+                // Услуги сразу ко мне
                 if ((req.item_name || "").toLowerCase().includes("услуг") || (req.item_name || "").toLowerCase().includes("работ")) return true; 
-                return (req.warehouse_status === "Частично" || req.warehouse_status === "Отсутствует" || req.warehouse_status === "ОТСУТСТВУЕТ");
+                
+                // Товары - только если Склад сказал "Частично" или "Отсутствует"
+                // ВАЖНО: Проверяем точное совпадение
+                const ws = req.warehouse_status;
+                return (ws === "Частично" || ws === "Отсутствует" || ws === "ОТСУТСТВУЕТ");
             });
         }
         if (userRole && userRole.includes("SKLAD")) {
@@ -81,7 +85,9 @@ export default function SED() {
                 if (userRole === "SKLAD_CENTRAL" && wId !== "central") return false;
                 if (userRole === "SKLAD_ZAP" && wId !== "parts") return false;
                 if ((userRole === "SKLAD_GSM" || userRole === "SKLAD_MEHTOK") && wId !== "special") return false;
-                return !req.warehouse_status || req.warehouse_status === "ВЫБРАТЬ";
+                
+                // Скрываем, если статус уже проставлен
+                return !req.warehouse_status || req.warehouse_status === "ВЫБРАТЬ" || req.warehouse_status === "";
             });
         }
         if (userRole === "FINANCE") filtered = filtered.filter(req => req.status !== "ОДОБРЕНО");
@@ -95,17 +101,18 @@ export default function SED() {
   const updateStatus = async (req, action, extraUpdates = {}) => {
     if (role !== 'LAWYER' && !confirm(`Выполнить: ${action}?`)) return;
     
-    // --- СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ СКЛАДА "ЧАСТИЧНО" ---
+    // --- ПРОВЕРКА КОММЕНТАРИЯ ДЛЯ СКЛАДА ---
     let comments = null;
     if (role.includes('SKLAD') && action === 'Частично') {
         comments = prompt("Напишите, ЧТО ИМЕННО есть на складе (и сколько):");
-        if (!comments) return; // Если нажал отмену - не сохраняем
+        if (!comments) return; 
     }
 
-    setLoading(true);
+    // --- МГНОВЕННОЕ УДАЛЕНИЕ КАРТОЧКИ С ЭКРАНА (Оптимистичный UI) ---
+    // Мы не ждем базу, мы сразу убираем заявку из списка, чтобы не было ощущения "зависания"
+    setRequests(prev => prev.filter(r => r.id !== req.id));
 
     let updates = { ...extraUpdates, last_role: role };
-    // Если есть коммент от склада - записываем его в fix_comment (чтобы комер видел)
     if (comments) updates.fix_comment = "СКЛАД: " + comments; 
 
     let newStatus = req.status; 
@@ -120,7 +127,7 @@ export default function SED() {
         else { newStatus = "ОТКЛОНЕНО"; nextStep = "CLOSED_REJECTED"; }
     }
     else if (role.includes('SKLAD')) {
-        updates.warehouse_status = action;
+        updates.warehouse_status = action; // "Частично", "Есть", "Отсутствует"
         nextStep = (action.toUpperCase() === 'ЕСТЬ') ? "CLOSED_SUCCESS" : "KOMER_WORK";
     }
     else if (role === 'KOMER') {
@@ -143,9 +150,14 @@ export default function SED() {
         else { newStatus = "ОТКАЗ БУХ"; nextStep = "CLOSED_REJECTED"; }
     }
 
+    // Отправляем в базу в фоне
     const { error } = await supabase.from('requests').update({ status: newStatus, current_step: nextStep, ...updates }).eq('id', req.id);
-    if (!error) fetchRequests(role, viewMode);
-    setLoading(false);
+    
+    // Если ошибка - вернем заявку и покажем алерт (но это вряд ли случится)
+    if (error) {
+        alert("Ошибка сохранения! Обновите страницу.");
+        fetchRequests(role, viewMode);
+    }
   };
 
   const handleUpload = async () => {
@@ -234,6 +246,7 @@ export default function SED() {
             </div>
          </div>
 
+         {/* --- ДАННЫЕ --- */}
          <div className="text-sm pl-3 mb-4 space-y-2 text-gray-300 flex-grow">
             <div className="flex items-start gap-2">
                 {isService ? <Wrench className="text-purple-400 shrink-0" size={18}/> : <Truck className="text-blue-400 shrink-0" size={18}/>}
@@ -274,7 +287,7 @@ export default function SED() {
              </div>
          )}
 
-         {/* --- ПРАВКИ (ФИНАНСИСТА ИЛИ ЮРИСТА) --- */}
+         {/* --- ПРАВКИ --- */}
          {req.fix_comment && req.status === "НА ДОРАБОТКУ" && (
              <div className="pl-3 mb-3 p-3 bg-orange-900/20 border border-orange-800 rounded flex gap-2 items-start text-orange-200 text-xs">
                  <AlertTriangle size={16} className="shrink-0 mt-0.5"/>
@@ -282,7 +295,7 @@ export default function SED() {
              </div>
          )}
 
-         {/* --- СООБЩЕНИЕ ДЛЯ КОМЕРА ОТ СКЛАДА (НОВОЕ!) --- */}
+         {/* --- СООБЩЕНИЕ ДЛЯ КОМЕРА ОТ СКЛАДА --- */}
          {role === 'KOMER' && req.warehouse_status === 'Частично' && req.fix_comment && (
              <div className="pl-3 mb-3 p-3 bg-blue-900/20 border border-blue-500 rounded flex gap-2 items-start text-blue-300 text-xs">
                  <Info size={16} className="shrink-0 mt-0.5"/>
@@ -421,7 +434,7 @@ export default function SED() {
 
   return (
     <div className="min-h-screen bg-[#0d1117] text-gray-300 pb-20 font-sans flex flex-col">
-      {/* МОДАЛЬНЫЕ ОКНА БЕЗ ИЗМЕНЕНИЙ */}
+      {/* МОДАЛКА БЕЗ ИЗМЕНЕНИЙ */}
       {modal.open && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
               <div className="bg-[#161b22] border border-gray-700 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
@@ -453,6 +466,7 @@ export default function SED() {
           </div>
       )}
       
+      {/* ШАПКА */}
       <div className="sticky top-0 z-20 bg-[#0d1117]/90 backdrop-blur border-b border-gray-800">
           <div className="max-w-7xl mx-auto p-3">
              <div className="flex justify-between items-center mb-3">
@@ -469,7 +483,6 @@ export default function SED() {
                      <button onClick={() => setRole(null)} className="text-[10px] text-red-400 border border-red-900/30 px-3 py-2 rounded-lg bg-red-900/10 hover:bg-red-900/20">ВЫХОД</button>
                  </div>
              </div>
-             
              <div className="flex gap-2">
                  <div className="flex-1 flex bg-[#161b22] p-1 rounded-lg border border-gray-700">
                      <button onClick={() => switchMode('active')} className={`flex-1 py-1.5 text-xs font-bold rounded flex justify-center items-center gap-1 transition ${viewMode==='active' ? 'bg-blue-600 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}><Zap size={14}/> <span className="hidden sm:inline">В РАБОТЕ</span></button>
@@ -483,6 +496,7 @@ export default function SED() {
           </div>
       </div>
       
+      {/* СЕТКА */}
       <div className="max-w-7xl mx-auto w-full p-4 flex-grow">
           {loading && requests.length === 0 ? (
               <div className="text-center py-20 text-gray-500 animate-pulse">Загрузка данных...</div> 
