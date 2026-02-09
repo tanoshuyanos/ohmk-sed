@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { RefreshCw, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, ExternalLink, AlertTriangle, Table, Truck, Wrench, Info, DollarSign, Calendar, MapPin, Eye } from 'lucide-react';
 
-const APP_VERSION = "v2.5 (Fin Review Fix)"; 
+const APP_VERSION = "v2.6 (Visiblity Fix)"; 
 // ВАША ССЫЛКА
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
@@ -49,27 +49,26 @@ export default function SED() {
 
     if (currentMode === 'history') query = query.limit(100);
     else {
-        // --- ФИЛЬТРЫ ОЧЕРЕДЕЙ (ИСПРАВЛЕНЫ) ---
         if (userRole === "DIRECTOR") query = query.or('current_step.eq.DIRECTOR_CHECK,status.eq.В ОБРАБОТКЕ,status.eq.new,status.eq.director_review');
         else if (userRole === "FIN_DIR") query = query.eq('status', 'ДОГОВОР').neq('fin_dir_status', 'ОДОБРЕНО').neq('fin_dir_status', 'ОТКАЗ');
         else if (userRole === "KOMER") query = query.or('status.eq.ОДОБРЕНО,fin_dir_status.eq.НА ДОРАБОТКУ');
         else if (userRole && userRole.includes("SKLAD")) query = query.eq('status', 'ОДОБРЕНО');
         
-        // ЮРИСТЫ: Видят по шагам (Проект, Финал, Правки)
-        else if (userRole === "LAWYER") query = query.or('current_step.eq.LAWYER_PROJECT,current_step.eq.LAWYER_FINAL,current_step.eq.LAWYER_FIX');
+        // --- ИСПРАВЛЕНИЕ: ЮРИСТЫ ---
+        // Видят: Свою очередь, ИЛИ когда они уже отправили Финансисту (FINANCE_REVIEW)
+        else if (userRole === "LAWYER") query = query.or('current_step.eq.LAWYER_PROJECT,current_step.eq.LAWYER_FINAL,current_step.eq.LAWYER_FIX,current_step.eq.FINANCE_REVIEW,status.eq.В РАБОТЕ');
         
-        // ФИНАНСЫ: Видят по шагам (Проверка проекта, Проверка сделки)
-        // Исправили: Теперь ищем по current_step, а не по наличию ссылок
-        else if (userRole === "FINANCE") query = query.or('current_step.eq.FINANCE_REVIEW,current_step.eq.FINANCE_DEAL');
+        // --- ИСПРАВЛЕНИЕ: ФИНАНСЫ ---
+        // Видят: Свою очередь (FINANCE_REVIEW/DEAL) ИЛИ статус "В РАБОТЕ" (который ставится при загрузке проекта)
+        else if (userRole === "FINANCE") query = query.or('current_step.eq.FINANCE_REVIEW,current_step.eq.FINANCE_DEAL,status.eq.В РАБОТЕ,status.eq.Договор подписан');
         
         // БУХГАЛТЕР: Видит готовые к оплате
-        else if (userRole === "ACCOUNTANT") query = query.eq('status', 'ОДОБРЕНО К ОПЛАТЕ').or('current_step.eq.ACCOUNTANT_PAY');
+        else if (userRole === "ACCOUNTANT") query = query.or('status.eq.ОДОБРЕНО К ОПЛАТЕ,status.eq.ОДОБРЕНО');
     }
 
     const { data } = await query;
     let filtered = data || [];
 
-    // Дополнительная фильтрация на клиенте (на всякий случай)
     if (currentMode === 'active') {
         if (userRole === "KOMER") {
             filtered = filtered.filter(req => {
@@ -89,10 +88,14 @@ export default function SED() {
                 return !req.warehouse_status || req.warehouse_status === "ВЫБРАТЬ";
             });
         }
-        // Финансист: убираем уже одобренные
-        if (userRole === "FINANCE") filtered = filtered.filter(req => req.status !== "ОДОБРЕНО");
-        // Юрист: убираем, если договор уже подписан (сделано)
-        if (userRole === "LAWYER") filtered = filtered.filter(req => req.status !== "ДОГОВОР ПОДПИСАН");
+        
+        // Финансист: скрываем, если УЖЕ одобрил сам (статус ОДОБРЕНО К ОПЛАТЕ ставит бухгалтер или финал)
+        // Но если статус просто "ОДОБРЕНО" (от ФинДира) - это не то.
+        // Фильтруем так: Если статус "ОДОБРЕНО" (финальный для фин контрола) - скрываем.
+        if (userRole === "FINANCE") filtered = filtered.filter(req => req.status !== "ОДОБРЕНО" && req.status !== "ОДОБРЕНО К ОПЛАТЕ" && req.status !== "ОПЛАЧЕНО");
+        
+        // Юрист: если статус "ОПЛАЧЕНО" или "ОДОБРЕНО К ОПЛАТЕ" (уже у буха) - скрываем
+        if (userRole === "LAWYER") filtered = filtered.filter(req => req.status !== "ОПЛАЧЕНО" && req.status !== "ОДОБРЕНО К ОПЛАТЕ");
     }
     setRequests(filtered);
     setLoading(false);
@@ -109,7 +112,10 @@ export default function SED() {
         if (!comments) return; 
     }
 
-    setRequests(prev => prev.filter(r => r.id !== req.id));
+    // Optimistic UI
+    if (role !== 'LAWYER') { // Юристу не удаляем сразу, ему может понадобиться обновить
+        setRequests(prev => prev.filter(r => r.id !== req.id));
+    }
 
     let updates = { ...extraUpdates, last_role: role };
     if (comments) updates.fix_comment = "СКЛАД: " + comments; 
@@ -151,6 +157,7 @@ export default function SED() {
 
     const { error } = await supabase.from('requests').update({ status: newStatus, current_step: nextStep, ...updates }).eq('id', req.id);
     if (error) { alert("Ошибка сохранения!"); fetchRequests(role, viewMode); }
+    else if (role === 'LAWYER') fetchRequests(role, viewMode); // Обновляем юристу список, чтобы статус поменялся
   };
 
   const handleUpload = async () => {
@@ -177,7 +184,14 @@ export default function SED() {
                   body: JSON.stringify({ file: base64, fileName: file.name, reqNum: modal.req.req_number, reqId: modal.req.id, contractNum: contractNum, amount: amount, type: modal.type })
               });
               clearInterval(interval); setUploadProgress(100); setUploadStatus('success');
-              setTimeout(async () => { setModal({ open: false, req: null, type: '' }); setUploadStatus(''); setUploadProgress(0); fetchRequests(role, viewMode); }, 5000); 
+              
+              // Мгновенное обновление UI для Юриста
+              setTimeout(async () => { 
+                  setModal({ open: false, req: null, type: '' }); 
+                  setUploadStatus(''); 
+                  setUploadProgress(0); 
+                  fetchRequests(role, viewMode); 
+              }, 4000); 
           } catch (e) { clearInterval(interval); setUploadStatus('error'); alert("Ошибка загрузки: " + e.message); }
       };
   };
@@ -243,10 +257,8 @@ export default function SED() {
             {!isService && <div className="pt-2 border-t border-gray-800 mt-1"><span className="text-[10px] text-gray-500">КОЛИЧЕСТВО:</span> <span className="text-white font-bold ml-2 text-sm">{req.qty}</span></div>}
          </div>
 
-         {/* --- БЛОК ПРОСМОТРА ДЕТАЛЕЙ (ДЛЯ ВСЕХ) --- */}
          { (role === 'FIN_DIR' || role === 'LAWYER' || role === 'FINANCE' || role === 'ACCOUNTANT') && req.legal_info && (<div className="pl-3 mb-3"><DealInfoBlock/></div>)}
 
-         {/* --- ДОКУМЕНТЫ (ФИНАНСИСТ И ЮРИСТ ВИДЯТ ЭТО) --- */}
          {(req.draft_url || req.contract_url) && (
              <div className="pl-3 mb-4 space-y-2">
                  {req.draft_url && <a href={req.draft_url} target="_blank" className="flex items-center gap-2 bg-blue-900/20 text-blue-400 p-2 rounded border border-blue-900/50 hover:bg-blue-900/40 transition"><FileText size={16}/> <span className="text-xs font-bold">Проект договора</span> <ExternalLink size={12} className="ml-auto"/></a>}
@@ -257,10 +269,8 @@ export default function SED() {
          {req.fix_comment && req.status === "НА ДОРАБОТКУ" && <div className="pl-3 mb-3 p-3 bg-orange-900/20 border border-orange-800 rounded flex gap-2 items-start text-orange-200 text-xs"><AlertTriangle size={16} className="shrink-0 mt-0.5"/><div><b>ПРАВКИ:</b> {req.fix_comment}</div></div>}
          {role === 'KOMER' && req.warehouse_status === 'Частично' && req.fix_comment && <div className="pl-3 mb-3 p-3 bg-blue-900/20 border border-blue-500 rounded flex gap-2 items-start text-blue-300 text-xs"><Info size={16} className="shrink-0 mt-0.5"/><div><b>{req.fix_comment}</b></div></div>}
 
-         {/* --- ФОРМА КОМЕРА --- */}
          {role === 'KOMER' && viewMode === 'active' && (
             <div className="pl-3 bg-pink-900/10 border-l-2 border-pink-500 p-3 rounded mb-3">
-               {/* Форма Коммерческого (сокращена для краткости, она такая же как в v2.1) */}
                <div className="flex items-center gap-2 mb-2"><span className="text-[10px] bg-pink-500 text-white px-1.5 py-0.5 rounded font-bold">АНКЕТА ПОСТАВЩИКА</span></div>
                <div className="grid grid-cols-2 gap-2 text-xs">
                    <div className="col-span-2"><label className="text-[9px] text-gray-400 block">Продавец</label><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" value={formData.seller||''} onChange={e=>setFormData({...formData, seller: e.target.value})}/></div>
@@ -328,7 +338,6 @@ export default function SED() {
                  )}
                  {role === 'FINANCE' && (
                     <>
-                       {/* ФИНАНСИСТ ТЕПЕРЬ ВИДИТ ДАННЫЕ ВВЕРХУ (DealInfoBlock) */}
                        <button onClick={()=>updateStatus(req, "ПРОЕКТ СОГЛАСОВАН")} className="w-full bg-green-600 py-3 rounded-lg text-white text-xs font-bold mb-2">✅ СОГЛАСОВАТЬ ПРОЕКТ</button>
                        <div className="flex gap-2">
                            <button onClick={()=>{const r=prompt("Что исправить?"); if(r) updateStatus(req, "НА ДОРАБОТКУ", {fix_comment: r})}} className="flex-1 bg-orange-600 py-2 rounded text-white text-xs font-bold">ПРАВКИ</button>
@@ -362,6 +371,7 @@ export default function SED() {
 
   return (
     <div className="min-h-screen bg-[#0d1117] text-gray-300 pb-20 font-sans flex flex-col">
+      {/* ... МОДАЛКА И ШАПКА ... */}
       {modal.open && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
               <div className="bg-[#161b22] border border-gray-700 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
