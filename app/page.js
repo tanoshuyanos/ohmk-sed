@@ -1,9 +1,9 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { RefreshCw, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, ExternalLink, AlertTriangle, Table, Truck, Wrench, Info, DollarSign, Calendar, MapPin, Eye, Clock } from 'lucide-react';
+import { RefreshCw, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, ExternalLink, AlertTriangle, Table, Truck, Wrench, Info, DollarSign, Calendar, MapPin, Eye, Clock, BarChart3 } from 'lucide-react';
 
-const APP_VERSION = "v3.1 (Fix Filters + Direct Calendar)"; 
+const APP_VERSION = "v3.3 (Parallel Economist)"; 
 // ВАША ССЫЛКА
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
@@ -28,6 +28,7 @@ export default function SED() {
   const ROLES = {
     "2223": "DIRECTOR", "0500": "KOMER", "777": "FIN_DIR", 
     "333": "LAWYER", "444": "FINANCE", "222": "ACCOUNTANT",
+    "111": "ECONOMIST", 
     "2014": "SKLAD_CENTRAL", "2525": "SKLAD_ZAP", "197": "SKLAD_STOL",
     "504": "SKLAD_MTF", "505": "SKLAD_MEHTOK", "506": "SKLAD_ZNKI",
     "507": "SKLAD_BUH", "508": "SKLAD_GSM"
@@ -51,30 +52,34 @@ export default function SED() {
     else {
         if (userRole === "DIRECTOR") query = query.or('current_step.eq.DIRECTOR_CHECK,status.eq.В ОБРАБОТКЕ,status.eq.new,status.eq.director_review');
         else if (userRole === "FIN_DIR") query = query.eq('status', 'ДОГОВОР').neq('fin_dir_status', 'ОДОБРЕНО').neq('fin_dir_status', 'ОТКАЗ');
-        else if (userRole === "KOMER") query = query.or('status.eq.ОДОБРЕНО,fin_dir_status.eq.НА ДОРАБОТКУ');
+        
+        // --- ИЗМЕНЕНИЕ: ЭКОНОМИСТ ---
+        // Видит всё, что находится в работе у Коммерческого (или на доработке)
+        // Он работает ПАРАЛЛЕЛЬНО, не задерживая заявку
+        else if (userRole === "ECONOMIST") query = query.or('current_step.eq.KOMER_WORK,current_step.eq.KOMER_FIX');
+
+        // КОМЕР: Видит свои задачи
+        else if (userRole === "KOMER") query = query.or('status.eq.ОДОБРЕНО,fin_dir_status.eq.НА ДОРАБОТКУ').or('current_step.eq.KOMER_WORK,current_step.eq.KOMER_FIX');
+        
         else if (userRole && userRole.includes("SKLAD")) query = query.eq('status', 'ОДОБРЕНО');
         else if (userRole === "LAWYER") query = query.or('current_step.eq.LAWYER_PROJECT,current_step.eq.LAWYER_FINAL,current_step.eq.LAWYER_FIX,current_step.eq.FINANCE_REVIEW,status.eq.В РАБОТЕ');
-        
         else if (userRole === "FINANCE") query = query.or('current_step.eq.FINANCE_REVIEW,current_step.eq.FINANCE_DEAL,status.eq.В РАБОТЕ,status.eq.Договор подписан,status.eq.НА СОГЛАСОВАНИИ ОПЛАТЫ');
-        
-        // --- ИСПРАВЛЕННЫЙ ФИЛЬТР ДЛЯ БУХГАЛТЕРА ---
-        // Видит только те, где шаг явно ACCOUNTANT_PAY (от Финансиста) или ACCOUNTANT_EXECUTE (после согласования даты)
-        // Статус "ОДОБРЕНО" сам по себе игнорируем, если шаг не наш.
-        else if (userRole === "ACCOUNTANT") {
-            query = query.or('current_step.eq.ACCOUNTANT_PAY,current_step.eq.ACCOUNTANT_EXECUTE,status.eq.СОГЛАСОВАНО НА ОПЛАТУ').neq('status', 'ОПЛАЧЕНО');
-        }
+        else if (userRole === "ACCOUNTANT") query = query.or('current_step.eq.ACCOUNTANT_PAY,current_step.eq.ACCOUNTANT_EXECUTE,status.eq.СОГЛАСОВАНО НА ОПЛАТУ').neq('status', 'ОПЛАЧЕНО');
     }
 
     const { data } = await query;
     let filtered = data || [];
 
-    // Дополнительная фильтрация на клиенте (для надежности)
     if (currentMode === 'active') {
         if (userRole === "KOMER") {
             filtered = filtered.filter(req => {
                 if (req.fin_dir_status === "НА ДОРАБОТКУ") return true;
                 if (req.status !== "ОДОБРЕНО") return false;
-                if ((req.item_name || "").toLowerCase().includes("услуг") || (req.item_name || "").toLowerCase().includes("работ")) return true; 
+                
+                const isService = (req.item_name || "").toLowerCase().includes("услуг") || (req.item_name || "").toLowerCase().includes("работ");
+                if (isService) return true;
+
+                // Убираем ожидание экономиста. Комер видит всё, что прошло склад.
                 return (req.warehouse_status === "Частично" || req.warehouse_status === "Отсутствует" || req.warehouse_status === "ОТСУТСТВУЕТ");
             });
         }
@@ -97,21 +102,16 @@ export default function SED() {
 
   const switchMode = (mode) => { setViewMode(mode); fetchRequests(role, mode); };
 
-  // === ПРЯМАЯ ССЫЛКА НА GOOGLE CALENDAR ===
   const openGoogleCalendar = (req) => {
     const title = encodeURIComponent(`Оплата: ${req.item_name} (${req.final_pay_sum} ₸)`);
     const details = encodeURIComponent(`Заявка №${req.req_number}\nКонтрагент: ${req.legal_info?.seller || ''}\nСумма: ${req.final_pay_sum}`);
-    
-    // Формат даты YYYYMMDD
     const dateStr = req.payment_date ? req.payment_date.replace(/-/g, '') : new Date().toISOString().split('T')[0].replace(/-/g, '');
-    const dates = `${dateStr}/${dateStr}`; // Весь день
-
-    const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&dates=${dates}`;
-    window.open(url, '_blank');
+    const dates = `${dateStr}/${dateStr}`; 
+    window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&dates=${dates}`, '_blank');
   };
 
   const updateStatus = async (req, action, extraUpdates = {}) => {
-    if (role !== 'LAWYER' && !confirm(`Выполнить: ${action}?`)) return;
+    if (role !== 'LAWYER' && role !== 'ECONOMIST' && !confirm(`Выполнить: ${action}?`)) return;
     
     let comments = null;
     if (role.includes('SKLAD') && action === 'Частично') {
@@ -119,7 +119,13 @@ export default function SED() {
         if (!comments) return; 
     }
 
-    if (role !== 'LAWYER') setRequests(prev => prev.filter(r => r.id !== req.id));
+    // Оптимистичное обновление UI
+    if (role !== 'LAWYER' && role !== 'ECONOMIST') setRequests(prev => prev.filter(r => r.id !== req.id));
+    
+    // ЭКОНОМИСТ НЕ УБИРАЕТ ЗАЯВКУ, ОНА ОСТАЕТСЯ, ЧТОБЫ ОН ВИДЕЛ РЕЗУЛЬТАТ
+    if (role === 'ECONOMIST') {
+        setRequests(prev => prev.map(r => r.id === req.id ? { ...r, economist_status: action } : r));
+    }
 
     let updates = { ...extraUpdates, last_role: role };
     if (comments) updates.fix_comment = "СКЛАД: " + comments; 
@@ -137,7 +143,14 @@ export default function SED() {
     }
     else if (role.includes('SKLAD')) {
         updates.warehouse_status = action;
+        // ИЗМЕНЕНИЕ: Сразу Комеру. Экономист работает параллельно.
         nextStep = (action.toUpperCase() === 'ЕСТЬ') ? "CLOSED_SUCCESS" : "KOMER_WORK";
+    }
+    else if (role === 'ECONOMIST') {
+        updates.economist_status = action;
+        // ВАЖНО: Экономист НЕ МЕНЯЕТ current_step. Заявка остается у Комера.
+        // nextStep мы не трогаем, берем текущий
+        nextStep = req.current_step; 
     }
     else if (role === 'KOMER') {
         if (action === 'ОТКАЗ') { newStatus = "ОТКАЗ"; nextStep = "CLOSED_REJECTED"; }
@@ -208,6 +221,9 @@ export default function SED() {
     else if (req.status === 'ОПЛАЧЕНО') { borderColor = 'border-green-900'; stripColor = 'bg-green-600'; }
     else if (req.status === 'НА СОГЛАСОВАНИИ ОПЛАТЫ') { borderColor = 'border-purple-800'; stripColor = 'bg-purple-500'; }
     else if (req.status === 'СОГЛАСОВАНО НА ОПЛАТУ') { borderColor = 'border-yellow-800'; stripColor = 'bg-yellow-500'; }
+    
+    // Экономист подсвечивает оранжевым только если "ВНЕ ПЛАНА"
+    if (req.economist_status === 'ВНЕ ПЛАНА') { borderColor = 'border-orange-800'; stripColor = 'bg-orange-500'; }
 
     const DataRow = ({ label, val, highlight }) => (
         <div className="flex justify-between items-start border-b border-gray-800/50 pb-1 mb-1 last:border-0 last:mb-0">
@@ -241,9 +257,32 @@ export default function SED() {
                 <div><b className={`${isService ? 'text-purple-400' : 'text-blue-400'} text-[10px] uppercase block mb-1`}>{isService ? 'Услуга / Работа' : 'Товар'}</b><span className="text-white text-base font-bold leading-tight block">{req.item_name}</span></div>
             </div>
             <div className="bg-[#0d1117] p-3 rounded border border-gray-800 mt-2"><span className="text-gray-300 text-xs whitespace-pre-wrap">{req.spec || "Нет описания"}</span></div>
+            
+            {req.warehouse_status && !isService && (
+                <div className="pt-2 border-t border-gray-800 mt-1 flex justify-between items-center">
+                    <span className="text-[10px] text-gray-500">СКЛАД:</span> 
+                    <span className={`text-xs font-bold ${req.warehouse_status==='ЕСТЬ'?'text-green-400':'text-red-400'}`}>{req.warehouse_status.toUpperCase()}</span>
+                </div>
+            )}
+
+            {/* ВЕРДИКТ ЭКОНОМИСТА (ВИДЕН ВСЕМ, ЕСЛИ ОН ЕСТЬ) */}
+            {req.economist_status ? (
+                <div className={`pt-2 border-t border-gray-800 mt-1 flex justify-between items-center ${req.economist_status==='ПО ПЛАНУ' ? 'text-green-500' : 'text-orange-500'}`}>
+                    <span className="text-[10px] font-bold flex items-center gap-1"><BarChart3 size={12}/> БЮДЖЕТ:</span> 
+                    <span className="text-xs font-bold bg-[#0d1117] px-2 py-0.5 rounded border border-current">{req.economist_status}</span>
+                </div>
+            ) : (
+                /* ПРЕДУПРЕЖДЕНИЕ ДЛЯ КОМЕРА, ЕСЛИ ЭКОНОМИСТ ЕЩЕ НЕ ПОСМОТРЕЛ */
+                role === 'KOMER' && !isService && (
+                    <div className="pt-2 border-t border-gray-800 mt-1 flex justify-between items-center text-gray-600">
+                        <span className="text-[10px] font-bold flex items-center gap-1"><BarChart3 size={12}/> БЮДЖЕТ:</span> 
+                        <span className="text-[10px] italic">Ожидание...</span>
+                    </div>
+                )
+            )}
          </div>
 
-         { (role === 'FIN_DIR' || role === 'LAWYER' || role === 'FINANCE' || role === 'ACCOUNTANT') && req.legal_info && (<div className="pl-3 mb-3"><DealInfoBlock/></div>)}
+         { (role === 'FIN_DIR' || role === 'LAWYER' || role === 'FINANCE' || role === 'ACCOUNTANT' || role === 'KOMER' || role === 'ECONOMIST') && req.legal_info && (<div className="pl-3 mb-3"><DealInfoBlock/></div>)}
 
          {(req.draft_url || req.contract_url) && (
              <div className="pl-3 mb-4 space-y-2">
@@ -267,6 +306,17 @@ export default function SED() {
          
          {viewMode === 'active' && (
              <div className="pl-3 flex flex-wrap gap-2 mt-auto">
+                 {/* ПАНЕЛЬ ЭКОНОМИСТА (ПАРАЛЛЕЛЬНАЯ) */}
+                 {role === 'ECONOMIST' && (
+                     <>
+                        <div className="w-full text-center text-gray-500 text-[10px] mb-2 bg-[#0d1117] p-1 rounded">Проверьте бюджет (Сделка не блокируется)</div>
+                        <div className="flex gap-2 w-full">
+                           <button onClick={()=>updateStatus(req, "ПО ПЛАНУ")} className={`flex-1 py-3 rounded text-white text-xs font-bold transition ${req.economist_status==='ПО ПЛАНУ' ? 'bg-green-600' : 'bg-gray-700 hover:bg-green-600'}`}>✅ ПО ПЛАНУ</button>
+                           <button onClick={()=>updateStatus(req, "ВНЕ ПЛАНА")} className={`flex-1 py-3 rounded text-white text-xs font-bold transition ${req.economist_status==='ВНЕ ПЛАНА' ? 'bg-orange-600' : 'bg-gray-700 hover:bg-orange-600'}`}>⚠️ ВНЕ ПЛАНА</button>
+                        </div>
+                     </>
+                 )}
+
                  {role === 'DIRECTOR' && (
                      <>
                        <button onClick={()=>updateStatus(req, "ОДОБРЕНО")} className="flex-1 bg-green-600 py-2 rounded text-white text-xs font-bold">ОДОБРИТЬ</button>
@@ -288,6 +338,20 @@ export default function SED() {
                        <button onClick={()=>updateStatus(req, "Частично")} className="flex-1 border border-orange-500 text-orange-500 py-2 rounded text-xs font-bold">ЧАСТИЧНО</button>
                        <button onClick={()=>updateStatus(req, "Отсутствует")} className="flex-1 border border-red-500 text-red-500 py-2 rounded text-xs font-bold">НЕТ</button>
                      </>
+                 )}
+                 {role === 'KOMER' && (
+                    <div className="pl-3 bg-pink-900/10 border-l-2 border-pink-500 p-3 rounded mb-3 w-full">
+                        <div className="flex items-center gap-2 mb-2"><span className="text-[10px] bg-pink-500 text-white px-1.5 py-0.5 rounded font-bold">АНКЕТА ПОСТАВЩИКА</span></div>
+                        <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+                            <div className="col-span-2"><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" placeholder="Продавец" value={formData.seller||''} onChange={e=>setFormData({...formData, seller: e.target.value})}/></div>
+                            <div><input className="w-full bg-[#0d1117] border border-gray-700 p-1.5 rounded text-white" placeholder="Цена" type="number" value={formData.price||''} onChange={e=>{const val=e.target.value; const qty = parseFloat(req.qty) || 1; setFormData({...formData, price: val, total: (val*qty).toFixed(2)})}}/></div>
+                            <div><input className="w-full bg-[#0d1117] border border-pink-900/50 p-1.5 rounded text-pink-400 font-bold" type="number" placeholder="Итого" value={formData.total||''} onChange={e=>setFormData({...formData, total: e.target.value})}/></div>
+                        </div>
+                        <div className="flex gap-2">
+                            <button onClick={()=>updateStatus(req, "ОТКАЗ")} className="flex-1 bg-red-900/20 text-red-300 py-2 rounded text-xs border border-red-900 hover:bg-red-900 hover:text-white transition">ОТКАЗ</button>
+                            <button onClick={()=>{ if(!formData.seller || !formData.price) return alert("Заполните Продавца и Цену!"); updateStatus(req, "ОДОБРЕНО", { legal_info: formData }); }} className="flex-[2] bg-gradient-to-r from-green-700 to-green-600 text-white py-2 rounded text-xs font-bold hover:from-green-600 hover:to-green-500">ОТПРАВИТЬ ➜</button>
+                        </div>
+                    </div>
                  )}
                  
                  {role === 'FINANCE' && req.status !== "НА СОГЛАСОВАНИИ ОПЛАТЫ" && (
@@ -316,7 +380,6 @@ export default function SED() {
                                      <div className="text-[10px] text-yellow-500">ОДОБРЕНО ФИНАНСИСТОМ</div>
                                      <div className="text-white font-bold">{req.payment_date} / {req.final_pay_sum} ₸</div>
                                  </div>
-                                 {/* ПРЯМАЯ КНОПКА GOOGLE CALENDAR */}
                                  <button onClick={()=>openGoogleCalendar(req)} className="w-full border border-blue-600 text-blue-400 py-2 rounded flex items-center justify-center gap-2 hover:bg-blue-900/30 transition mb-1">
                                      <Calendar size={14}/> В GOOGLE CALENDAR
                                  </button>
@@ -332,7 +395,7 @@ export default function SED() {
       </div>
     );
   };
-
+  
   if (!role) return (
     <div className="min-h-screen bg-[#0d1117] flex flex-col items-center justify-center p-4 relative">
       <div className="text-center mb-8"><h1 className="text-4xl font-bold text-blue-500 tracking-widest">ОХМК СЭД</h1><p className="text-gray-500 text-xs mt-2">CORPORATE SYSTEM</p></div>
@@ -346,7 +409,6 @@ export default function SED() {
 
   return (
     <div className="min-h-screen bg-[#0d1117] text-gray-300 pb-20 font-sans flex flex-col">
-      {/* МОДАЛКА И ШАПКА ... */}
       {modal.open && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
               <div className="bg-[#161b22] border border-gray-700 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
