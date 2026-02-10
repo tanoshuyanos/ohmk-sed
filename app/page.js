@@ -5,10 +5,10 @@ import {
   RefreshCw, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, 
   ExternalLink, AlertTriangle, Table, Truck, Wrench, Info, DollarSign, Calendar, 
   MapPin, Eye, Clock, BarChart3, Phone, User, Factory, AlertCircle, Briefcase, FileSignature, 
-  Package, Scale, ShieldCheck, Keyboard, History, GitMerge, Settings
+  Package, Scale, ShieldCheck, Keyboard, History, GitMerge, Settings, ChevronRight
 } from 'lucide-react';
 
-const APP_VERSION = "v6.0 (The Matrix Engine)"; 
+const APP_VERSION = "v6.0 (Stable Matrix)"; 
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
 
@@ -19,25 +19,20 @@ const supabase = createClient(
 
 // =================================================================================
 // 🛠 ПУЛЬТ УПРАВЛЕНИЯ (МАТРИЦА ДВИЖЕНИЯ)
-// Здесь настраивается ВЕСЬ путь заявки. Меняй правила здесь, не трогая код.
 // =================================================================================
 const WORKFLOW_RULES = {
-    // 1. ДИРЕКТОР ПРОВЕРЯЕТ
     "DIRECTOR_CHECK": {
-        role: "DIRECTOR", // Кто видит
+        role: "DIRECTOR",
         description: "Ждет одобрения Директора",
         buttons: [
             { label: "ОДОБРИТЬ", action: "ОДОБРЕНО", style: "green", 
-              // Логика ветвления: Если услуга -> Комер, Если товар -> Склад
               next_step: (req) => req.request_type === 'service' ? "KOMER_WORK" : "SKLAD_CHECK" 
             },
             { label: "ОТКЛОНИТЬ", action: "ОТКЛОНЕНО", style: "red", next_step: "CLOSED_REJECTED" }
         ]
     },
-
-    // 2. СКЛАД ПРОВЕРЯЕТ (Только товары)
     "SKLAD_CHECK": {
-        role: "SKLAD", // Обобщенная роль, внутри кода делим по складам
+        role: "SKLAD",
         description: "Проверка наличия на складе",
         buttons: [
             { label: "ЕСТЬ", action: "ЕСТЬ", style: "green-outline", next_step: "CLOSED_SUCCESS" },
@@ -45,31 +40,25 @@ const WORKFLOW_RULES = {
             { label: "НЕТ", action: "Отсутствует", style: "red-outline", next_step: "KOMER_WORK" }
         ]
     },
-
-    // 3. КОММЕРЧЕСКИЙ (ЗАКУП) + ЭКОНОМИСТ (ПАРАЛЛЕЛЬНО СМОТРИТ)
     "KOMER_WORK": {
         role: "KOMER",
-        parallel_role: "ECONOMIST", // Экономист видит, но не блокирует
-        description: "Поиск поставщика / Бюджетный контроль",
-        form: "commercial", // Включаем форму Комера
+        parallel_role: "ECONOMIST",
+        description: "Поиск поставщика / Бюджет",
+        form: "commercial",
         buttons: [
             { label: "ОТПРАВИТЬ ЮРИСТУ", action: "ОДОБРЕНО", style: "pink-gradient", next_step: "FIN_DIR_CHECK", require_form: true },
             { label: "ОТКАЗ", action: "ОТКАЗ", style: "red", next_step: "CLOSED_REJECTED" }
         ]
     },
-
-    // 4. ФИНАНСОВЫЙ ДИРЕКТОР (ПРОВЕРКА ЦЕНЫ И УСЛОВИЙ)
     "FIN_DIR_CHECK": {
         role: "FIN_DIR",
         description: "Согласование условий Фин.Директором",
         buttons: [
             { label: "УТВЕРДИТЬ", action: "ОДОБРЕНО", style: "green-gradient", next_step: "LAWYER_PROJECT" },
-            { label: "ПРАВКИ", action: "НА ДОРАБОТКУ", style: "orange", next_step: "KOMER_FIX", ask_comment: true }, // Возврат Комеру
+            { label: "ПРАВКИ", action: "НА ДОРАБОТКУ", style: "orange", next_step: "KOMER_FIX", ask_comment: true },
             { label: "ОТКАЗ", action: "ОТКАЗ", style: "red-outline", next_step: "CLOSED_REJECTED" }
         ]
     },
-
-    // 4.1 ВОЗВРАТ КОМЕРУ (ИСПРАВЛЕНИЕ)
     "KOMER_FIX": {
         role: "KOMER",
         description: "Исправление замечаний",
@@ -78,18 +67,14 @@ const WORKFLOW_RULES = {
             { label: "ИСПРАВЛЕНО -> ФИН.ДИР", action: "ИСПРАВЛЕНО", style: "blue", next_step: "FIN_DIR_CHECK", require_form: true }
         ]
     },
-
-    // 5. ЮРИСТ (ПОДГОТОВКА ПРОЕКТА)
     "LAWYER_PROJECT": {
         role: "LAWYER",
         description: "Юрист готовит/загружает договор",
         buttons: [
-            { label: "ЗАГРУЗИТЬ ПРОЕКТ", action: "upload_draft", style: "blue" }, // Спец. кнопка
+            { label: "ЗАГРУЗИТЬ ПРОЕКТ", action: "upload_draft", style: "blue" },
             { label: "ОТПРАВИТЬ ФИНАНСИСТУ", action: "НА СОГЛАСОВАНИЕ", style: "indigo", next_step: "FINANCE_REVIEW", require_draft: true }
         ]
     },
-
-    // 6. ФИНАНСИСТ (ПРОВЕРКА ДОГОВОРА)
     "FINANCE_REVIEW": {
         role: "FINANCE",
         description: "Финансист проверяет проект договора",
@@ -99,8 +84,6 @@ const WORKFLOW_RULES = {
             { label: "ОТКАЗ", action: "ОТКЛОНЕНО", style: "red", next_step: "CLOSED_REJECTED" }
         ]
     },
-
-    // 6.1 ВОЗВРАТ ЮРИСТУ (ПРАВКИ)
     "LAWYER_FIX": {
         role: "LAWYER",
         description: "Юрист вносит правки в проект",
@@ -109,41 +92,29 @@ const WORKFLOW_RULES = {
             { label: "ПОВТОРНО ФИНАНСИСТУ", action: "НА СОГЛАСОВАНИЕ", style: "indigo", next_step: "FINANCE_REVIEW", require_draft: true }
         ]
     },
-
-    // 7. ЮРИСТ (ПОДПИСАНИЕ)
     "LAWYER_FINAL": {
         role: "LAWYER",
         description: "Подписание оригинала",
         buttons: [
-            { label: "ЗАГРУЗИТЬ СКАН", action: "upload_final", style: "green" }, // Спец. кнопка
+            { label: "ЗАГРУЗИТЬ СКАН", action: "upload_final", style: "green" },
             { label: "✔ ПОДТВЕРДИТЬ ПОДПИСАНИЕ", action: "Договор подписан", style: "green-outline", next_step: "FINANCE_DEAL", require_contract: true }
         ]
     },
-
-    // 8. ФИНАНСИСТ (ЗАПРОС НА ОПЛАТУ) - ЭТОТ ЭТАП АВТОМАТИЧЕСКИ ПЕРЕХОДИТ К БУХГАЛТЕРУ ЧЕРЕЗ КНОПКУ,
-    //    НО МЫ ОСТАВИМ ЕГО КАК "ОЖИДАНИЕ БУХГАЛТЕРА" ИЛИ РУЧНУЮ ПРОВЕРКУ
     "FINANCE_DEAL": {
-        role: "FINANCE", // Или сразу Бухгалтер? Пока оставим как было - Финансист видит "Договор подписан"
+        role: "FINANCE",
         description: "Договор подписан. Ждет оплаты.",
-        // Тут хитро: Финансист может сразу кинуть бухгалтеру или ждать заявку на оплату
-        // В вашей схеме было: Бухгалтер сам видит "СОГЛАСОВАНО НА ОПЛАТУ"
-        // Давайте сделаем переход к Бухгалтеру автоматическим или через кнопку
         buttons: [
              { label: "ПЕРЕДАТЬ НА ОПЛАТУ", action: "СОГЛАСОВАНО НА ОПЛАТУ", style: "green", next_step: "ACCOUNTANT_EXECUTE" }
         ]
     },
-
-    // 9. БУХГАЛТЕР (ОПЛАТА)
     "ACCOUNTANT_EXECUTE": {
         role: "ACCOUNTANT",
         description: "Проведение оплаты",
-        form: "payment", // Форма выбора даты и суммы
+        form: "payment",
         buttons: [
             { label: "ОТПРАВИТЬ НА СОГЛАСОВАНИЕ", action: "НА СОГЛАСОВАНИЕ", style: "blue", next_step: "FINANCE_PAY_APPROVE", require_payment_data: true }
         ]
     },
-
-    // 10. ФИНАНСИСТ (ОДОБРЕНИЕ ОПЛАТЫ)
     "FINANCE_PAY_APPROVE": {
         role: "FINANCE",
         description: "Финальное добро на платеж",
@@ -152,8 +123,6 @@ const WORKFLOW_RULES = {
             { label: "ВЕРНУТЬ", action: "НА ДОРАБОТКУ", style: "orange", next_step: "ACCOUNTANT_EXECUTE" }
         ]
     },
-
-    // 11. БУХГАЛТЕР (ФИНАЛ)
     "ACCOUNTANT_FINAL": {
         role: "ACCOUNTANT",
         description: "Проведение платежа и закрытие",
@@ -163,7 +132,6 @@ const WORKFLOW_RULES = {
         ]
     }
 };
-// =================================================================================
 
 export default function SED() {
   const [role, setRole] = useState(null);
@@ -174,19 +142,15 @@ export default function SED() {
   const [viewMode, setViewMode] = useState('active'); 
   const [modal, setModal] = useState({ open: false, req: null, type: '' }); 
   const [historyModal, setHistoryModal] = useState({ open: false, req: null });
-  const [schemeModal, setSchemeModal] = useState(false); // Для просмотра схемы
-  
+  const [schemeModal, setSchemeModal] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState('');
-  
   const pinInputRef = useRef(null);
 
   const ROLES = {
-    "2223": "DIRECTOR", "0500": "KOMER", "777": "FIN_DIR", 
-    "333": "LAWYER", "444": "FINANCE", "222": "ACCOUNTANT",
-    "111": "ECONOMIST", 
-    "2014": "SKLAD_CENTRAL", "2525": "SKLAD_ZAP", "197": "SKLAD_STOL",
-    "504": "SKLAD_MTF", "505": "SKLAD_MEHTOK", "506": "SKLAD_ZNKI",
+    "2223": "DIRECTOR", "0500": "KOMER", "777": "FIN_DIR", "333": "LAWYER", "444": "FINANCE", 
+    "222": "ACCOUNTANT", "111": "ECONOMIST", "2014": "SKLAD_CENTRAL", "2525": "SKLAD_ZAP", 
+    "197": "SKLAD_STOL", "504": "SKLAD_MTF", "505": "SKLAD_MEHTOK", "506": "SKLAD_ZNKI",
     "507": "SKLAD_BUH", "508": "SKLAD_GSM"
   };
 
@@ -201,52 +165,36 @@ export default function SED() {
 
   const fetchRequests = async (userRole, mode) => {
     setLoading(true);
-    const currentMode = mode || viewMode;
     let query = supabase.from('requests').select('*').order('created_at', { ascending: false });
 
-    if (currentMode === 'history') query = query.limit(100);
+    if (mode === 'history') query = query.limit(100);
     else {
-        // --- УМНАЯ ФИЛЬТРАЦИЯ НА ОСНОВЕ МАТРИЦЫ ---
         let stepsForRole = [];
-        
-        // Пробегаем по матрице и ищем этапы для текущей роли
         for (const [stepKey, config] of Object.entries(WORKFLOW_RULES)) {
-            // Если роль совпадает ИЛИ это параллельная роль (Экономист)
             if (config.role === userRole || config.role.includes(userRole) || 
                (userRole.includes("SKLAD") && config.role === "SKLAD") ||
                config.parallel_role === userRole) {
                 stepsForRole.push(stepKey);
             }
         }
-        
-        // Директор и Склады требуют особого обращения, остальные - по шагам
         if (userRole === "DIRECTOR") {
-             // Директор видит всё новое + свои шаги
              query = query.or(`current_step.in.(${stepsForRole.join(',')}),status.eq.new,status.eq.В ОБРАБОТКЕ`);
         } else if (userRole.includes("SKLAD")) {
              query = query.eq('current_step', 'SKLAD_CHECK');
         } else {
-             if (stepsForRole.length > 0) {
-                 query = query.in('current_step', stepsForRole);
-             } else {
-                 // Если роль не найдена в матрице - ничего не показываем (защита)
-                 query = query.eq('id', 0); 
-             }
+             if (stepsForRole.length > 0) query = query.in('current_step', stepsForRole);
+             else query = query.eq('id', 0); 
         }
-        
-        // Экономист видит всё в статусе KOMER_WORK (параллельно)
-        if (userRole === "ECONOMIST") {
-             query = query.or('current_step.eq.KOMER_WORK,current_step.eq.KOMER_FIX');
-        }
+        if (userRole === "ECONOMIST") query = query.or('current_step.eq.KOMER_WORK,current_step.eq.KOMER_FIX');
     }
 
     const { data } = await query;
     let filtered = data || [];
 
-    if (currentMode === 'active') {
+    if (mode === 'active') {
         if (userRole && userRole.includes("SKLAD")) {
             filtered = filtered.filter(req => {
-                if (req.request_type === 'service') return false; // Склад не видит услуги
+                if (req.request_type === 'service') return false;
                 const wId = req.target_warehouse_code;
                 if (!wId || wId === "central") return userRole === "SKLAD_CENTRAL";
                 if (wId === "parts") return userRole === "SKLAD_ZAP";
@@ -261,28 +209,22 @@ export default function SED() {
 
   const switchMode = (mode) => { setViewMode(mode); fetchRequests(role, mode); };
 
-  const openGoogleCalendar = (req) => {
-    const title = encodeURIComponent(`Оплата: ${req.item_name} (${req.final_pay_sum} ₸)`);
-    const details = encodeURIComponent(`Заявка №${req.req_number}\nПоставщик: ${req.legal_info?.seller || ''}\nСумма: ${req.final_pay_sum}`);
-    const dateStr = req.payment_date ? req.payment_date.replace(/-/g, '') : new Date().toISOString().split('T')[0].replace(/-/g, '');
-    const dates = `${dateStr}/${dateStr}`; 
-    window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&dates=${dates}`, '_blank');
-  };
-
-  // --- УНИВЕРСАЛЬНЫЙ ОБРАБОТЧИК КНОПОК ---
   const handleAction = async (req, btn) => {
       if (btn.ask_comment) {
           const c = prompt("Комментарий:");
           if (!c) return;
           req.temp_comment = c;
       }
-
-      // Специальные действия
       if (btn.action === 'upload_draft') { setModal({open:true, req:req, type:'DRAFT'}); return; }
       if (btn.action === 'upload_final') { setModal({open:true, req:req, type:'FINAL'}); return; }
-      if (btn.action === 'calendar') { openGoogleCalendar(req); return; }
+      if (btn.action === 'calendar') { 
+          const title = encodeURIComponent(`Оплата: ${req.item_name} (${req.final_pay_sum} ₸)`);
+          const details = encodeURIComponent(`Заявка №${req.req_number}\nПоставщик: ${req.legal_info?.seller}`);
+          const dateStr = req.payment_date ? req.payment_date.replace(/-/g, '') : '';
+          window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&dates=${dateStr}/${dateStr}`, '_blank');
+          return; 
+      }
 
-      // Проверки
       if (btn.require_form && (!req.legal_info?.seller || !req.legal_info?.total)) return alert("Заполните форму!");
       if (btn.require_draft && !req.draft_url) return alert("Сначала загрузите проект!");
       if (btn.require_contract && !req.contract_url) return alert("Сначала загрузите скан!");
@@ -290,27 +232,13 @@ export default function SED() {
 
       if (!confirm(`Выполнить: ${btn.label}?`)) return;
 
-      // Вычисляем следующий шаг
       let nextStep = btn.next_step;
-      if (typeof nextStep === 'function') {
-          nextStep = nextStep(req); // Динамический выбор (товар/услуга)
-      }
+      if (typeof nextStep === 'function') nextStep = nextStep(req);
 
-      // Формируем обновление
-      let updates = { 
-          status: btn.action, 
-          last_role: role 
-      };
-      
-      // Если это просто Экономист ставит метку - шаг не меняем!
-      if (role === 'ECONOMIST') {
-          updates.economist_status = btn.label;
-          // Step не меняем
-      } else {
-          updates.current_step = nextStep;
-      }
+      let updates = { status: btn.action, last_role: role };
+      if (role === 'ECONOMIST') updates.economist_status = btn.label;
+      else updates.current_step = nextStep;
 
-      // Доп. поля
       if (role.includes('SKLAD')) updates.warehouse_status = btn.action;
       if (role === 'KOMER' && req.temp_legal_info) updates.legal_info = req.temp_legal_info;
       if (role === 'FIN_DIR') updates.fin_dir_status = btn.action;
@@ -318,65 +246,49 @@ export default function SED() {
       if (req.temp_pay_sum) updates.final_pay_sum = req.temp_pay_sum;
       if (req.temp_pay_date) updates.payment_date = req.temp_pay_date;
 
-      // История
       const history = req.history || [];
-      updates.history = [...history, {
-          role: role,
-          action: btn.label,
-          date: new Date().toLocaleString("ru-RU"),
-          comment: req.temp_comment
-      }];
+      updates.history = [...history, { role: role, action: btn.label, date: new Date().toLocaleString("ru-RU"), comment: req.temp_comment }];
 
-      // Отправка
-      setRequests(prev => prev.filter(r => r.id !== req.id)); // Оптимистичное удаление
+      setRequests(prev => prev.filter(r => r.id !== req.id));
       if (role === 'ECONOMIST') setRequests(prev => prev.map(r => r.id === req.id ? { ...r, economist_status: btn.label } : r));
 
       await supabase.from('requests').update(updates).eq('id', req.id);
       fetchRequests(role, viewMode);
   };
 
-  // ... (handleUpload без изменений)
   const handleUpload = async () => {
       const fileInput = document.getElementById('file-upload');
       const contractNum = document.getElementById('contract-num')?.value || '';
       const amount = document.getElementById('contract-amount')?.value || '';
-
       if (!fileInput.files[0]) return alert("Выберите файл!");
-      if (modal.type === 'FINAL' && (!contractNum || !amount)) return alert("Заполните номер договора и сумму!");
+      if (modal.type === 'FINAL' && (!contractNum || !amount)) return alert("Заполните данные!");
 
       const file = fileInput.files[0];
       setUploadStatus('uploading');
-      
       let progress = 0;
-      const interval = setInterval(() => { progress += 5; if (progress > 90) progress = 90; setUploadProgress(progress); }, 500);
+      const interval = setInterval(() => { progress += 10; if (progress > 90) progress = 90; setUploadProgress(progress); }, 300);
 
       const reader = new FileReader();
       reader.readAsDataURL(file);
       reader.onload = async function() {
-          const base64 = reader.result;
           try {
               await fetch(STAND_URL, {
                   method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ file: base64, fileName: file.name, reqNum: modal.req.req_number, reqId: modal.req.id, contractNum: contractNum, amount: amount, type: modal.type })
+                  body: JSON.stringify({ file: reader.result, fileName: file.name, reqNum: modal.req.req_number, reqId: modal.req.id, contractNum: contractNum, amount: amount, type: modal.type })
               });
               clearInterval(interval); setUploadProgress(100); setUploadStatus('success');
-              setTimeout(async () => { setModal({ open: false, req: null, type: '' }); setUploadStatus(''); setUploadProgress(0); fetchRequests(role, viewMode); }, 4000); 
-          } catch (e) { clearInterval(interval); setUploadStatus('error'); alert("Ошибка загрузки: " + e.message); }
+              setTimeout(async () => { setModal({ open: false, req: null, type: '' }); setUploadStatus(''); fetchRequests(role, viewMode); }, 2000); 
+          } catch (e) { clearInterval(interval); setUploadStatus('error'); alert("Ошибка: " + e.message); }
       };
   };
 
   const RequestCard = ({ req }) => {
-    // Определяем конфигурацию для текущего шага
-    // Если шаг не найден в матрице (старая заявка), берем пустой конфиг
     const currentConfig = WORKFLOW_RULES[req.current_step] || { buttons: [] };
-    
-    // Специальная логика: Кнопки показываем, только если это НАША роль или мы Экономист
     let showButtons = false;
     if (role === 'ECONOMIST' && currentConfig.parallel_role === 'ECONOMIST') showButtons = true;
     else if (role.includes('SKLAD') && currentConfig.role === 'SKLAD') showButtons = true;
     else if (currentConfig.role === role) showButtons = true;
 
-    // Формы
     const [formData, setFormData] = useState(req.legal_info || {
         seller: '', buyer: 'ТОО ОХМК', subject: req.item_name, qty: req.quantity || '1', price_unit: '', total: '', payment_terms: 'Постоплата', 
         delivery_place: 'Мира 2А', pickup: 'ДА', delivery_date: '', quality: 'Новое', warranty: '12 месяцев', initiator: req.initiator, vat: 'ДА'
@@ -384,47 +296,32 @@ export default function SED() {
     const [paySum, setPaySum] = useState(req.final_pay_sum || '');
     const [payDate, setPayDate] = useState(req.payment_date || '');
 
-    // Авто-апдейт суммы в форме
     useEffect(() => {
         if(formData.qty && formData.price_unit) {
             const sum = (parseFloat(formData.qty) * parseFloat(formData.price_unit)).toFixed(2);
             setFormData(prev => ({...prev, total: sum}));
-            req.temp_legal_info = {...formData, total: sum}; // Передаем наверх
-        } else {
-            req.temp_legal_info = formData;
-        }
+            req.temp_legal_info = {...formData, total: sum};
+        } else { req.temp_legal_info = formData; }
     }, [formData]);
-
-    // Передача данных оплаты
     useEffect(() => { req.temp_pay_sum = paySum; req.temp_pay_date = payDate; }, [paySum, payDate]);
 
     const isService = req.request_type === 'service';
     const isUrgent = (req.urgency || "").toLowerCase().includes("срочно");
-
-    // Стили
     let borderColor = 'border-[#30363d]';
-    let stripColor = 'bg-blue-600';
-    if (req.status.includes('ОТКАЗ') || req.status.includes('ОТКЛОНЕНО')) { borderColor = 'border-red-900'; stripColor = 'bg-red-600'; }
-    else if (req.status === 'ОПЛАЧЕНО') { borderColor = 'border-green-900'; stripColor = 'bg-green-600'; }
+    if (req.status.includes('ОТКАЗ') || req.status.includes('ОТКЛОНЕНО')) borderColor = 'border-red-900';
+    else if (req.status === 'ОПЛАЧЕНО') borderColor = 'border-green-900';
     if (isUrgent) borderColor = 'border-red-500';
 
     return (
       <div className={`bg-[#161b22] border ${borderColor} rounded-xl p-5 shadow-xl relative overflow-hidden group flex flex-col h-full`}>
-         <div className={`absolute left-0 top-0 bottom-0 w-1 ${stripColor}`}></div>
-         
          <div className="flex justify-between items-start mb-2 pl-3">
-            <div>
-                <h3 className="text-xl font-bold flex items-center gap-2 text-white">#{req.req_number}</h3>
-                <div className="text-xs text-gray-500">{new Date(req.created_at).toLocaleDateString()}</div>
-            </div>
+            <div><h3 className="text-xl font-bold flex items-center gap-2 text-white">#{req.req_number}</h3><div className="text-xs text-gray-500">{new Date(req.created_at).toLocaleDateString()}</div></div>
             <div className="flex flex-col items-end gap-1">
-                <div className={`px-2 py-1 rounded text-xs border font-bold ${req.status.includes('ОТКАЗ') ? 'bg-red-900/40 text-red-400 border-red-800' : 'bg-gray-800 text-gray-400 border-gray-700'}`}>{req.status}</div>
+                <div className={`px-2 py-1 rounded text-xs border font-bold ${req.status.includes('ОТКАЗ') ? 'bg-red-900/40 text-red-400' : 'bg-gray-800 text-gray-400'}`}>{req.status}</div>
                 <button onClick={() => setHistoryModal({open: true, req: req})} className="bg-gray-800 hover:bg-gray-700 text-gray-400 px-2 py-0.5 rounded text-[10px] flex items-center gap-1 transition"><History size={10}/> История</button>
                 {isUrgent && <div className="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded animate-pulse font-bold flex items-center gap-1"><AlertCircle size={10}/> СРОЧНО</div>}
             </div>
          </div>
-
-         {/* ИНИЦИАТОР И ТЕЛО ЗАЯВКИ (БЕЗ ИЗМЕНЕНИЙ) */}
          <div className="pl-3 mb-3 flex items-center gap-3 bg-[#0d1117] p-2 rounded border border-gray-800">
              <div className="bg-gray-800 p-1.5 rounded-full"><User size={14} className="text-gray-400"/></div>
              <div className="flex-1"><div className="text-[10px] text-gray-500">Инициатор</div><div className="text-xs text-gray-300 font-medium truncate">{req.initiator || "Неизвестно"}</div></div>
@@ -444,16 +341,12 @@ export default function SED() {
             {req.warehouse_status && !isService && (<div className="pt-2 border-t border-gray-800 mt-1 flex justify-between items-center"><span className="text-[10px] text-gray-500">СКЛАД:</span> <span className={`text-xs font-bold ${req.warehouse_status==='ЕСТЬ'?'text-green-400':'text-red-400'}`}>{req.warehouse_status.toUpperCase()}</span></div>)}
             {req.economist_status ? (<div className={`pt-2 border-t border-gray-800 mt-1 flex justify-between items-center ${req.economist_status==='ПО ПЛАНУ' ? 'text-green-500' : 'text-orange-500'}`}><span className="text-[10px] font-bold flex items-center gap-1"><BarChart3 size={12}/> БЮДЖЕТ:</span> <span className="text-xs font-bold bg-[#0d1117] px-2 py-0.5 rounded border border-current">{req.economist_status}</span></div>) : ((role === 'KOMER' || role === 'FIN_DIR' || role === 'LAWYER') && (<div className="pt-2 border-t border-gray-800 mt-1 flex justify-between items-center text-gray-600"><span className="text-[10px] font-bold flex items-center gap-1"><BarChart3 size={12}/> БЮДЖЕТ:</span> <span className="text-[10px] italic">Ожидание...</span></div>))}
          </div>
-
-         {/* ДОКУМЕНТЫ */}
          {(req.draft_url || req.contract_url) && (
              <div className="pl-3 mb-4 space-y-2">
                  {req.draft_url && <a href={req.draft_url} target="_blank" className="flex items-center gap-2 bg-blue-900/20 text-blue-400 p-2 rounded border border-blue-900/50 hover:bg-blue-900/40 transition"><FileText size={16}/> <span className="text-xs font-bold">Проект договора</span> <ExternalLink size={12} className="ml-auto"/></a>}
                  {req.contract_url && <a href={req.contract_url} target="_blank" className="flex items-center gap-2 bg-green-900/20 text-green-400 p-2 rounded border border-green-900/50 hover:bg-green-900/40 transition"><CheckCircle size={16}/> <span className="text-xs font-bold">Подписанный скан</span> <ExternalLink size={12} className="ml-auto"/></a>}
              </div>
          )}
-
-         {/* ФОРМЫ (КОМЕР / БУХГАЛТЕР) */}
          {showButtons && currentConfig.form === 'commercial' && (
              <div className="pl-3 bg-pink-900/10 border-l-2 border-pink-500 p-3 rounded mb-3 w-full text-xs">
                  <div className="flex items-center gap-2 mb-3"><Briefcase size={14} className="text-pink-500"/><span className="text-xs font-bold text-pink-400">ПОДГОТОВКА ДОГОВОРА</span></div>
@@ -468,12 +361,9 @@ export default function SED() {
          {showButtons && currentConfig.form === 'payment' && (
              <div className="flex gap-2 mb-2"><input type="number" placeholder="Сумма" className="w-1/2 bg-[#0d1117] border border-gray-700 rounded text-xs text-white p-2" value={paySum} onChange={e=>setPaySum(e.target.value)}/><input type="date" className="w-1/2 bg-[#0d1117] border border-gray-700 rounded text-xs text-white p-2" value={payDate} onChange={e=>setPayDate(e.target.value)}/></div>
          )}
-
-         {/* ГЕНЕРАЦИЯ КНОПОК ИЗ МАТРИЦЫ */}
          {viewMode === 'active' && showButtons && (
              <div className="pl-3 flex flex-wrap gap-2 mt-auto">
                  {currentConfig.buttons.map((btn, idx) => {
-                     // Стилизация кнопок
                      let btnClass = "flex-1 py-2.5 rounded text-xs font-bold transition flex items-center justify-center gap-2 ";
                      if (btn.style.includes('green')) btnClass += "bg-green-600 text-white hover:bg-green-500 ";
                      else if (btn.style.includes('red')) btnClass += "bg-red-900/50 border border-red-800 text-red-300 hover:bg-red-900 ";
@@ -482,7 +372,6 @@ export default function SED() {
                      else if (btn.style.includes('indigo')) btnClass += "bg-indigo-600 text-white hover:bg-indigo-500 ";
                      else if (btn.style.includes('pink')) btnClass += "bg-gradient-to-r from-pink-700 to-pink-600 text-white hover:from-pink-600 hover:to-pink-500 shadow-lg shadow-pink-900/20 ";
                      else btnClass += "bg-gray-700 text-white ";
-
                      return <button key={idx} onClick={() => handleAction(req, btn)} className={btnClass}>{btn.label}</button>;
                  })}
              </div>
@@ -491,7 +380,6 @@ export default function SED() {
     );
   };
   
-  // LOGIN SCREEN
   if (!role) return (
     <div className="min-h-screen bg-[#0d1117] flex flex-col items-center justify-center p-4 relative">
       <div className="text-center mb-8"><h1 className="text-4xl font-bold text-blue-500 tracking-widest">ОХМК СЭД</h1><p className="text-gray-500 text-xs mt-2">CORPORATE SYSTEM</p></div>
@@ -508,12 +396,11 @@ export default function SED() {
 
   return (
     <div className="min-h-screen bg-[#0d1117] text-gray-300 pb-20 font-sans flex flex-col">
-      {/* СХЕМА ДВИЖЕНИЯ (МАТРИЦА ВИЗУАЛЬНО) */}
       {schemeModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 overflow-auto">
               <div className="bg-[#161b22] border border-gray-700 rounded-2xl w-full max-w-4xl p-6 shadow-2xl relative">
                   <div className="flex justify-between items-center mb-6">
-                      <h3 className="text-xl font-bold text-white flex items-center gap-2"><GitMerge className="text-blue-500"/> КАРТА МАРШРУТОВ (WORKFLOW)</h3>
+                      <h3 className="text-xl font-bold text-white flex items-center gap-2"><GitMerge className="text-blue-500"/> КАРТА МАРШРУТОВ</h3>
                       <button onClick={()=>setSchemeModal(false)}><X className="text-gray-500 hover:text-white"/></button>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -521,23 +408,13 @@ export default function SED() {
                           <div key={key} className="bg-[#0d1117] border border-gray-700 rounded p-3 text-xs">
                               <div className="font-bold text-blue-400 mb-1">{key}</div>
                               <div className="text-gray-500 mb-2">{rule.description}</div>
-                              <div className="space-y-1">
-                                  {rule.buttons.map((b, i) => (
-                                      <div key={i} className="flex items-center gap-2">
-                                          <div className={`px-2 py-0.5 rounded text-[10px] bg-gray-800 text-white`}>{b.label}</div>
-                                          <ChevronRight size={10} className="text-gray-600"/>
-                                          <div className="text-[10px] text-gray-400">{typeof b.next_step === 'function' ? 'АВТО-ВЫБОР' : (b.next_step || 'Без перехода')}</div>
-                                      </div>
-                                  ))}
-                              </div>
+                              <div className="space-y-1">{rule.buttons.map((b, i) => (<div key={i} className="flex items-center gap-2"><div className={`px-2 py-0.5 rounded text-[10px] bg-gray-800 text-white`}>{b.label}</div><ChevronRight size={10} className="text-gray-600"/><div className="text-[10px] text-gray-400">{typeof b.next_step === 'function' ? 'АВТО-ВЫБОР' : (b.next_step || 'Без перехода')}</div></div>))}</div>
                           </div>
                       ))}
                   </div>
               </div>
           </div>
       )}
-
-      {/* МОДАЛКА ИСТОРИИ */}
       {historyModal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
            <div className="bg-[#161b22] border border-gray-700 rounded-2xl w-full max-w-md p-6 shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh]">
@@ -563,8 +440,6 @@ export default function SED() {
            </div>
         </div>
       )}
-
-      {/* МОДАЛКА ЗАГРУЗКИ ФАЙЛОВ */}
       {modal.open && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
               <div className="bg-[#161b22] border border-gray-700 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
@@ -593,53 +468,29 @@ export default function SED() {
               </div>
           </div>
       )}
-      
-      {/* HEADER */}
       <div className="sticky top-0 z-20 bg-[#0d1117]/90 backdrop-blur border-b border-gray-800">
           <div className="max-w-7xl mx-auto p-3">
              <div className="flex justify-between items-center mb-3">
-                 <div className="flex items-center gap-3">
-                     <div className="flex flex-col">
-                         <span className="text-xs text-gray-500 font-bold">РОЛЬ</span>
-                         <div className="flex items-center gap-2"><b className="text-blue-400 text-lg">{role}</b>{loading && <Loader2 className="animate-spin text-gray-500" size={14}/>}</div>
-                     </div>
-                 </div>
+                 <div className="flex items-center gap-3"><div className="flex flex-col"><span className="text-xs text-gray-500 font-bold">РОЛЬ</span><div className="flex items-center gap-2"><b className="text-blue-400 text-lg">{role}</b>{loading && <Loader2 className="animate-spin text-gray-500" size={14}/>}</div></div></div>
                  <div className="flex gap-2">
                      <button onClick={() => setSchemeModal(true)} className="flex items-center gap-1 bg-blue-900/20 hover:bg-blue-900/40 border border-blue-500/30 text-blue-300 px-3 py-2 rounded-lg text-xs font-bold transition"><Settings size={14}/> СХЕМА</button>
-                     <a href={SHEET_URL} target="_blank" className="flex items-center gap-1 bg-gray-800 hover:bg-gray-700 border border-gray-600 text-gray-300 px-3 py-2 rounded-lg text-xs font-bold transition">
-                         <Table size={14}/> <span className="hidden sm:inline">ТАБЛИЦА</span>
-                     </a>
+                     <a href={SHEET_URL} target="_blank" className="flex items-center gap-1 bg-gray-800 hover:bg-gray-700 border border-gray-600 text-gray-300 px-3 py-2 rounded-lg text-xs font-bold transition"><Table size={14}/> <span className="hidden sm:inline">ТАБЛИЦА</span></a>
                      <button onClick={() => setRole(null)} className="text-[10px] text-red-400 border border-red-900/30 px-3 py-2 rounded-lg bg-red-900/10 hover:bg-red-900/20">ВЫХОД</button>
                  </div>
              </div>
-             
              <div className="flex gap-2">
                  <div className="flex-1 flex bg-[#161b22] p-1 rounded-lg border border-gray-700">
                      <button onClick={() => switchMode('active')} className={`flex-1 py-1.5 text-xs font-bold rounded flex justify-center items-center gap-1 transition ${viewMode==='active' ? 'bg-blue-600 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}><Zap size={14}/> <span className="hidden sm:inline">В РАБОТЕ</span></button>
                      <button onClick={() => switchMode('history')} className={`flex-1 py-1.5 text-xs font-bold rounded flex justify-center items-center gap-1 transition ${viewMode==='history' ? 'bg-gray-700 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}><Archive size={14}/> <span className="hidden sm:inline">АРХИВ</span></button>
                  </div>
-                 <div className="relative w-1/3">
-                     <Search className="absolute left-3 top-2 text-gray-500" size={14}/>
-                     <input type="text" placeholder="Поиск..." className="w-full h-full bg-[#161b22] border border-gray-700 rounded-lg pl-9 text-white text-xs outline-none focus:border-blue-500 transition" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
-                 </div>
+                 <div className="relative w-1/3"><Search className="absolute left-3 top-2 text-gray-500" size={14}/><input type="text" placeholder="Поиск..." className="w-full h-full bg-[#161b22] border border-gray-700 rounded-lg pl-9 text-white text-xs outline-none focus:border-blue-500 transition" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} /></div>
              </div>
           </div>
       </div>
-      
-      {/* CARD GRID */}
       <div className="max-w-7xl mx-auto w-full p-4 flex-grow">
-          {loading && requests.length === 0 ? (
-              <div className="text-center py-20 text-gray-500 animate-pulse">Загрузка данных...</div> 
-          ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {requests.filter(r => searchQuery ? String(r.req_number).includes(searchQuery) : true).map(req => (
-                      <RequestCard key={req.id} req={req} />
-                  ))}
-              </div>
-          )}
+          {loading && requests.length === 0 ? (<div className="text-center py-20 text-gray-500 animate-pulse">Загрузка данных...</div>) : (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">{requests.filter(r => searchQuery ? String(r.req_number).includes(searchQuery) : true).map(req => (<RequestCard key={req.id} req={req} />))}</div>)}
           {!loading && requests.length === 0 && <div className="text-center py-20 opacity-30 flex flex-col items-center"><Archive size={48} className="mb-2"/><div>Список пуст</div></div>}
       </div>
-
       <div className="text-center py-4 text-gray-800 text-[10px]">{APP_VERSION}</div>
     </div>
   );
