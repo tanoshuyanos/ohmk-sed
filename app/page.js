@@ -8,7 +8,7 @@ import {
   Package, Scale, ShieldCheck, Keyboard, History, GitMerge, Settings, ChevronRight, MessageCircle, Paperclip
 } from 'lucide-react';
 
-const APP_VERSION = "v9.2 (Full Info Cards)"; 
+const APP_VERSION = "v9.3 (Dynamic Cards + Auto Height)"; 
 // Вставь свои ссылки:
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
@@ -18,7 +18,6 @@ const supabase = createClient(
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlrbXZsdWdoZWtqbnFnZHlkZG1wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1NzQ3OTAsImV4cCI6MjA4NTE1MDc5MH0.ZaPeruXSJ6EQJ21nk4VPdvzQFMxoLUSxewQVK4EOE8Y"
 );
 
-// СЛОВАРЬ СКЛАДОВ (Для красивого отображения)
 const WAREHOUSE_NAMES = {
   "SKLAD_CENTRAL": "Центральный склад (ТМЦ)",
   "SKLAD_ZAP": "Склад Запчастей",
@@ -44,7 +43,6 @@ export default function SED() {
   const [uploadStatus, setUploadStatus] = useState('');
   const pinInputRef = useRef(null);
 
-  // ПИН-КОДЫ (Сверяем с твоей структурой)
   const ROLES = {
     "2223": "DIRECTOR", 
     "0500": "KOMER", 
@@ -53,7 +51,6 @@ export default function SED() {
     "444": "FINANCE", 
     "222": "ACCOUNTANT",
     "111": "ECONOMIST", 
-    // СКЛАДЫ
     "2014": "SKLAD_CENTRAL", 
     "2525": "SKLAD_ZAP", 
     "197":  "SKLAD_STOL",
@@ -77,70 +74,34 @@ export default function SED() {
 
     if (mode === 'history') query = query.limit(100);
     else {
-        // --- ГЛАВНЫЙ ФИЛЬТР ВИДИМОСТИ (ФЛАГИ 1/0/NULL) ---
-        
-        if (userRole === "DIRECTOR") {
-            // Видит всё, где еще не принял решение
-            query = query.is('step_director', null);
-        }
-        else if (userRole === "FIN_DIR") {
-            // Видит то, что прошел Комер, но сам еще не решил
-            query = query.eq('step_komer', 1).is('step_findir', null);
-        }
-        else if (userRole === "ECONOMIST") {
-            // Видит всё одобренное директором
-            query = query.eq('step_director', 1);
-        }
-        else if (userRole === "KOMER") {
-            // Видит одобренное директором, но еще не сделанное собой
-            query = query.eq('step_director', 1).is('step_komer', null); 
-        }
-        else if (userRole && userRole.includes("SKLAD")) {
-            // Склады видят одобренное директором, где шаг склада NULL
-            // И ВАЖНО: Только Тип "Товар" (Goods), Услуги отсекаем сразу
-            query = query.eq('step_director', 1).is('step_sklad', null).neq('request_type', 'service');
-        }
-        else if (userRole === "LAWYER") {
-            // Два этапа: 1. После ФинДира (Проект) 2. После ФинПроверки (Скан)
-            query = query.or('and(step_findir.eq.1,step_lawyer_draft.is.null),and(step_finance_review.eq.1,step_lawyer_final.is.null)');
-        }
-        else if (userRole === "FINANCE") {
-            // Два этапа: 1. После Проекта (Ревью) 2. После БухЗапроса (Оплата)
-            query = query.or('and(step_lawyer_draft.eq.1,step_finance_review.is.null),and(step_accountant_req.eq.1,step_finance_pay.is.null)');
-        }
-        else if (userRole === "ACCOUNTANT") {
-            // Два этапа: 1. После Подписания (Запрос) 2. После ОдобренияОплаты (Проведение)
-            query = query.or('and(step_lawyer_final.eq.1,step_accountant_req.is.null),and(step_finance_pay.eq.1,step_accountant_done.is.null)');
-        }
+        if (userRole === "DIRECTOR") query = query.is('step_director', null);
+        else if (userRole === "FIN_DIR") query = query.eq('step_komer', 1).is('step_findir', null);
+        else if (userRole === "ECONOMIST") query = query.eq('step_director', 1);
+        else if (userRole === "KOMER") query = query.eq('step_director', 1).is('step_komer', null); 
+        else if (userRole && userRole.includes("SKLAD")) query = query.eq('step_director', 1).is('step_sklad', null).neq('request_type', 'service');
+        else if (userRole === "LAWYER") query = query.or('and(step_findir.eq.1,step_lawyer_draft.is.null),and(step_finance_review.eq.1,step_lawyer_final.is.null)');
+        else if (userRole === "FINANCE") query = query.or('and(step_lawyer_draft.eq.1,step_finance_review.is.null),and(step_accountant_req.eq.1,step_finance_pay.is.null)');
+        else if (userRole === "ACCOUNTANT") query = query.or('and(step_lawyer_final.eq.1,step_accountant_req.is.null),and(step_finance_pay.eq.1,step_accountant_done.is.null)');
     }
 
     const { data } = await query;
     let filtered = data || [];
 
-    // --- КЛИЕНТСКИЕ ФИЛЬТРЫ (ТОНКАЯ НАСТРОЙКА) ---
     if (mode === 'active') {
-        
-        // 1. КОММЕРЧЕСКИЙ: Видит Услуги СРАЗУ, Товары - ТОЛЬКО если Склад=0 или 2
         if (userRole === "KOMER") {
             filtered = filtered.filter(req => {
-                if (req.request_type === 'service') return true; // Услуга -> Вижу
-                if (req.step_sklad === 0 || req.step_sklad === 2) return true; // Нет на складе -> Вижу
-                // Если step_sklad === null (Склад еще не смотрел) -> НЕ ВИЖУ
+                if (req.request_type === 'service') return true; 
+                if (req.step_sklad === 0 || req.step_sklad === 2) return true; 
                 return false; 
             });
         }
-
-        // 2. СКЛАДЫ: Видят ТОЛЬКО свой код (SKLAD_MTF видит только SKLAD_MTF)
         if (userRole && userRole.includes("SKLAD")) {
             filtered = filtered.filter(req => {
-                // Берем целевой код из заявки (его поставил SQL-робот)
                 const target = req.target_warehouse_code;
-                if (!target) return userRole === "SKLAD_CENTRAL"; // Если кода нет - летит на Центральный
+                if (!target) return userRole === "SKLAD_CENTRAL"; 
                 return userRole === target;
             });
         }
-        
-        // 3. ЮРИСТ: Не видит уже оплаченные (на всякий случай)
         if (userRole === "LAWYER") filtered = filtered.filter(req => req.status !== "ОПЛАЧЕНО");
     }
     setRequests(filtered);
@@ -157,7 +118,6 @@ export default function SED() {
   };
 
   const handleAction = async (req, actionType, payload = {}) => {
-      // Валидация полей
       if (payload.require_form && (!req.legal_info?.seller || !req.legal_info?.total)) return alert("Заполните форму!");
       if (payload.require_draft && !req.draft_url) return alert("Загрузите проект!");
       if (payload.require_scan && !req.contract_url) return alert("Загрузите скан!");
@@ -169,93 +129,64 @@ export default function SED() {
       let updates = { last_role: role };
       let comments = payload.comment || null;
 
-      // --- ЛОГИКА ИЗМЕНЕНИЯ ФЛАГОВ ---
-      
-      // ДИРЕКТОР
       if (role === 'DIRECTOR') {
           if (actionType === 'APPROVE') updates.step_director = 1;
           if (actionType === 'REJECT') updates.step_director = 0;
       }
-      
-      // СКЛАДЫ
       else if (role.includes('SKLAD')) {
           if (actionType === 'YES') { updates.step_sklad = 1; updates.warehouse_status = 'ЕСТЬ'; }
           if (actionType === 'NO') { updates.step_sklad = 0; updates.warehouse_status = 'НЕТ'; }
           if (actionType === 'PARTIAL') { 
               const c = prompt("Что именно есть на складе?");
               if (!c) return;
-              updates.step_sklad = 2; 
-              updates.warehouse_status = 'ЧАСТИЧНО';
-              updates.warehouse_comment = c;
+              updates.step_sklad = 2; updates.warehouse_status = 'ЧАСТИЧНО'; updates.warehouse_comment = c;
           }
       }
-
-      // ЭКОНОМИСТ
       else if (role === 'ECONOMIST') {
-          updates.step_economist = 1; 
-          updates.economist_status = actionType === 'PLAN' ? 'ПО ПЛАНУ' : 'ВНЕ ПЛАНА';
+          updates.step_economist = 1; updates.economist_status = actionType === 'PLAN' ? 'ПО ПЛАНУ' : 'ВНЕ ПЛАНА';
       }
-
-      // КОММЕРЧЕСКИЙ
       else if (role === 'KOMER') {
           if (actionType === 'SEND') { 
-              updates.step_komer = 1; 
-              updates.fix_comment = null;
+              updates.step_komer = 1; updates.fix_comment = null;
               if (req.temp_legal_info) updates.legal_info = req.temp_legal_info;
           }
-          // ОТМЕНА ЗАЯВКИ
           if (actionType === 'REJECT') {
               const reason = prompt("Укажите причину отмены/отказа:");
               if (!reason) return; 
-              
-              updates.step_komer = 0;
-              updates.status = "ОТМЕНЕНО КОМЕРОМ";
-              comments = "Причина отказа: " + reason;
+              updates.step_komer = 0; updates.status = "ОТМЕНЕНО КОМЕРОМ"; comments = "Причина отказа: " + reason;
           }
       }
-
-      // ФИН. ДИРЕКТОР (Может вернуть назад Комеру)
       else if (role === 'FIN_DIR') {
           if (actionType === 'APPROVE') updates.step_findir = 1;
           if (actionType === 'FIX') {
               const c = prompt("Причина возврата:");
               if (!c) return;
-              updates.step_komer = null; // <-- СТИРАЕМ ФЛАГ КОМЕРА (ОТКАТ)
-              updates.fix_comment = "Фин.Дир: " + c;
+              updates.step_komer = null; updates.fix_comment = "Фин.Дир: " + c;
           }
           if (actionType === 'REJECT') updates.step_findir = 0;
       }
-
-      // ЮРИСТ
       else if (role === 'LAWYER') {
           if (actionType === 'SEND_DRAFT') updates.step_lawyer_draft = 1;
           if (actionType === 'SIGN') { 
               updates.step_lawyer_final = 1; 
-              // Пишем Сумму Договора в БД
               if (req.temp_contract_sum) updates.contract_sum = req.temp_contract_sum;
           }
       }
-
-      // ФИНАНСИСТ
       else if (role === 'FINANCE') {
           if (actionType === 'REVIEW_OK') { updates.step_finance_review = 1; updates.fix_comment = null; }
           if (actionType === 'REVIEW_FIX') {
               const c = prompt("Правки к договору:");
               if (!c) return;
-              updates.step_lawyer_draft = null; // Откат Юристу
-              updates.fix_comment = "Фин (Договор): " + c;
+              updates.step_lawyer_draft = null; updates.fix_comment = "Фин (Договор): " + c;
           }
           if (actionType === 'PAY_OK') { updates.step_finance_pay = 1; updates.fix_comment = null; }
           if (actionType === 'PAY_FIX') {
               const c = prompt("Правка по оплате:");
               if (!c) return;
-              updates.step_accountant_req = null; // Откат Бухгалтеру
-              updates.fix_comment = "Фин (Оплата): " + c;
+              updates.step_accountant_req = null; updates.fix_comment = "Фин (Оплата): " + c;
           }
           if (actionType === 'REJECT') updates.step_finance_review = 0;
       }
-
-      // БУХГАЛТЕР
       else if (role === 'ACCOUNTANT') {
           if (actionType === 'REQ_PAY') {
               updates.step_accountant_req = 1;
@@ -264,22 +195,16 @@ export default function SED() {
               updates.fix_comment = null;
           }
           if (actionType === 'DONE') {
-              updates.step_accountant_done = 1;
-              updates.status = "ОПЛАЧЕНО";
+              updates.step_accountant_done = 1; updates.status = "ОПЛАЧЕНО";
           }
       }
 
-      // Оптимистичное обновление UI
       if (role !== 'ECONOMIST') setRequests(prev => prev.filter(r => r.id !== req.id));
       
-      // История действий
       if (comments) {
           const currentHistory = req.history || [];
           updates.history = [...currentHistory, {
-              role: role,
-              action: "КОММЕНТАРИЙ / ОТКАЗ",
-              date: new Date().toLocaleString("ru-RU"),
-              comment: comments
+              role: role, action: "КОММЕНТАРИЙ / ОТКАЗ", date: new Date().toLocaleString("ru-RU"), comment: comments
           }];
       }
 
@@ -307,7 +232,6 @@ export default function SED() {
       };
   };
 
-  // КАРТОЧКА ЗАЯВКИ
   const RequestCard = ({ req }) => {
     const [formData, setFormData] = useState(req.legal_info || { seller: '', buyer: 'ТОО ОХМК', subject: req.item_name, qty: req.quantity || '1', price_unit: '', total: '', payment_terms: 'Постоплата', delivery_place: 'Мира 2А', pickup: 'ДА', delivery_date: '', quality: 'Новое', warranty: '12 месяцев', initiator: req.initiator, vat: 'ДА' });
     const [contractSum, setContractSum] = useState(req.contract_sum || '');
@@ -329,7 +253,6 @@ export default function SED() {
     if (req.fix_comment) borderColor = 'border-orange-500'; 
     if (isUrgent) borderColor = 'border-red-500';
 
-    // Функция для очистки номера (превращает 8777... в 7777...)
     const getCleanPhone = (phoneStr) => {
         if (!phoneStr) return null;
         let p = phoneStr.toString().replace(/\D/g, '');
@@ -340,74 +263,58 @@ export default function SED() {
     const cleanPhone = getCleanPhone(req.phone);
 
     return (
-      <div className={`bg-[#161b22] border ${borderColor} rounded-xl p-5 shadow-xl flex flex-col h-full`}>
+      // ИЗМЕНЕНИЕ 1: Убрали h-full, карточка теперь растет от контента
+      <div className={`bg-[#161b22] border ${borderColor} rounded-xl p-5 shadow-xl flex flex-col`}>
          <div className="flex justify-between items-start mb-2">
             <div><h3 className="text-xl font-bold text-white">#{req.req_number}</h3><div className="text-xs text-gray-500">{new Date(req.created_at).toLocaleDateString()}</div></div>
             {isUrgent && <div className="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded animate-pulse font-bold">СРОЧНО</div>}
          </div>
 
-         {/* Сообщение о правках */}
          {req.fix_comment && <div className="bg-orange-900/30 border border-orange-600 p-2 rounded mb-3 text-xs text-orange-200"><b className="block mb-1">⚠️ ТРЕБУЮТСЯ ПРАВКИ:</b>{req.fix_comment}</div>}
 
-         {/* Основная инфо */}
-         <div className="text-sm space-y-2 text-gray-300 flex-grow mb-4">
-             {/* Заголовок и Количество */}
+         {/* ИЗМЕНЕНИЕ 2: Обертка контента без flex-grow, чтобы не тянуть пустые места */}
+         <div className="text-sm space-y-2 text-gray-300 mb-4">
              <div className="flex justify-between items-start">
-                 <div className="font-bold text-white text-lg leading-tight">{req.item_name}</div>
-                 {req.quantity && <div className="bg-gray-700 px-2 py-1 rounded text-white font-mono text-xs whitespace-nowrap ml-2">{req.quantity}</div>}
+                 {/* ИЗМЕНЕНИЕ 3: break-words и whitespace-pre-wrap для длинных текстов */}
+                 <div className="font-bold text-white text-lg leading-tight break-words pr-2">{req.item_name}</div>
+                 {req.quantity && <div className="bg-gray-700 px-2 py-1 rounded text-white font-mono text-xs whitespace-nowrap">{req.quantity}</div>}
              </div>
              
              <div className="text-xs text-gray-400">Категория: {req.cost_category || "Не указана"}</div>
 
-             {/* Блок Производитель и Место (Новое) */}
              {(req.manufacturer || req.destination) && (
                  <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-400 mt-2 bg-gray-800/50 p-2 rounded">
-                     {req.manufacturer && <div className="flex items-center gap-1"><Factory size={12}/> {req.manufacturer}</div>}
-                     {req.destination && <div className="flex items-center gap-1"><MapPin size={12}/> {req.destination}</div>}
+                     {req.manufacturer && <div className="flex items-center gap-1 break-words"><Factory size={12}/> {req.manufacturer}</div>}
+                     {req.destination && <div className="flex items-center gap-1 break-words"><MapPin size={12}/> {req.destination}</div>}
                  </div>
              )}
 
-             {/* Описание / Цель (Новое) */}
              {req.purpose && (
-                  <div className="bg-[#0d1117] p-2 rounded text-xs text-gray-300 italic mt-2 border-l-2 border-gray-600">
+                  // ИЗМЕНЕНИЕ 4: Описание расширяется и переносит строки
+                  <div className="bg-[#0d1117] p-2 rounded text-xs text-gray-300 italic mt-2 border-l-2 border-gray-600 whitespace-pre-wrap break-words">
                      "{req.purpose}"
                   </div>
              )}
 
-             {/* Файл инициатора (Новое) */}
              {req.attachment_url && (
-                 <a href={req.attachment_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-blue-400 text-xs hover:text-blue-300 mt-2 border border-blue-900/30 p-1.5 rounded bg-blue-900/10">
+                 <a href={req.attachment_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-blue-400 text-xs hover:text-blue-300 mt-2 border border-blue-900/30 p-1.5 rounded bg-blue-900/10 w-fit">
                      <Paperclip size={12}/> <span>Файл инициатора</span>
                  </a>
              )}
              
-             {/* Блок Инициатора с кнопками связи */}
              <div className="flex justify-between items-center border-t border-gray-700 pt-2 mt-2">
                  <div className="flex flex-col">
                      <span className="text-[10px] text-gray-500 font-bold">ИНИЦИАТОР</span>
                      <span className="text-xs text-gray-300">{req.initiator}</span>
                  </div>
-                 
                  {cleanPhone && (
                      <div className="flex gap-2">
-                         {/* Кнопка WhatsApp */}
-                         <a href={`https://wa.me/${cleanPhone}`} target="_blank" rel="noreferrer" 
-                            className="bg-green-600 hover:bg-green-500 text-white p-1.5 rounded-lg transition"
-                            title="Написать в WhatsApp">
-                             <MessageCircle size={14} />
-                         </a>
-                         
-                         {/* Кнопка Позвонить */}
-                         <a href={`tel:+${cleanPhone}`} 
-                            className="bg-blue-600 hover:bg-blue-500 text-white p-1.5 rounded-lg transition"
-                            title="Позвонить">
-                             <Phone size={14} />
-                         </a>
+                         <a href={`https://wa.me/${cleanPhone}`} target="_blank" rel="noreferrer" className="bg-green-600 hover:bg-green-500 text-white p-1.5 rounded-lg transition"><MessageCircle size={14} /></a>
+                         <a href={`tel:+${cleanPhone}`} className="bg-blue-600 hover:bg-blue-500 text-white p-1.5 rounded-lg transition"><Phone size={14} /></a>
                      </div>
                  )}
              </div>
              
-             {/* Отображение статуса Склада */}
              {req.target_warehouse_code && (
                 <div className="mt-2 text-xs">
                     <span className="text-gray-500 block mb-0.5">{WAREHOUSE_NAMES[req.target_warehouse_code] || "Неизвестный склад"}:</span>
@@ -419,7 +326,6 @@ export default function SED() {
              )}
          </div>
 
-         {/* --- КНОПКИ УПРАВЛЕНИЯ --- */}
          <div className="mt-auto space-y-2">
              {role === 'DIRECTOR' && (
                  <div className="flex gap-2">
@@ -566,7 +472,8 @@ export default function SED() {
           </div>
       </div>
       <div className="max-w-7xl mx-auto w-full p-4 flex-grow">
-          {loading && requests.length === 0 ? (<div className="text-center py-20 text-gray-500 animate-pulse">Загрузка данных...</div>) : (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">{requests.filter(r => searchQuery ? String(r.req_number).includes(searchQuery) : true).map(req => (<RequestCard key={req.id} req={req} />))}</div>)}
+          {/* ИЗМЕНЕНИЕ 5: items-start в grid - карточки не тянутся по соседям, каждая своей высоты */}
+          {loading && requests.length === 0 ? (<div className="text-center py-20 text-gray-500 animate-pulse">Загрузка данных...</div>) : (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">{requests.filter(r => searchQuery ? String(r.req_number).includes(searchQuery) : true).map(req => (<RequestCard key={req.id} req={req} />))}</div>)}
           {!loading && requests.length === 0 && <div className="text-center py-20 opacity-30 flex flex-col items-center"><Archive size={48} className="mb-2"/><div>Список пуст</div></div>}
       </div>
       <div className="text-center py-4 text-gray-800 text-[10px]">{APP_VERSION}</div>
