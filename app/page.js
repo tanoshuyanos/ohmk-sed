@@ -8,7 +8,7 @@ import {
   Package, Scale, ShieldCheck, Keyboard, History, GitMerge, Settings, ChevronRight, MessageCircle, Paperclip, Hash, CreditCard
 } from 'lucide-react';
 
-const APP_VERSION = "v9.5 (FULL KOMER FORM)"; 
+const APP_VERSION = "v10.0 (FULL PROTOCOL)"; 
 // Вставь свои ссылки:
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
@@ -118,11 +118,11 @@ export default function SED() {
   };
 
   const handleAction = async (req, actionType, payload = {}) => {
-      // ПРОВЕРКА ДЛЯ КОММЕРЧЕСКОГО (ОБЯЗАТЕЛЬНЫЕ ПОЛЯ)
+      // ВАЛИДАЦИЯ ФОРМЫ КОМЕРЧЕСКОГО (СТРОГО 14 ПУНКТОВ)
       if (payload.require_form) {
           const info = req.legal_info;
-          if (!info?.seller || !info?.price_unit || !info?.payment_terms || !info?.delivery_date) {
-              return alert("ЗАПОЛНИТЕ ВСЕ ПОЛЯ:\n- Поставщик\n- Цена\n- Условия оплаты\n- Дата поставки");
+          if (!info?.seller || !info?.buyer || !info?.price_unit || !info?.payment_terms || !info?.delivery_date) {
+              return alert("ЗАПОЛНИТЕ ВСЕ ОБЯЗАТЕЛЬНЫЕ ПОЛЯ!");
           }
       }
       
@@ -240,34 +240,36 @@ export default function SED() {
   };
 
   const RequestCard = ({ req }) => {
-    // ПОЛНАЯ ФОРМА КОММЕРЧЕСКОГО (БОЛЬШЕ ДАННЫХ)
+    // === ПОЛНАЯ СТРУКТУРА ДАННЫХ СДЕЛКИ (14 ПУНКТОВ) ===
     const [formData, setFormData] = useState(req.legal_info || { 
         seller: '', 
+        buyer: 'ТОО ОХМК', 
+        subject: req.item_name,
+        qty: req.quantity || '1',
         price_unit: '', 
         total: '', 
-        payment_terms: 'Постоплата 100%', // Дефолт
+        payment_terms: 'Постоплата 100%', 
+        delivery_place: 'Склад Покупателя',
+        pickup: 'Нет', // Самовывоз: Да/Нет
         delivery_date: '', 
-        vat: 'с НДС',
+        quality: 'Новое',
         warranty: '12 месяцев',
-        pickup: 'Доставка' 
+        initiator: req.initiator,
+        vat: 'с НДС'
     });
+
     const [contractSum, setContractSum] = useState(req.contract_sum || '');
     const [paySum, setPaySum] = useState(req.payment_sum || '');
     const [payDate, setPayDate] = useState(req.payment_date || '');
 
+    // Авторасчет суммы
     useEffect(() => {
         if(formData.qty && formData.price_unit) {
-             // ... старая логика, если qty есть в форме ...
-        }
-        // Расчет итого
-        if(req.quantity && formData.price_unit) {
-            // Пытаемся вытащить число из строки количества, если там текст
-            const qtyNum = parseFloat(String(req.quantity).replace(/[^0-9.]/g, '')) || 1;
-            const sum = (qtyNum * parseFloat(formData.price_unit)).toFixed(2);
+            const qtyNum = parseFloat(String(formData.qty).replace(/[^0-9.]/g, '')) || 1;
+            const priceNum = parseFloat(formData.price_unit) || 0;
+            const sum = (qtyNum * priceNum).toFixed(2);
             setFormData(prev => ({...prev, total: sum}));
         }
-        
-        // СОХРАНЯЕМ ВЕСЬ ОБЪЕКТ
         req.temp_legal_info = formData;
     }, [formData]);
 
@@ -303,20 +305,27 @@ export default function SED() {
                  <div className="flex items-start gap-3 mt-2 bg-[#0d1117] p-2 rounded border border-gray-700">
                     <div className="bg-blue-900/20 p-2 rounded text-blue-400 mt-0.5"><Package size={18}/></div>
                     <div className="flex flex-col">
-                        <span className="text-[10px] text-gray-500 font-bold uppercase">Количество</span>
+                        <span className="text-[10px] text-gray-500 font-bold uppercase">Количество (Заявка)</span>
                         <span className="text-sm text-white font-mono break-words whitespace-pre-wrap">{req.quantity}</span>
                     </div>
                  </div>
              )}
 
-             {/* БЛОК ИНФОРМАЦИИ ОТ КОММЕРЧЕСКОГО (ВИДЯТ ВСЕ) */}
+             {/* === БЛОК: УСЛОВИЯ СДЕЛКИ (ОТОБРАЖЕНИЕ ДЛЯ ВСЕХ) === */}
              {req.legal_info && (
-                 <div className="mt-3 bg-gray-800/40 p-2 rounded border border-gray-700 text-xs space-y-1">
-                     <div className="text-gray-500 font-bold text-[10px] uppercase mb-1">Коммерческое предложение:</div>
-                     <div className="flex justify-between"><span>Поставщик:</span> <b className="text-white">{req.legal_info.seller}</b></div>
-                     <div className="flex justify-between"><span>Сумма:</span> <b className="text-green-400">{req.legal_info.total}</b></div>
-                     <div className="flex justify-between"><span>Условия:</span> <span className="text-white">{req.legal_info.payment_terms}</span></div>
-                     <div className="flex justify-between"><span>Поставка:</span> <span className="text-white">{req.legal_info.delivery_date}</span></div>
+                 <div className="mt-3 bg-gray-800/40 p-3 rounded border border-gray-700 text-xs space-y-2">
+                     <div className="text-gray-500 font-bold text-[10px] uppercase mb-1 flex items-center gap-1"><Briefcase size={12}/> Протокол сделки:</div>
+                     
+                     <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                         <div className="text-gray-500">Продавец:</div> <div className="text-white font-bold">{req.legal_info.seller}</div>
+                         <div className="text-gray-500">Покупатель:</div> <div className="text-white">{req.legal_info.buyer}</div>
+                         <div className="text-gray-500">Предмет:</div> <div className="text-white truncate">{req.legal_info.subject}</div>
+                         <div className="text-gray-500">Цена/ед:</div> <div className="text-white">{req.legal_info.price_unit}</div>
+                         <div className="text-gray-500">ИТОГО:</div> <div className="text-green-400 font-bold">{req.legal_info.total}</div>
+                         <div className="text-gray-500">НДС:</div> <div className="text-white">{req.legal_info.vat}</div>
+                         <div className="text-gray-500">Оплата:</div> <div className="text-white">{req.legal_info.payment_terms}</div>
+                         <div className="text-gray-500">Поставка до:</div> <div className="text-white">{req.legal_info.delivery_date}</div>
+                     </div>
                  </div>
              )}
 
@@ -380,46 +389,105 @@ export default function SED() {
                  </div>
              )}
              
-             {/* ============================================== */}
-             {/* ПОЛНАЯ ФОРМА КОММЕРЧЕСКОГО (ОБЯЗАТЕЛЬНАЯ) */}
-             {/* ============================================== */}
+             {/* ========================================================= */}
+             {/* ФОРМА КОММЕРЧЕСКОГО (14 ПУНКТОВ) - РЕДАКТИРОВАНИЕ */}
+             {/* ========================================================= */}
              {role === 'KOMER' && (
-                 <div className="bg-[#0d1117] p-2 rounded border border-gray-700 space-y-2">
-                     <div className="text-[10px] text-gray-500 font-bold uppercase">Заполните данные:</div>
+                 <div className="bg-[#0d1117] p-3 rounded border border-gray-700 space-y-3 text-xs">
+                     <div className="text-blue-400 font-bold uppercase border-b border-gray-700 pb-1">ДАННЫЕ ДЛЯ ДОГОВОРА:</div>
                      
-                     <input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white text-xs" placeholder="Поставщик (ТОО/ИП)" value={formData.seller} onChange={e=>setFormData({...formData, seller: e.target.value})}/>
-                     
-                     <div className="flex gap-2">
-                        <input type="number" className="w-1/2 bg-gray-800 border border-gray-600 p-1.5 rounded text-white text-xs" placeholder="Цена за ед." value={formData.price_unit} onChange={e=>setFormData({...formData, price_unit: e.target.value})}/>
-                        <div className="w-1/2 text-right text-green-400 font-bold text-xs pt-2">{formData.total ? `${formData.total} ₸` : '0 ₸'}</div>
+                     {/* 1. СТОРОНЫ */}
+                     <div className="grid grid-cols-2 gap-2">
+                        <div>
+                            <span className="text-gray-500 text-[9px]">Продавец</span>
+                            <input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.seller} onChange={e=>setFormData({...formData, seller: e.target.value})}/>
+                        </div>
+                        <div>
+                            <span className="text-gray-500 text-[9px]">Покупатель</span>
+                            <input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.buyer} onChange={e=>setFormData({...formData, buyer: e.target.value})}/>
+                        </div>
                      </div>
 
-                     <div className="flex gap-2">
-                        <select className="w-1/2 bg-gray-800 border border-gray-600 p-1.5 rounded text-white text-xs" value={formData.payment_terms} onChange={e=>setFormData({...formData, payment_terms: e.target.value})}>
+                     {/* 2. ПРЕДМЕТ И КОЛ-ВО */}
+                     <div>
+                        <span className="text-gray-500 text-[9px]">Предмет договора</span>
+                        <input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white mb-2" value={formData.subject} onChange={e=>setFormData({...formData, subject: e.target.value})}/>
+                        <div className="grid grid-cols-2 gap-2">
+                             <div>
+                                <span className="text-gray-500 text-[9px]">Кол-во</span>
+                                <input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.qty} onChange={e=>setFormData({...formData, qty: e.target.value})}/>
+                             </div>
+                             <div>
+                                <span className="text-gray-500 text-[9px]">Цена за ед.</span>
+                                <input type="number" className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.price_unit} onChange={e=>setFormData({...formData, price_unit: e.target.value})}/>
+                             </div>
+                        </div>
+                     </div>
+
+                     {/* 3. ИТОГО И ОПЛАТА */}
+                     <div className="grid grid-cols-2 gap-2 bg-gray-800/50 p-2 rounded">
+                         <div>
+                             <span className="text-gray-500 text-[9px]">ОБЩАЯ СТОИМОСТЬ</span>
+                             <div className="text-green-400 font-bold">{formData.total}</div>
+                         </div>
+                         <div>
+                             <span className="text-gray-500 text-[9px]">НДС</span>
+                             <select className="w-full bg-gray-800 border border-gray-600 p-1 rounded text-white" value={formData.vat} onChange={e=>setFormData({...formData, vat: e.target.value})}>
+                                <option>с НДС</option>
+                                <option>без НДС</option>
+                             </select>
+                         </div>
+                     </div>
+
+                     {/* 4. УСЛОВИЯ */}
+                     <div>
+                        <span className="text-gray-500 text-[9px]">Порядок оплаты</span>
+                        <select className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.payment_terms} onChange={e=>setFormData({...formData, payment_terms: e.target.value})}>
                             <option>Постоплата 100%</option>
                             <option>Предоплата 100%</option>
                             <option>Предоплата 30% / 70%</option>
                             <option>Предоплата 50% / 50%</option>
-                            <option>По факту поставки</option>
-                        </select>
-                        <select className="w-1/2 bg-gray-800 border border-gray-600 p-1.5 rounded text-white text-xs" value={formData.vat} onChange={e=>setFormData({...formData, vat: e.target.value})}>
-                            <option>с НДС</option>
-                            <option>без НДС</option>
                         </select>
                      </div>
 
-                     <div className="flex gap-2">
-                        <div className="w-1/2">
-                            <div className="text-[9px] text-gray-500 mb-0.5">Дата поставки:</div>
-                            <input type="date" className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white text-xs" value={formData.delivery_date} onChange={e=>setFormData({...formData, delivery_date: e.target.value})}/>
+                     {/* 5. ЛОГИСТИКА */}
+                     <div className="grid grid-cols-2 gap-2">
+                        <div>
+                            <span className="text-gray-500 text-[9px]">Место поставки</span>
+                            <input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.delivery_place} onChange={e=>setFormData({...formData, delivery_place: e.target.value})}/>
                         </div>
-                        <div className="w-1/2">
-                             <div className="text-[9px] text-gray-500 mb-0.5">Гарантия:</div>
-                             <input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white text-xs" placeholder="12 мес" value={formData.warranty} onChange={e=>setFormData({...formData, warranty: e.target.value})}/>
+                         <div>
+                            <span className="text-gray-500 text-[9px]">Самовывоз?</span>
+                            <select className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.pickup} onChange={e=>setFormData({...formData, pickup: e.target.value})}>
+                                <option>Нет (Доставка)</option>
+                                <option>Да (Самовывоз)</option>
+                            </select>
                         </div>
                      </div>
 
-                     <button onClick={()=>handleAction(req, 'SEND', {require_form: true})} className="w-full bg-pink-700 hover:bg-pink-600 py-2 rounded text-xs font-bold text-white mb-2 shadow-lg shadow-pink-900/20">ОТПРАВИТЬ ЮРИСТУ (1)</button>
+                     {/* 6. СРОКИ И КАЧЕСТВО */}
+                     <div className="grid grid-cols-2 gap-2">
+                        <div>
+                            <span className="text-gray-500 text-[9px]">Срок поставки (Дата)</span>
+                            <input type="date" className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.delivery_date} onChange={e=>setFormData({...formData, delivery_date: e.target.value})}/>
+                        </div>
+                        <div>
+                            <span className="text-gray-500 text-[9px]">Гарантия</span>
+                            <input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.warranty} onChange={e=>setFormData({...formData, warranty: e.target.value})}/>
+                        </div>
+                     </div>
+                     <div>
+                        <span className="text-gray-500 text-[9px]">Качество товара</span>
+                        <input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.quality} onChange={e=>setFormData({...formData, quality: e.target.value})}/>
+                     </div>
+
+                     {/* 7. ИНИЦИАТОР (READ ONLY) */}
+                     <div className="flex justify-between items-center bg-gray-900 p-1.5 rounded border border-gray-800">
+                         <span className="text-gray-500 text-[9px]">ФИО Инициатора:</span>
+                         <span className="text-gray-300 font-bold">{formData.initiator}</span>
+                     </div>
+
+                     <button onClick={()=>handleAction(req, 'SEND', {require_form: true})} className="w-full bg-pink-700 hover:bg-pink-600 py-2.5 rounded text-xs font-bold text-white shadow-lg shadow-pink-900/20 mt-2">ОТПРАВИТЬ ЮРИСТУ (1)</button>
                      <button onClick={()=>handleAction(req, 'REJECT')} className="w-full border border-red-600 text-red-400 py-1.5 rounded text-xs hover:bg-red-900/20">❌ ОТКАЗ (ОТМЕНА)</button>
                  </div>
              )}
