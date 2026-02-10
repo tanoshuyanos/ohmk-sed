@@ -4,10 +4,11 @@ import { createClient } from '@supabase/supabase-js';
 import { 
   RefreshCw, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, 
   ExternalLink, AlertTriangle, Table, Truck, Wrench, Info, DollarSign, Calendar, 
-  MapPin, Eye, Clock, BarChart3, Phone, User, Factory, AlertCircle, Briefcase, FileSignature
+  MapPin, Eye, Clock, BarChart3, Phone, User, Factory, AlertCircle, Briefcase, FileSignature, 
+  Package, Scale, ShieldCheck
 } from 'lucide-react';
 
-const APP_VERSION = "v4.1 (Full Commercial Form)"; 
+const APP_VERSION = "v4.2 (Pro Contract Form)"; 
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
 
@@ -188,13 +189,37 @@ export default function SED() {
   };
 
   const RequestCard = ({ req }) => {
-    // Состояние формы для Комера
-    const [formData, setFormData] = useState(req.legal_info || {});
+    // Состояние формы для Комера - заполняем из существующих данных или пустоты
+    const [formData, setFormData] = useState({
+        seller: req.legal_info?.seller || '',
+        buyer: req.legal_info?.buyer || 'ТОО ОХМК', // По умолчанию ОХМК
+        subject: req.legal_info?.subject || req.item_name || '', // Предмет берем из заявки
+        qty: req.legal_info?.qty || req.quantity || '1',
+        price_unit: req.legal_info?.price_unit || '',
+        total: req.legal_info?.total || '',
+        payment_terms: req.legal_info?.payment_terms || '', // Порядок оплаты
+        delivery_place: req.legal_info?.delivery_place || '', // Место
+        pickup: req.legal_info?.pickup || 'НЕТ', // Самовывоз
+        delivery_date: req.legal_info?.delivery_date || req.deadline || '', // Срок
+        quality: req.legal_info?.quality || 'Новое', // Качество
+        warranty: req.legal_info?.warranty || '', // Гарантия
+        initiator: req.legal_info?.initiator || req.initiator || '', // Инициатор
+        vat: req.legal_info?.vat || 'ДА' // НДС
+    });
+
     const [paySum, setPaySum] = useState(req.final_pay_sum || '');
     const [payDate, setPayDate] = useState(req.payment_date || '');
 
     const isService = req.request_type === 'service';
     const isUrgent = (req.urgency || "").toLowerCase().includes("срочно");
+
+    // Авто-расчет суммы
+    useEffect(() => {
+        if(role === 'KOMER' && formData.qty && formData.price_unit) {
+            const sum = (parseFloat(formData.qty) * parseFloat(formData.price_unit)).toFixed(2);
+            setFormData(prev => ({...prev, total: sum}));
+        }
+    }, [formData.qty, formData.price_unit]);
 
     let borderColor = 'border-[#30363d]';
     let stripColor = 'bg-blue-600';
@@ -206,15 +231,17 @@ export default function SED() {
     if (isUrgent) { borderColor = 'border-red-500'; }
 
     const DealInfoBlock = () => (
-        <div className="w-full bg-[#0d1117] border border-gray-700/50 rounded-lg p-3 mb-3 mt-2">
-           <div className="text-[10px] text-gray-400 font-bold mb-2 uppercase tracking-wider flex items-center gap-2 border-b border-gray-800 pb-1"><FileText size={12}/> Детали Сделки</div>
-           <div className="space-y-3">
-               <div className="bg-gray-800/30 p-2 rounded border border-gray-700/50">
-                   <div className="flex justify-between items-end mb-1"><span className="text-gray-500 text-[10px]">Поставщик</span><span className="text-blue-300 font-bold text-xs">{req.legal_info?.seller || "Не указан"}</span></div>
-                   <div className="flex justify-between items-end"><span className="text-gray-500 text-[10px]">Сумма договора</span><span className="text-green-400 font-bold text-base">{req.legal_info?.total || "0"} ₸</span></div>
-                   <div className="flex justify-between items-end border-t border-gray-700 mt-1 pt-1"><span className="text-gray-500 text-[10px]">Условия</span><span className="text-gray-300 text-[10px]">{req.legal_info?.terms || "-"}</span></div>
+        <div className="w-full bg-[#0d1117] border border-gray-700/50 rounded-lg p-3 mb-3 mt-2 text-xs">
+           <div className="text-[10px] text-gray-400 font-bold mb-2 uppercase tracking-wider flex items-center gap-2 border-b border-gray-800 pb-1"><FileText size={12}/> Детали Договора</div>
+           <div className="grid grid-cols-2 gap-2 text-gray-300">
+               <div><span className="text-gray-500 block text-[9px]">Продавец</span>{req.legal_info?.seller}</div>
+               <div><span className="text-gray-500 block text-[9px]">Сумма</span><span className="text-green-400 font-bold">{req.legal_info?.total} ₸</span></div>
+               <div><span className="text-gray-500 block text-[9px]">Оплата</span>{req.legal_info?.payment_terms}</div>
+               <div><span className="text-gray-500 block text-[9px]">Срок</span>{req.legal_info?.delivery_date}</div>
+               <div className="col-span-2 border-t border-gray-800 pt-1 mt-1 flex justify-between">
+                   <span><span className="text-gray-500">НДС:</span> {req.legal_info?.vat}</span>
+                   <span><span className="text-gray-500">Гарантия:</span> {req.legal_info?.warranty}</span>
                </div>
-               {req.legal_info?.comment && <div className="text-[10px] text-gray-400 italic">"{req.legal_info.comment}"</div>}
            </div>
         </div>
     );
@@ -343,62 +370,59 @@ export default function SED() {
                      </>
                  )}
                  
-                 {/* ПОЛНАЯ ФОРМА КОМЕРЧЕСКОГО ДИРЕКТОРА */}
+                 {/* ПОЛНАЯ ФОРМА КОМЕРЧЕСКОГО ДИРЕКТОРА v4.2 */}
                  {role === 'KOMER' && (
                     <div className="pl-3 bg-pink-900/10 border-l-2 border-pink-500 p-3 rounded mb-3 w-full">
                         <div className="flex items-center gap-2 mb-3">
                             <Briefcase size={14} className="text-pink-500"/>
-                            <span className="text-xs font-bold text-pink-400">АНКЕТА ПОСТАВЩИКА</span>
+                            <span className="text-xs font-bold text-pink-400">ПОДГОТОВКА ДОГОВОРА</span>
                         </div>
                         
                         <div className="space-y-3 mb-4">
-                            {/* Поле 1: Поставщик */}
-                            <div>
-                                <label className="text-[10px] text-gray-500 block mb-1">Наименование контрагента (ТОО/ИП)</label>
-                                <input className="w-full bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs focus:border-pink-500 outline-none" 
-                                    placeholder="Например: ТОО Ромашка" 
-                                    value={formData.seller||''} 
-                                    onChange={e=>setFormData({...formData, seller: e.target.value})}
-                                />
+                            {/* Блок 1: Стороны */}
+                            <div className="grid grid-cols-2 gap-2">
+                                <input className="bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" placeholder="Продавец" value={formData.seller} onChange={e=>setFormData({...formData, seller: e.target.value})}/>
+                                <input className="bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" placeholder="Покупатель" value={formData.buyer} onChange={e=>setFormData({...formData, buyer: e.target.value})}/>
                             </div>
 
-                            {/* Поле 2: Сумма */}
-                            <div>
-                                <label className="text-[10px] text-gray-500 block mb-1">Сумма сделки (Цена договора)</label>
-                                <div className="relative">
-                                    <input className="w-full bg-[#0d1117] border border-gray-700 p-2 pl-7 rounded text-white text-xs font-bold focus:border-green-500 outline-none" 
-                                        type="number" 
-                                        placeholder="0" 
-                                        value={formData.total||''} 
-                                        onChange={e=>setFormData({...formData, total: e.target.value})}
-                                    />
-                                    <DollarSign size={12} className="absolute left-2 top-2.5 text-green-500"/>
+                            {/* Блок 2: Товар и Деньги */}
+                            <div className="space-y-2 bg-[#0d1117] p-2 rounded border border-gray-700/50">
+                                <input className="w-full bg-transparent border-b border-gray-700 p-1 text-white text-xs" placeholder="Предмет договора (Товар/Услуга)" value={formData.subject} onChange={e=>setFormData({...formData, subject: e.target.value})}/>
+                                <div className="grid grid-cols-3 gap-2">
+                                    <input type="number" className="bg-gray-800 border border-gray-700 p-1 rounded text-white text-xs" placeholder="Кол-во" value={formData.qty} onChange={e=>setFormData({...formData, qty: e.target.value})}/>
+                                    <input type="number" className="bg-gray-800 border border-gray-700 p-1 rounded text-white text-xs" placeholder="Цена за ед." value={formData.price_unit} onChange={e=>setFormData({...formData, price_unit: e.target.value})}/>
+                                    <select className="bg-gray-800 border border-gray-700 p-1 rounded text-white text-xs" value={formData.vat} onChange={e=>setFormData({...formData, vat: e.target.value})}>
+                                        <option value="ДА">С НДС</option>
+                                        <option value="НЕТ">Без НДС</option>
+                                    </select>
+                                </div>
+                                <div className="flex justify-between items-center pt-1">
+                                    <span className="text-[10px] text-gray-500">Общая сумма:</span>
+                                    <input className="bg-transparent text-right font-bold text-green-400 text-sm outline-none w-1/2" placeholder="0.00" value={formData.total} onChange={e=>setFormData({...formData, total: e.target.value})}/>
                                 </div>
                             </div>
 
-                            {/* Поле 3: Условия оплаты */}
-                            <div>
-                                <label className="text-[10px] text-gray-500 block mb-1">Условия оплаты</label>
-                                <select className="w-full bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs focus:border-blue-500 outline-none"
-                                    value={formData.terms||''}
-                                    onChange={e=>setFormData({...formData, terms: e.target.value})}
-                                >
-                                    <option value="">Выберите условия...</option>
-                                    <option value="100% Предоплата">100% Предоплата</option>
-                                    <option value="50% / 50%">50% Предоплата / 50% Факт</option>
-                                    <option value="По факту поставки">По факту поставки</option>
-                                    <option value="Отсрочка платежа">Отсрочка платежа</option>
+                            {/* Блок 3: Логистика и Сроки */}
+                            <div className="grid grid-cols-2 gap-2">
+                                <input className="bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" placeholder="Место поставки" value={formData.delivery_place} onChange={e=>setFormData({...formData, delivery_place: e.target.value})}/>
+                                <select className="bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" value={formData.pickup} onChange={e=>setFormData({...formData, pickup: e.target.value})}>
+                                    <option value="НЕТ">Доставка</option>
+                                    <option value="ДА">Самовывоз</option>
                                 </select>
+                                <input className="bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" placeholder="Срок поставки (дата/дни)" value={formData.delivery_date} onChange={e=>setFormData({...formData, delivery_date: e.target.value})}/>
+                                <input className="bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" placeholder="Гарантия (мес)" value={formData.warranty} onChange={e=>setFormData({...formData, warranty: e.target.value})}/>
                             </div>
 
-                            {/* Поле 4: Комментарий */}
-                            <div>
-                                <label className="text-[10px] text-gray-500 block mb-1">Комментарий / Обоснование</label>
-                                <textarea className="w-full bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs focus:border-pink-500 outline-none h-16 resize-none" 
-                                    placeholder="Почему этот поставщик? Сроки?" 
-                                    value={formData.comment||''} 
-                                    onChange={e=>setFormData({...formData, comment: e.target.value})}
-                                />
+                            {/* Блок 4: Условия и Инициатор */}
+                            <div className="grid grid-cols-1 gap-2">
+                                <input className="w-full bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" placeholder="Порядок оплаты (100% / 50-50 / Отсрочка)" value={formData.payment_terms} onChange={e=>setFormData({...formData, payment_terms: e.target.value})}/>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <select className="bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" value={formData.quality} onChange={e=>setFormData({...formData, quality: e.target.value})}>
+                                        <option value="Новое">Товар: НОВЫЙ</option>
+                                        <option value="Б/У">Товар: Б/У</option>
+                                    </select>
+                                    <input className="bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" placeholder="ФИО Инициатора" value={formData.initiator} onChange={e=>setFormData({...formData, initiator: e.target.value})}/>
+                                </div>
                             </div>
                         </div>
 
