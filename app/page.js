@@ -5,17 +5,17 @@ import {
   RefreshCw, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, 
   ExternalLink, AlertTriangle, Table, Truck, Wrench, Info, DollarSign, Calendar, 
   MapPin, Eye, Clock, BarChart3, Phone, User, Factory, AlertCircle, Briefcase, FileSignature, 
-  Package, Scale, ShieldCheck, Keyboard, History, GitMerge, Settings, ChevronRight
+  Package, Scale, ShieldCheck, Keyboard, History, GitMerge, Settings, ChevronRight, MessageCircle
 } from 'lucide-react';
 
-const APP_VERSION = "v9.1 (Smart Warehouses + Flags)"; 
+const APP_VERSION = "v9.1 (Smart Warehouses + Flags + Contacts)"; 
 // Вставь свои ссылки:
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
 
 const supabase = createClient(
-  https://ykmvlughekjnqgdyddmp.supabase.co/rest/v1/SED,
-  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlrbXZsdWdoZWtqbnFnZHlkZG1wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1NzQ3OTAsImV4cCI6MjA4NTE1MDc5MH0.ZaPeruXSJ6EQJ21nk4VPdvzQFMxoLUSxewQVK4EOE8Y
+  "https://ykmvlughekjnqgdyddmp.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlrbXZsdWdoZWtqbnFnZHlkZG1wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1NzQ3OTAsImV4cCI6MjA4NTE1MDc5MH0.ZaPeruXSJ6EQJ21nk4VPdvzQFMxoLUSxewQVK4EOE8Y"
 );
 
 // СЛОВАРЬ СКЛАДОВ (Для красивого отображения)
@@ -333,13 +333,14 @@ export default function SED() {
     const getCleanPhone = (phoneStr) => {
         if (!phoneStr) return null;
         // Оставляем только цифры
-        let p = phoneStr.replace(/\D/g, '');
+        let p = phoneStr.toString().replace(/\D/g, '');
         // Если начинается с 8 (Казахстан), меняем на 7
         if (p.startsWith('8')) p = '7' + p.slice(1);
         return p;
     };
     
     const cleanPhone = getCleanPhone(req.phone);
+
     return (
       <div className={`bg-[#161b22] border ${borderColor} rounded-xl p-5 shadow-xl flex flex-col h-full`}>
          <div className="flex justify-between items-start mb-2">
@@ -354,6 +355,7 @@ export default function SED() {
          <div className="text-sm space-y-2 text-gray-300 flex-grow mb-4">
              <div className="font-bold text-white text-lg">{req.item_name}</div>
              <div className="text-xs text-gray-400">Категория: {req.cost_category || "Не указана"}</div>
+             
              {/* Блок Инициатора с кнопками связи */}
              <div className="flex justify-between items-center border-t border-gray-700 pt-2 mt-2">
                  <div className="flex flex-col">
@@ -367,7 +369,7 @@ export default function SED() {
                          <a href={`https://wa.me/${cleanPhone}`} target="_blank" rel="noreferrer" 
                             className="bg-green-600 hover:bg-green-500 text-white p-1.5 rounded-lg transition"
                             title="Написать в WhatsApp">
-                             <Phone size={14} className="rotate-0" /> {/* Или иконка MessageCircle если есть */}
+                             <MessageCircle size={14} />
                          </a>
                          
                          {/* Кнопка Позвонить */}
