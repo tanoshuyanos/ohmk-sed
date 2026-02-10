@@ -8,7 +8,7 @@ import {
   Package, Scale, ShieldCheck
 } from 'lucide-react';
 
-const APP_VERSION = "v4.3 (Defaults & Weeks)"; 
+const APP_VERSION = "v4.5 (Parallel Economist)"; 
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
 
@@ -55,9 +55,15 @@ export default function SED() {
     else {
         if (userRole === "DIRECTOR") query = query.or('current_step.eq.DIRECTOR_CHECK,status.eq.В ОБРАБОТКЕ,status.eq.new,status.eq.director_review');
         else if (userRole === "FIN_DIR") query = query.eq('status', 'ДОГОВОР').neq('fin_dir_status', 'ОДОБРЕНО').neq('fin_dir_status', 'ОТКАЗ');
+        
+        // --- ИЗМЕНЕНИЕ: Экономист смотрит через плечо Комеру ---
+        // Он видит всё, что находится в работе у Коммерческого
         else if (userRole === "ECONOMIST") query = query.or('current_step.eq.KOMER_WORK,current_step.eq.KOMER_FIX');
+
+        // КОМЕР: Видит свои задачи (Они теперь падают сюда сразу)
         else if (userRole === "KOMER") query = query.or('status.eq.ОДОБРЕНО,fin_dir_status.eq.НА ДОРАБОТКУ').or('current_step.eq.KOMER_WORK,current_step.eq.KOMER_FIX');
-        else if (userRole && userRole.includes("SKLAD")) query = query.eq('status', 'ОДОБРЕНО');
+        
+        else if (userRole && userRole.includes("SKLAD")) query = query.eq('current_step', 'SKLAD_CHECK');
         else if (userRole === "LAWYER") query = query.or('current_step.eq.LAWYER_PROJECT,current_step.eq.LAWYER_FINAL,current_step.eq.LAWYER_FIX,current_step.eq.FINANCE_REVIEW,status.eq.В РАБОТЕ');
         else if (userRole === "FINANCE") query = query.or('current_step.eq.FINANCE_REVIEW,current_step.eq.FINANCE_DEAL,status.eq.В РАБОТЕ,status.eq.Договор подписан,status.eq.НА СОГЛАСОВАНИИ ОПЛАТЫ');
         else if (userRole === "ACCOUNTANT") query = query.or('current_step.eq.ACCOUNTANT_PAY,current_step.eq.ACCOUNTANT_EXECUTE,status.eq.СОГЛАСОВАНО НА ОПЛАТУ').neq('status', 'ОПЛАЧЕНО');
@@ -67,24 +73,16 @@ export default function SED() {
     let filtered = data || [];
 
     if (currentMode === 'active') {
-        if (userRole === "KOMER") {
-            filtered = filtered.filter(req => {
-                if (req.fin_dir_status === "НА ДОРАБОТКУ") return true;
-                if (req.status !== "ОДОБРЕНО") return false;
-                if (req.request_type === 'service') return true; 
-                return (req.warehouse_status === "Частично" || req.warehouse_status === "Отсутствует" || req.warehouse_status === "ОТСУТСТВУЕТ");
-            });
-        }
         if (userRole && userRole.includes("SKLAD")) {
             filtered = filtered.filter(req => {
                 if (req.request_type === 'service') return false; 
-                const wId = req.target_warehouse_code || "central"; 
-                if (!wId) return userRole === "SKLAD_CENTRAL";
-                return !req.warehouse_status || req.warehouse_status === "ВЫБРАТЬ";
+                const wId = req.target_warehouse_code;
+                if (!wId || wId === "central") return userRole === "SKLAD_CENTRAL";
+                if (wId === "parts") return userRole === "SKLAD_ZAP";
+                if (wId === "special") return (userRole === "SKLAD_GSM" || userRole === "SKLAD_MEHTOK");
+                return userRole === "SKLAD_CENTRAL";
             });
         }
-        if (userRole === "FINANCE") filtered = filtered.filter(req => req.status !== "ОПЛАЧЕНО" && req.status !== "ОДОБРЕНО К ОПЛАТЕ" && req.status !== "ОДОБРЕНО"); 
-        if (userRole === "LAWYER") filtered = filtered.filter(req => req.status !== "ОПЛАЧЕНО" && req.status !== "ОДОБРЕНО К ОПЛАТЕ");
     }
     setRequests(filtered);
     setLoading(false);
@@ -109,6 +107,8 @@ export default function SED() {
         if (!comments) return; 
     }
 
+    // Если Экономист - не удаляем заявку из списка (чтобы он видел результат)
+    // Остальные - оптимистично удаляем
     if (role !== 'LAWYER' && role !== 'ECONOMIST') setRequests(prev => prev.filter(r => r.id !== req.id));
     if (role === 'ECONOMIST') setRequests(prev => prev.map(r => r.id === req.id ? { ...r, economist_status: action } : r));
 
@@ -121,18 +121,34 @@ export default function SED() {
     if (role === 'DIRECTOR') {
         if (action === 'ОДОБРЕНО') { 
             newStatus = "ОДОБРЕНО"; 
-            nextStep = (req.request_type === 'service') ? "KOMER_WORK" : "SKLAD_CHECK";
+            // --- ПАРАЛЛЕЛЬНЫЙ МАРШРУТ ---
+            // Услуга -> Сразу к КОМЕРУ (Экономист увидит параллельно)
+            // Товар -> На СКЛАД
+            if (req.request_type === 'service') {
+                nextStep = "KOMER_WORK"; 
+            } else {
+                nextStep = "SKLAD_CHECK";
+            }
         } 
         else { newStatus = "ОТКЛОНЕНО"; nextStep = "CLOSED_REJECTED"; }
     }
+    
     else if (role.includes('SKLAD')) {
         updates.warehouse_status = action;
-        nextStep = (action.toUpperCase() === 'ЕСТЬ') ? "CLOSED_SUCCESS" : "KOMER_WORK";
+        if (action.toUpperCase() === 'ЕСТЬ') {
+            nextStep = "CLOSED_SUCCESS"; 
+        } else {
+            // Нет на складе -> Сразу к КОМЕРУ (Экономист увидит параллельно)
+            nextStep = "KOMER_WORK"; 
+        }
     }
+
     else if (role === 'ECONOMIST') {
         updates.economist_status = action;
-        nextStep = req.current_step;
+        // ВАЖНО: Экономист НЕ МЕНЯЕТ current_step. Заявка остается у Комера.
+        nextStep = req.current_step; 
     }
+
     else if (role === 'KOMER') {
         if (action === 'ОТКАЗ') { newStatus = "ОТКАЗ"; nextStep = "CLOSED_REJECTED"; }
         else { newStatus = "ДОГОВОР"; nextStep = "FIN_DIR_CHECK"; updates.fin_dir_status = "НА ПРОВЕРКЕ"; updates.fix_comment = null; }
@@ -159,6 +175,7 @@ export default function SED() {
     if (error) { alert("Ошибка сохранения!"); fetchRequests(role, viewMode); }
   };
 
+  // ... (handleUpload без изменений)
   const handleUpload = async () => {
       const fileInput = document.getElementById('file-upload');
       const contractNum = document.getElementById('contract-num')?.value || '';
@@ -189,7 +206,7 @@ export default function SED() {
   };
 
   const RequestCard = ({ req }) => {
-    // --- ЗДЕСЬ ЗАДАЮТСЯ ЗНАЧЕНИЯ ПО УМОЛЧАНИЮ ---
+    // ДЕФОЛТНЫЕ ЗНАЧЕНИЯ ФОРМЫ (Как вы просили)
     const [formData, setFormData] = useState({
         seller: req.legal_info?.seller || '',
         buyer: req.legal_info?.buyer || 'ТОО ОХМК', 
@@ -197,13 +214,13 @@ export default function SED() {
         qty: req.legal_info?.qty || req.quantity || '1',
         price_unit: req.legal_info?.price_unit || '',
         total: req.legal_info?.total || '',
-        payment_terms: req.legal_info?.payment_terms || 'Постоплата', // По умолчанию
-        delivery_place: req.legal_info?.delivery_place || 'Мира 2А', // По умолчанию
-        pickup: req.legal_info?.pickup || 'ДА', // По умолчанию
+        payment_terms: req.legal_info?.payment_terms || 'Постоплата', 
+        delivery_place: req.legal_info?.delivery_place || 'Мира 2А', 
+        pickup: req.legal_info?.pickup || 'ДА', 
         delivery_date: req.legal_info?.delivery_date || '', 
         quality: req.legal_info?.quality || 'Новое', 
-        warranty: req.legal_info?.warranty || '12 месяцев', // По умолчанию
-        initiator: req.legal_info?.initiator || req.initiator || '', // Из заявки
+        warranty: req.legal_info?.warranty || '12 месяцев', 
+        initiator: req.legal_info?.initiator || req.initiator || '', 
         vat: req.legal_info?.vat || 'ДА'
     });
 
@@ -213,7 +230,6 @@ export default function SED() {
     const isService = req.request_type === 'service';
     const isUrgent = (req.urgency || "").toLowerCase().includes("срочно");
 
-    // Авто-расчет суммы
     useEffect(() => {
         if(role === 'KOMER' && formData.qty && formData.price_unit) {
             const sum = (parseFloat(formData.qty) * parseFloat(formData.price_unit)).toFixed(2);
@@ -305,7 +321,7 @@ export default function SED() {
                     <span className="text-xs font-bold bg-[#0d1117] px-2 py-0.5 rounded border border-current">{req.economist_status}</span>
                 </div>
             ) : (
-                role === 'KOMER' && !isService && (
+                (role === 'KOMER' || role === 'FIN_DIR' || role === 'LAWYER') && (
                     <div className="pt-2 border-t border-gray-800 mt-1 flex justify-between items-center text-gray-600">
                         <span className="text-[10px] font-bold flex items-center gap-1"><BarChart3 size={12}/> БЮДЖЕТ:</span> 
                         <span className="text-[10px] italic">Ожидание...</span>
@@ -323,23 +339,12 @@ export default function SED() {
              </div>
          )}
 
-         {role === 'FINANCE' && req.status === "НА СОГЛАСОВАНИИ ОПЛАТЫ" && (
-             <div className="pl-3 mb-4 bg-purple-900/20 border border-purple-500 rounded p-3">
-                 <div className="text-[10px] text-purple-300 font-bold mb-2">ЗАПРОС НА ОПЛАТУ</div>
-                 <div className="text-white font-bold text-lg">{req.final_pay_sum} ₸</div>
-                 <div className="text-gray-400 text-xs mb-3">Планируемая дата: <b className="text-white">{req.payment_date}</b></div>
-                 <div className="flex gap-2">
-                    <button onClick={()=>updateStatus(req, "ОПЛАТА СОГЛАСОВАНА")} className="flex-[2] bg-green-600 py-2 rounded text-white text-xs font-bold">✔ ОДОБРИТЬ</button>
-                    <button onClick={()=>updateStatus(req, "НА ДОРАБОТКУ")} className="flex-1 bg-orange-600 py-2 rounded text-white text-xs font-bold">↩ ВЕРНУТЬ</button>
-                 </div>
-             </div>
-         )}
-         
          {viewMode === 'active' && (
              <div className="pl-3 flex flex-wrap gap-2 mt-auto">
+                 {/* ПАНЕЛЬ ЭКОНОМИСТА (ПАРАЛЛЕЛЬНАЯ) */}
                  {role === 'ECONOMIST' && (
                      <>
-                        <div className="w-full text-center text-gray-500 text-[10px] mb-2 bg-[#0d1117] p-1 rounded">Проверьте бюджет (Сделка не блокируется)</div>
+                        <div className="w-full text-center text-gray-500 text-[10px] mb-2 bg-[#0d1117] p-1 rounded">Проверьте бюджет (Параллельный режим)</div>
                         <div className="flex gap-2 w-full">
                            <button onClick={()=>updateStatus(req, "ПО ПЛАНУ")} className={`flex-1 py-3 rounded text-white text-xs font-bold transition ${req.economist_status==='ПО ПЛАНУ' ? 'bg-green-600' : 'bg-gray-700 hover:bg-green-600'}`}>✅ ПО ПЛАНУ</button>
                            <button onClick={()=>updateStatus(req, "ВНЕ ПЛАНА")} className={`flex-1 py-3 rounded text-white text-xs font-bold transition ${req.economist_status==='ВНЕ ПЛАНА' ? 'bg-orange-600' : 'bg-gray-700 hover:bg-orange-600'}`}>⚠️ ВНЕ ПЛАНА</button>
@@ -370,22 +375,20 @@ export default function SED() {
                      </>
                  )}
                  
-                 {/* ПОЛНАЯ ФОРМА КОМЕРЧЕСКОГО ДИРЕКТОРА v4.3 */}
                  {role === 'KOMER' && (
                     <div className="pl-3 bg-pink-900/10 border-l-2 border-pink-500 p-3 rounded mb-3 w-full">
+                        {/* ФОРМА КОМЕРА v4.3: ПОЛНАЯ + ДЕФОЛТЫ */}
                         <div className="flex items-center gap-2 mb-3">
                             <Briefcase size={14} className="text-pink-500"/>
                             <span className="text-xs font-bold text-pink-400">ПОДГОТОВКА ДОГОВОРА</span>
                         </div>
                         
                         <div className="space-y-3 mb-4">
-                            {/* Блок 1: Стороны */}
                             <div className="grid grid-cols-2 gap-2">
                                 <input className="bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" placeholder="Продавец" value={formData.seller} onChange={e=>setFormData({...formData, seller: e.target.value})}/>
                                 <input className="bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" placeholder="Покупатель" value={formData.buyer} onChange={e=>setFormData({...formData, buyer: e.target.value})}/>
                             </div>
 
-                            {/* Блок 2: Товар и Деньги */}
                             <div className="space-y-2 bg-[#0d1117] p-2 rounded border border-gray-700/50">
                                 <input className="w-full bg-transparent border-b border-gray-700 p-1 text-white text-xs" placeholder="Предмет договора (Товар/Услуга)" value={formData.subject} onChange={e=>setFormData({...formData, subject: e.target.value})}/>
                                 <div className="grid grid-cols-3 gap-2">
@@ -402,7 +405,6 @@ export default function SED() {
                                 </div>
                             </div>
 
-                            {/* Блок 3: Логистика и Сроки */}
                             <div className="grid grid-cols-2 gap-2">
                                 <input className="bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" placeholder="Место поставки" value={formData.delivery_place} onChange={e=>setFormData({...formData, delivery_place: e.target.value})}/>
                                 <select className="bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" value={formData.pickup} onChange={e=>setFormData({...formData, pickup: e.target.value})}>
@@ -413,7 +415,6 @@ export default function SED() {
                                 <input className="bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" placeholder="Гарантия (мес)" value={formData.warranty} onChange={e=>setFormData({...formData, warranty: e.target.value})}/>
                             </div>
 
-                            {/* Блок 4: Условия и Инициатор */}
                             <div className="grid grid-cols-1 gap-2">
                                 <input className="w-full bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" placeholder="Порядок оплаты" value={formData.payment_terms} onChange={e=>setFormData({...formData, payment_terms: e.target.value})}/>
                                 <div className="grid grid-cols-2 gap-2">
@@ -479,101 +480,3 @@ export default function SED() {
       </div>
     );
   };
-  
-  if (!role) return (
-    <div className="min-h-screen bg-[#0d1117] flex flex-col items-center justify-center p-4 relative">
-      <div className="text-center mb-8"><h1 className="text-4xl font-bold text-blue-500 tracking-widest">ОХМК СЭД</h1><p className="text-gray-500 text-xs mt-2">CORPORATE SYSTEM</p></div>
-      <form onSubmit={handleLogin} className="flex flex-col gap-4 w-64">
-        <input type="password" value={pin} onChange={e => setPin(e.target.value)} className="bg-[#161b22] border-2 border-[#30363d] text-white text-4xl text-center p-4 rounded-2xl outline-none focus:border-blue-500 transition" placeholder="••••" autoFocus />
-        <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl text-lg shadow-lg shadow-blue-900/20 transition transform active:scale-95">ВОЙТИ</button>
-      </form>
-      <div className="absolute bottom-5 text-gray-700 text-[10px]">{APP_VERSION}</div>
-    </div>
-  );
-
-  return (
-    <div className="min-h-screen bg-[#0d1117] text-gray-300 pb-20 font-sans flex flex-col">
-      {modal.open && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-              <div className="bg-[#161b22] border border-gray-700 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
-                  <div className="flex justify-between items-center mb-6">
-                      <h3 className="text-lg font-bold text-white flex items-center gap-2"><UploadCloud className="text-blue-500"/> {modal.type === 'DRAFT' ? 'Проект' : 'Финал'}</h3>
-                      <button onClick={()=>setModal({...modal, open:false})}><X className="text-gray-500 hover:text-white"/></button>
-                  </div>
-                  {uploadStatus === 'success' ? (
-                      <div className="text-center py-6"><CheckCircle size={48} className="text-green-500 mx-auto mb-2"/><p className="text-white font-bold">Загружено!</p></div>
-                  ) : (
-                      <div className="space-y-4">
-                          <div className="bg-[#0d1117] border border-dashed border-gray-600 rounded-xl p-6 text-center cursor-pointer hover:border-blue-500 transition relative">
-                              <input type="file" id="file-upload" className="absolute inset-0 opacity-0 cursor-pointer"/>
-                              <div className="text-gray-400 text-sm">Выбрать файл<br/>(PDF, DOCX)</div>
-                          </div>
-                          {modal.type === 'FINAL' && (
-                              <div className="space-y-2">
-                                  <input id="contract-num" className="w-full bg-[#0d1117] border border-gray-700 rounded p-3 text-white text-sm" placeholder="№ Договора"/>
-                                  <input id="contract-amount" type="number" className="w-full bg-[#0d1117] border border-gray-700 rounded p-3 text-white text-sm" placeholder="Сумма договора"/>
-                              </div>
-                          )}
-                          {uploadStatus === 'uploading' && (
-                              <div className="w-full bg-gray-700 rounded-full h-2.5 mt-4 overflow-hidden"><div className="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style={{width: `${uploadProgress}%`}}></div></div>
-                          )}
-                          <button onClick={handleUpload} disabled={uploadStatus === 'uploading'} className={`w-full py-3 rounded-xl font-bold text-white transition ${uploadStatus==='uploading' ? 'bg-gray-600 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500'}`}>{uploadStatus === 'uploading' ? `...` : 'ОТПРАВИТЬ'}</button>
-                      </div>
-                  )}
-              </div>
-          </div>
-      )}
-      
-      <div className="sticky top-0 z-20 bg-[#0d1117]/90 backdrop-blur border-b border-gray-800">
-          <div className="max-w-7xl mx-auto p-3">
-             <div className="flex justify-between items-center mb-3">
-                 <div className="flex items-center gap-3">
-                     <div className="flex flex-col">
-                         <span className="text-xs text-gray-500 font-bold">РОЛЬ</span>
-                         <div className="flex items-center gap-2"><b className="text-blue-400 text-lg">{role}</b>{loading && <Loader2 className="animate-spin text-gray-500" size={14}/>}</div>
-                     </div>
-                 </div>
-                 <div className="flex gap-2">
-                     <a href={SHEET_URL} target="_blank" className="flex items-center gap-1 bg-gray-800 hover:bg-gray-700 border border-gray-600 text-gray-300 px-3 py-2 rounded-lg text-xs font-bold transition">
-                         <Table size={14}/> <span className="hidden sm:inline">ТАБЛИЦА</span>
-                     </a>
-                     <button onClick={() => setRole(null)} className="text-[10px] text-red-400 border border-red-900/30 px-3 py-2 rounded-lg bg-red-900/10 hover:bg-red-900/20">ВЫХОД</button>
-                 </div>
-             </div>
-             
-             <div className="flex gap-2">
-                 <div className="flex-1 flex bg-[#161b22] p-1 rounded-lg border border-gray-700">
-                     <button onClick={() => switchMode('active')} className={`flex-1 py-1.5 text-xs font-bold rounded flex justify-center items-center gap-1 transition ${viewMode==='active' ? 'bg-blue-600 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}><Zap size={14}/> <span className="hidden sm:inline">В РАБОТЕ</span></button>
-                     <button onClick={() => switchMode('history')} className={`flex-1 py-1.5 text-xs font-bold rounded flex justify-center items-center gap-1 transition ${viewMode==='history' ? 'bg-gray-700 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}><Archive size={14}/> <span className="hidden sm:inline">АРХИВ</span></button>
-                 </div>
-                 <div className="relative w-1/3">
-                     <Search className="absolute left-3 top-2 text-gray-500" size={14}/>
-                     <input type="text" placeholder="Поиск..." className="w-full h-full bg-[#161b22] border border-gray-700 rounded-lg pl-9 text-white text-xs outline-none focus:border-blue-500 transition" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
-                 </div>
-             </div>
-          </div>
-      </div>
-      
-      <div className="max-w-7xl mx-auto w-full p-4 flex-grow">
-          {loading && requests.length === 0 ? (
-              <div className="text-center py-20 text-gray-500 animate-pulse">Загрузка данных...</div> 
-          ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {requests.filter(r => searchQuery ? String(r.req_number).includes(searchQuery) : true).map(req => (
-                      <RequestCard key={req.id} req={req} />
-                  ))}
-              </div>
-          )}
-          
-          {!loading && requests.length === 0 && (
-              <div className="text-center py-20 opacity-30 flex flex-col items-center">
-                  <Archive size={48} className="mb-2"/>
-                  <div>Список пуст</div>
-              </div>
-          )}
-      </div>
-
-      <div className="text-center py-4 text-gray-800 text-[10px]">{APP_VERSION}</div>
-    </div>
-  );
-}
