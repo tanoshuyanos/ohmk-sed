@@ -8,7 +8,7 @@ import {
   Package, Scale, ShieldCheck, Keyboard 
 } from 'lucide-react';
 
-const APP_VERSION = "v4.7 (Lawyer Buttons Fixed)"; 
+const APP_VERSION = "v4.8 (Stable & Complete)"; 
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
 
@@ -60,10 +60,7 @@ export default function SED() {
         else if (userRole === "ECONOMIST") query = query.or('current_step.eq.KOMER_WORK,current_step.eq.KOMER_FIX');
         else if (userRole === "KOMER") query = query.or('status.eq.ОДОБРЕНО,fin_dir_status.eq.НА ДОРАБОТКУ').or('current_step.eq.KOMER_WORK,current_step.eq.KOMER_FIX');
         else if (userRole && userRole.includes("SKLAD")) query = query.eq('current_step', 'SKLAD_CHECK');
-        
-        // ЮРИСТ: Видит свои шаги
         else if (userRole === "LAWYER") query = query.or('current_step.eq.LAWYER_PROJECT,current_step.eq.LAWYER_FINAL,current_step.eq.LAWYER_FIX,status.eq.ПРОЕКТ СОГЛАСОВАН');
-        
         else if (userRole === "FINANCE") query = query.or('current_step.eq.FINANCE_REVIEW,current_step.eq.FINANCE_DEAL,status.eq.В РАБОТЕ,status.eq.Договор подписан,status.eq.НА СОГЛАСОВАНИИ ОПЛАТЫ');
         else if (userRole === "ACCOUNTANT") query = query.or('current_step.eq.ACCOUNTANT_PAY,current_step.eq.ACCOUNTANT_EXECUTE,status.eq.СОГЛАСОВАНО НА ОПЛАТУ').neq('status', 'ОПЛАЧЕНО');
     }
@@ -82,7 +79,6 @@ export default function SED() {
                 return userRole === "SKLAD_CENTRAL";
             });
         }
-        // Фильтр для Юриста (убираем лишнее)
         if (userRole === "LAWYER") filtered = filtered.filter(req => req.status !== "ОПЛАЧЕНО" && req.status !== "ОДОБРЕНО К ОПЛАТЕ");
     }
     setRequests(filtered);
@@ -142,24 +138,12 @@ export default function SED() {
         else if (action === 'НА ДОРАБОТКУ') { nextStep = "KOMER_FIX"; newStatus = "ОДОБРЕНО"; }
         else { newStatus = "ОТКАЗ ФИН.ДИР"; nextStep = "CLOSED_REJECTED"; }
     }
-    
-    // --- ЮРИСТ: ОТПРАВКА НА ПРОВЕРКУ ФИНАНСИСТУ ---
     else if (role === 'LAWYER') {
-        if (action === 'НА СОГЛАСОВАНИЕ') { 
-            newStatus = "НА СОГЛАСОВАНИИ У ФИН"; 
-            nextStep = "FINANCE_REVIEW"; // Передаем Финансисту
-        }
-        else if (action === 'Договор подписан') { 
-            newStatus = "Договор подписан"; 
-            nextStep = "FINANCE_DEAL"; // Финал для финансиста
-        }
+        if (action === 'НА СОГЛАСОВАНИЕ') { newStatus = "НА СОГЛАСОВАНИИ У ФИН"; nextStep = "FINANCE_REVIEW"; }
+        else if (action === 'Договор подписан') { newStatus = "Договор подписан"; nextStep = "FINANCE_DEAL"; }
     }
-
     else if (role === 'FINANCE') {
-        if (action === 'ПРОЕКТ СОГЛАСОВАН') { 
-            newStatus = "ПРОЕКТ СОГЛАСОВАН"; 
-            nextStep = "LAWYER_FINAL"; // Возвращаем Юристу на подписание
-        }
+        if (action === 'ПРОЕКТ СОГЛАСОВАН') { newStatus = "ПРОЕКТ СОГЛАСОВАН"; nextStep = "LAWYER_FINAL"; }
         else if (action === 'НА ДОРАБОТКУ') { newStatus = "НА ДОРАБОТКУ"; nextStep = "LAWYER_FIX"; }
         else if (action === 'ОПЛАТА СОГЛАСОВАНА') { newStatus = "СОГЛАСОВАНО НА ОПЛАТУ"; nextStep = "ACCOUNTANT_EXECUTE"; }
         else if (action === 'ОТКЛОНЕНО') { newStatus = "ОТКЛОНЕНО ФИН"; nextStep = "CLOSED_REJECTED"; }
@@ -172,7 +156,7 @@ export default function SED() {
 
     const { error } = await supabase.from('requests').update({ status: newStatus, current_step: nextStep, ...updates }).eq('id', req.id);
     if (error) { alert("Ошибка сохранения!"); fetchRequests(role, viewMode); }
-};
+  };
 
   const handleUpload = async () => {
       const fileInput = document.getElementById('file-upload');
@@ -336,27 +320,20 @@ export default function SED() {
              </div>
          )}
 
-         {/* ПАНЕЛЬ ДЕЙСТВИЙ */}
          {viewMode === 'active' && (
              <div className="pl-3 flex flex-wrap gap-2 mt-auto">
-                 {/* КНОПКИ ЮРИСТА (ВОССТАНОВЛЕНО) */}
                  {role === 'LAWYER' && (
                      <div className="flex flex-col gap-2 w-full">
-                         {/* 1. Если еще нет проекта - кнопка загрузки */}
                          {!req.draft_url && req.status !== "ПРОЕКТ СОГЛАСОВАН" && (
                              <button onClick={()=>setModal({ open:true, req:req, type:'DRAFT' })} className="w-full bg-blue-600 py-3 rounded text-white text-xs font-bold flex items-center justify-center gap-2">
                                  <UploadCloud size={14}/> ЗАГРУЗИТЬ ПРОЕКТ
                              </button>
                          )}
-
-                         {/* 2. Если проект загружен - кнопка отправить Финансисту */}
                          {req.draft_url && req.status !== "НА СОГЛАСОВАНИИ У ФИН" && req.status !== "ПРОЕКТ СОГЛАСОВАН" && (
                              <button onClick={()=>updateStatus(req, "НА СОГЛАСОВАНИЕ")} className="w-full bg-indigo-600 py-3 rounded text-white text-xs font-bold flex items-center justify-center gap-2">
                                  <Briefcase size={14}/> ОТПРАВИТЬ ФИНАНСИСТУ
                              </button>
                          )}
-
-                         {/* 3. Если Финансист одобрил - кнопка загрузки Скана */}
                          {req.status === "ПРОЕКТ СОГЛАСОВАН" && (
                              <>
                                 <div className="bg-green-900/20 border border-green-600/50 p-2 rounded text-center mb-1">
@@ -367,8 +344,6 @@ export default function SED() {
                                 </button>
                              </>
                          )}
-                         
-                         {/* Кнопка "Договор подписан" появляется после загрузки скана */}
                          {req.contract_url && req.status !== "Договор подписан" && (
                              <button onClick={()=>updateStatus(req, "Договор подписан")} className="w-full border border-green-600 text-green-400 py-3 rounded text-xs font-bold mt-1">
                                  ✔ ПОДТВЕРДИТЬ ПОДПИСАНИЕ
@@ -416,7 +391,6 @@ export default function SED() {
                             <Briefcase size={14} className="text-pink-500"/>
                             <span className="text-xs font-bold text-pink-400">ПОДГОТОВКА ДОГОВОРА</span>
                         </div>
-                        {/* ФОРМА БЕЗ ИЗМЕНЕНИЙ */}
                         <div className="space-y-3 mb-4">
                             <div className="grid grid-cols-2 gap-2">
                                 <input className="bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" placeholder="Продавец" value={formData.seller} onChange={e=>setFormData({...formData, seller: e.target.value})}/>
@@ -510,3 +484,120 @@ export default function SED() {
       </div>
     );
   };
+  
+  if (!role) return (
+    <div className="min-h-screen bg-[#0d1117] flex flex-col items-center justify-center p-4 relative">
+      <div className="text-center mb-8"><h1 className="text-4xl font-bold text-blue-500 tracking-widest">ОХМК СЭД</h1><p className="text-gray-500 text-xs mt-2">CORPORATE SYSTEM</p></div>
+      <form onSubmit={handleLogin} className="flex flex-col gap-4 w-64">
+        <div className="relative">
+            <input 
+                ref={pinInputRef}
+                type="password" 
+                inputMode="numeric" 
+                pattern="[0-9]*"
+                value={pin} 
+                onChange={e => setPin(e.target.value)} 
+                className="bg-[#161b22] border-2 border-[#30363d] text-white text-4xl text-center p-4 rounded-2xl outline-none focus:border-blue-500 transition w-full" 
+                placeholder="••••" 
+                autoFocus 
+            />
+            <button 
+                type="button" 
+                onClick={() => pinInputRef.current?.focus()} 
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-600 p-2"
+            >
+                <Keyboard size={20}/>
+            </button>
+        </div>
+        <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl text-lg shadow-lg shadow-blue-900/20 transition transform active:scale-95">ВОЙТИ</button>
+      </form>
+      <div className="absolute bottom-5 text-gray-700 text-[10px]">{APP_VERSION}</div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-[#0d1117] text-gray-300 pb-20 font-sans flex flex-col">
+      {modal.open && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+              <div className="bg-[#161b22] border border-gray-700 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+                  <div className="flex justify-between items-center mb-6">
+                      <h3 className="text-lg font-bold text-white flex items-center gap-2"><UploadCloud className="text-blue-500"/> {modal.type === 'DRAFT' ? 'Проект' : 'Финал'}</h3>
+                      <button onClick={()=>setModal({...modal, open:false})}><X className="text-gray-500 hover:text-white"/></button>
+                  </div>
+                  {uploadStatus === 'success' ? (
+                      <div className="text-center py-6"><CheckCircle size={48} className="text-green-500 mx-auto mb-2"/><p className="text-white font-bold">Загружено!</p></div>
+                  ) : (
+                      <div className="space-y-4">
+                          <div className="bg-[#0d1117] border border-dashed border-gray-600 rounded-xl p-6 text-center cursor-pointer hover:border-blue-500 transition relative">
+                              <input type="file" id="file-upload" className="absolute inset-0 opacity-0 cursor-pointer"/>
+                              <div className="text-gray-400 text-sm">Выбрать файл<br/>(PDF, DOCX)</div>
+                          </div>
+                          {modal.type === 'FINAL' && (
+                              <div className="space-y-2">
+                                  <input id="contract-num" className="w-full bg-[#0d1117] border border-gray-700 rounded p-3 text-white text-sm" placeholder="№ Договора"/>
+                                  <input id="contract-amount" type="number" className="w-full bg-[#0d1117] border border-gray-700 rounded p-3 text-white text-sm" placeholder="Сумма договора"/>
+                              </div>
+                          )}
+                          {uploadStatus === 'uploading' && (
+                              <div className="w-full bg-gray-700 rounded-full h-2.5 mt-4 overflow-hidden"><div className="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style={{width: `${uploadProgress}%`}}></div></div>
+                          )}
+                          <button onClick={handleUpload} disabled={uploadStatus === 'uploading'} className={`w-full py-3 rounded-xl font-bold text-white transition ${uploadStatus==='uploading' ? 'bg-gray-600 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500'}`}>{uploadStatus === 'uploading' ? `...` : 'ОТПРАВИТЬ'}</button>
+                      </div>
+                  )}
+              </div>
+          </div>
+      )}
+      
+      <div className="sticky top-0 z-20 bg-[#0d1117]/90 backdrop-blur border-b border-gray-800">
+          <div className="max-w-7xl mx-auto p-3">
+             <div className="flex justify-between items-center mb-3">
+                 <div className="flex items-center gap-3">
+                     <div className="flex flex-col">
+                         <span className="text-xs text-gray-500 font-bold">РОЛЬ</span>
+                         <div className="flex items-center gap-2"><b className="text-blue-400 text-lg">{role}</b>{loading && <Loader2 className="animate-spin text-gray-500" size={14}/>}</div>
+                     </div>
+                 </div>
+                 <div className="flex gap-2">
+                     <a href={SHEET_URL} target="_blank" className="flex items-center gap-1 bg-gray-800 hover:bg-gray-700 border border-gray-600 text-gray-300 px-3 py-2 rounded-lg text-xs font-bold transition">
+                         <Table size={14}/> <span className="hidden sm:inline">ТАБЛИЦА</span>
+                     </a>
+                     <button onClick={() => setRole(null)} className="text-[10px] text-red-400 border border-red-900/30 px-3 py-2 rounded-lg bg-red-900/10 hover:bg-red-900/20">ВЫХОД</button>
+                 </div>
+             </div>
+             
+             <div className="flex gap-2">
+                 <div className="flex-1 flex bg-[#161b22] p-1 rounded-lg border border-gray-700">
+                     <button onClick={() => switchMode('active')} className={`flex-1 py-1.5 text-xs font-bold rounded flex justify-center items-center gap-1 transition ${viewMode==='active' ? 'bg-blue-600 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}><Zap size={14}/> <span className="hidden sm:inline">В РАБОТЕ</span></button>
+                     <button onClick={() => switchMode('history')} className={`flex-1 py-1.5 text-xs font-bold rounded flex justify-center items-center gap-1 transition ${viewMode==='history' ? 'bg-gray-700 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}><Archive size={14}/> <span className="hidden sm:inline">АРХИВ</span></button>
+                 </div>
+                 <div className="relative w-1/3">
+                     <Search className="absolute left-3 top-2 text-gray-500" size={14}/>
+                     <input type="text" placeholder="Поиск..." className="w-full h-full bg-[#161b22] border border-gray-700 rounded-lg pl-9 text-white text-xs outline-none focus:border-blue-500 transition" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+                 </div>
+             </div>
+          </div>
+      </div>
+      
+      <div className="max-w-7xl mx-auto w-full p-4 flex-grow">
+          {loading && requests.length === 0 ? (
+              <div className="text-center py-20 text-gray-500 animate-pulse">Загрузка данных...</div> 
+          ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {requests.filter(r => searchQuery ? String(r.req_number).includes(searchQuery) : true).map(req => (
+                      <RequestCard key={req.id} req={req} />
+                  ))}
+              </div>
+          )}
+          
+          {!loading && requests.length === 0 && (
+              <div className="text-center py-20 opacity-30 flex flex-col items-center">
+                  <Archive size={48} className="mb-2"/>
+                  <div>Список пуст</div>
+              </div>
+          )}
+      </div>
+
+      <div className="text-center py-4 text-gray-800 text-[10px]">{APP_VERSION}</div>
+    </div>
+  );
+}
