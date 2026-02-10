@@ -5,10 +5,10 @@ import {
   RefreshCw, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, 
   ExternalLink, AlertTriangle, Table, Truck, Wrench, Info, DollarSign, Calendar, 
   MapPin, Eye, Clock, BarChart3, Phone, User, Factory, AlertCircle, Briefcase, FileSignature, 
-  Package, Scale, ShieldCheck, Keyboard, History, GitMerge, Settings, ChevronRight, MessageCircle, Paperclip
+  Package, Scale, ShieldCheck, Keyboard, History, GitMerge, Settings, ChevronRight, MessageCircle, Paperclip, Hash, CreditCard
 } from 'lucide-react';
 
-const APP_VERSION = "v9.3 (Dynamic Cards + Auto Height)"; 
+const APP_VERSION = "v9.5 (FULL KOMER FORM)"; 
 // Вставь свои ссылки:
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
@@ -118,7 +118,14 @@ export default function SED() {
   };
 
   const handleAction = async (req, actionType, payload = {}) => {
-      if (payload.require_form && (!req.legal_info?.seller || !req.legal_info?.total)) return alert("Заполните форму!");
+      // ПРОВЕРКА ДЛЯ КОММЕРЧЕСКОГО (ОБЯЗАТЕЛЬНЫЕ ПОЛЯ)
+      if (payload.require_form) {
+          const info = req.legal_info;
+          if (!info?.seller || !info?.price_unit || !info?.payment_terms || !info?.delivery_date) {
+              return alert("ЗАПОЛНИТЕ ВСЕ ПОЛЯ:\n- Поставщик\n- Цена\n- Условия оплаты\n- Дата поставки");
+          }
+      }
+      
       if (payload.require_draft && !req.draft_url) return alert("Загрузите проект!");
       if (payload.require_scan && !req.contract_url) return alert("Загрузите скан!");
       if (payload.require_contract_sum && !req.contract_sum) return alert("Укажите сумму договора!");
@@ -233,17 +240,35 @@ export default function SED() {
   };
 
   const RequestCard = ({ req }) => {
-    const [formData, setFormData] = useState(req.legal_info || { seller: '', buyer: 'ТОО ОХМК', subject: req.item_name, qty: req.quantity || '1', price_unit: '', total: '', payment_terms: 'Постоплата', delivery_place: 'Мира 2А', pickup: 'ДА', delivery_date: '', quality: 'Новое', warranty: '12 месяцев', initiator: req.initiator, vat: 'ДА' });
+    // ПОЛНАЯ ФОРМА КОММЕРЧЕСКОГО (БОЛЬШЕ ДАННЫХ)
+    const [formData, setFormData] = useState(req.legal_info || { 
+        seller: '', 
+        price_unit: '', 
+        total: '', 
+        payment_terms: 'Постоплата 100%', // Дефолт
+        delivery_date: '', 
+        vat: 'с НДС',
+        warranty: '12 месяцев',
+        pickup: 'Доставка' 
+    });
     const [contractSum, setContractSum] = useState(req.contract_sum || '');
     const [paySum, setPaySum] = useState(req.payment_sum || '');
     const [payDate, setPayDate] = useState(req.payment_date || '');
 
     useEffect(() => {
         if(formData.qty && formData.price_unit) {
-            const sum = (parseFloat(formData.qty) * parseFloat(formData.price_unit)).toFixed(2);
+             // ... старая логика, если qty есть в форме ...
+        }
+        // Расчет итого
+        if(req.quantity && formData.price_unit) {
+            // Пытаемся вытащить число из строки количества, если там текст
+            const qtyNum = parseFloat(String(req.quantity).replace(/[^0-9.]/g, '')) || 1;
+            const sum = (qtyNum * parseFloat(formData.price_unit)).toFixed(2);
             setFormData(prev => ({...prev, total: sum}));
-            req.temp_legal_info = {...formData, total: sum};
-        } else { req.temp_legal_info = formData; }
+        }
+        
+        // СОХРАНЯЕМ ВЕСЬ ОБЪЕКТ
+        req.temp_legal_info = formData;
     }, [formData]);
 
     useEffect(() => { req.temp_pay_sum = paySum; req.temp_pay_date = payDate; req.temp_contract_sum = contractSum; }, [paySum, payDate, contractSum]);
@@ -263,7 +288,6 @@ export default function SED() {
     const cleanPhone = getCleanPhone(req.phone);
 
     return (
-      // ИЗМЕНЕНИЕ 1: Убрали h-full, карточка теперь растет от контента
       <div className={`bg-[#161b22] border ${borderColor} rounded-xl p-5 shadow-xl flex flex-col`}>
          <div className="flex justify-between items-start mb-2">
             <div><h3 className="text-xl font-bold text-white">#{req.req_number}</h3><div className="text-xs text-gray-500">{new Date(req.created_at).toLocaleDateString()}</div></div>
@@ -272,15 +296,31 @@ export default function SED() {
 
          {req.fix_comment && <div className="bg-orange-900/30 border border-orange-600 p-2 rounded mb-3 text-xs text-orange-200"><b className="block mb-1">⚠️ ТРЕБУЮТСЯ ПРАВКИ:</b>{req.fix_comment}</div>}
 
-         {/* ИЗМЕНЕНИЕ 2: Обертка контента без flex-grow, чтобы не тянуть пустые места */}
          <div className="text-sm space-y-2 text-gray-300 mb-4">
-             <div className="flex justify-between items-start">
-                 {/* ИЗМЕНЕНИЕ 3: break-words и whitespace-pre-wrap для длинных текстов */}
-                 <div className="font-bold text-white text-lg leading-tight break-words pr-2">{req.item_name}</div>
-                 {req.quantity && <div className="bg-gray-700 px-2 py-1 rounded text-white font-mono text-xs whitespace-nowrap">{req.quantity}</div>}
-             </div>
+             <div className="font-bold text-white text-lg leading-tight break-words pr-2">{req.item_name}</div>
              
-             <div className="text-xs text-gray-400">Категория: {req.cost_category || "Не указана"}</div>
+             {req.quantity && (
+                 <div className="flex items-start gap-3 mt-2 bg-[#0d1117] p-2 rounded border border-gray-700">
+                    <div className="bg-blue-900/20 p-2 rounded text-blue-400 mt-0.5"><Package size={18}/></div>
+                    <div className="flex flex-col">
+                        <span className="text-[10px] text-gray-500 font-bold uppercase">Количество</span>
+                        <span className="text-sm text-white font-mono break-words whitespace-pre-wrap">{req.quantity}</span>
+                    </div>
+                 </div>
+             )}
+
+             {/* БЛОК ИНФОРМАЦИИ ОТ КОММЕРЧЕСКОГО (ВИДЯТ ВСЕ) */}
+             {req.legal_info && (
+                 <div className="mt-3 bg-gray-800/40 p-2 rounded border border-gray-700 text-xs space-y-1">
+                     <div className="text-gray-500 font-bold text-[10px] uppercase mb-1">Коммерческое предложение:</div>
+                     <div className="flex justify-between"><span>Поставщик:</span> <b className="text-white">{req.legal_info.seller}</b></div>
+                     <div className="flex justify-between"><span>Сумма:</span> <b className="text-green-400">{req.legal_info.total}</b></div>
+                     <div className="flex justify-between"><span>Условия:</span> <span className="text-white">{req.legal_info.payment_terms}</span></div>
+                     <div className="flex justify-between"><span>Поставка:</span> <span className="text-white">{req.legal_info.delivery_date}</span></div>
+                 </div>
+             )}
+
+             <div className="text-xs text-gray-400 mt-2">Категория: <span className="text-gray-300">{req.cost_category || "Не указана"}</span></div>
 
              {(req.manufacturer || req.destination) && (
                  <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-400 mt-2 bg-gray-800/50 p-2 rounded">
@@ -290,7 +330,6 @@ export default function SED() {
              )}
 
              {req.purpose && (
-                  // ИЗМЕНЕНИЕ 4: Описание расширяется и переносит строки
                   <div className="bg-[#0d1117] p-2 rounded text-xs text-gray-300 italic mt-2 border-l-2 border-gray-600 whitespace-pre-wrap break-words">
                      "{req.purpose}"
                   </div>
@@ -340,17 +379,51 @@ export default function SED() {
                      <button onClick={()=>handleAction(req, 'NO')} className="flex-1 border border-red-500 text-red-500 py-2 rounded text-xs font-bold">НЕТ (0)</button>
                  </div>
              )}
+             
+             {/* ============================================== */}
+             {/* ПОЛНАЯ ФОРМА КОММЕРЧЕСКОГО (ОБЯЗАТЕЛЬНАЯ) */}
+             {/* ============================================== */}
              {role === 'KOMER' && (
-                 <div className="bg-[#0d1117] p-2 rounded border border-gray-700">
-                     <input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white text-xs mb-2" placeholder="Продавец" value={formData.seller} onChange={e=>setFormData({...formData, seller: e.target.value})}/>
-                     <div className="flex gap-2 mb-2">
-                         <input type="number" className="w-1/2 bg-gray-800 border border-gray-600 p-1.5 rounded text-white text-xs" placeholder="Цена" value={formData.price_unit} onChange={e=>setFormData({...formData, price_unit: e.target.value})}/>
-                         <div className="w-1/2 text-right text-green-400 font-bold text-xs pt-2">{formData.total}</div>
+                 <div className="bg-[#0d1117] p-2 rounded border border-gray-700 space-y-2">
+                     <div className="text-[10px] text-gray-500 font-bold uppercase">Заполните данные:</div>
+                     
+                     <input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white text-xs" placeholder="Поставщик (ТОО/ИП)" value={formData.seller} onChange={e=>setFormData({...formData, seller: e.target.value})}/>
+                     
+                     <div className="flex gap-2">
+                        <input type="number" className="w-1/2 bg-gray-800 border border-gray-600 p-1.5 rounded text-white text-xs" placeholder="Цена за ед." value={formData.price_unit} onChange={e=>setFormData({...formData, price_unit: e.target.value})}/>
+                        <div className="w-1/2 text-right text-green-400 font-bold text-xs pt-2">{formData.total ? `${formData.total} ₸` : '0 ₸'}</div>
                      </div>
-                     <button onClick={()=>handleAction(req, 'SEND', {require_form: true})} className="w-full bg-pink-700 py-2 rounded text-xs font-bold text-white mb-2">ОТПРАВИТЬ ЮРИСТУ (1)</button>
+
+                     <div className="flex gap-2">
+                        <select className="w-1/2 bg-gray-800 border border-gray-600 p-1.5 rounded text-white text-xs" value={formData.payment_terms} onChange={e=>setFormData({...formData, payment_terms: e.target.value})}>
+                            <option>Постоплата 100%</option>
+                            <option>Предоплата 100%</option>
+                            <option>Предоплата 30% / 70%</option>
+                            <option>Предоплата 50% / 50%</option>
+                            <option>По факту поставки</option>
+                        </select>
+                        <select className="w-1/2 bg-gray-800 border border-gray-600 p-1.5 rounded text-white text-xs" value={formData.vat} onChange={e=>setFormData({...formData, vat: e.target.value})}>
+                            <option>с НДС</option>
+                            <option>без НДС</option>
+                        </select>
+                     </div>
+
+                     <div className="flex gap-2">
+                        <div className="w-1/2">
+                            <div className="text-[9px] text-gray-500 mb-0.5">Дата поставки:</div>
+                            <input type="date" className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white text-xs" value={formData.delivery_date} onChange={e=>setFormData({...formData, delivery_date: e.target.value})}/>
+                        </div>
+                        <div className="w-1/2">
+                             <div className="text-[9px] text-gray-500 mb-0.5">Гарантия:</div>
+                             <input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white text-xs" placeholder="12 мес" value={formData.warranty} onChange={e=>setFormData({...formData, warranty: e.target.value})}/>
+                        </div>
+                     </div>
+
+                     <button onClick={()=>handleAction(req, 'SEND', {require_form: true})} className="w-full bg-pink-700 hover:bg-pink-600 py-2 rounded text-xs font-bold text-white mb-2 shadow-lg shadow-pink-900/20">ОТПРАВИТЬ ЮРИСТУ (1)</button>
                      <button onClick={()=>handleAction(req, 'REJECT')} className="w-full border border-red-600 text-red-400 py-1.5 rounded text-xs hover:bg-red-900/20">❌ ОТКАЗ (ОТМЕНА)</button>
                  </div>
              )}
+             
              {role === 'FIN_DIR' && (
                  <div className="flex gap-2">
                      <button onClick={()=>handleAction(req, 'APPROVE')} className="flex-[2] bg-green-600 py-2 rounded text-xs font-bold text-white">УТВЕРДИТЬ (1)</button>
@@ -472,7 +545,6 @@ export default function SED() {
           </div>
       </div>
       <div className="max-w-7xl mx-auto w-full p-4 flex-grow">
-          {/* ИЗМЕНЕНИЕ 5: items-start в grid - карточки не тянутся по соседям, каждая своей высоты */}
           {loading && requests.length === 0 ? (<div className="text-center py-20 text-gray-500 animate-pulse">Загрузка данных...</div>) : (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">{requests.filter(r => searchQuery ? String(r.req_number).includes(searchQuery) : true).map(req => (<RequestCard key={req.id} req={req} />))}</div>)}
           {!loading && requests.length === 0 && <div className="text-center py-20 opacity-30 flex flex-col items-center"><Archive size={48} className="mb-2"/><div>Список пуст</div></div>}
       </div>
