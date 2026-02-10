@@ -8,8 +8,8 @@ import {
   Package, Scale, ShieldCheck
 } from 'lucide-react';
 
-const APP_VERSION = "v4.2 (Pro Contract Form)"; 
-const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec";
+const APP_VERSION = "v4.3 (Defaults & Weeks)"; 
+const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
 
 const supabase = createClient(
@@ -189,22 +189,22 @@ export default function SED() {
   };
 
   const RequestCard = ({ req }) => {
-    // Состояние формы для Комера - заполняем из существующих данных или пустоты
+    // --- ЗДЕСЬ ЗАДАЮТСЯ ЗНАЧЕНИЯ ПО УМОЛЧАНИЮ ---
     const [formData, setFormData] = useState({
         seller: req.legal_info?.seller || '',
-        buyer: req.legal_info?.buyer || 'ТОО ОХМК', // По умолчанию ОХМК
-        subject: req.legal_info?.subject || req.item_name || '', // Предмет берем из заявки
+        buyer: req.legal_info?.buyer || 'ТОО ОХМК', 
+        subject: req.legal_info?.subject || req.item_name || '', 
         qty: req.legal_info?.qty || req.quantity || '1',
         price_unit: req.legal_info?.price_unit || '',
         total: req.legal_info?.total || '',
-        payment_terms: req.legal_info?.payment_terms || '', // Порядок оплаты
-        delivery_place: req.legal_info?.delivery_place || '', // Место
-        pickup: req.legal_info?.pickup || 'НЕТ', // Самовывоз
-        delivery_date: req.legal_info?.delivery_date || req.deadline || '', // Срок
-        quality: req.legal_info?.quality || 'Новое', // Качество
-        warranty: req.legal_info?.warranty || '', // Гарантия
-        initiator: req.legal_info?.initiator || req.initiator || '', // Инициатор
-        vat: req.legal_info?.vat || 'ДА' // НДС
+        payment_terms: req.legal_info?.payment_terms || 'Постоплата', // По умолчанию
+        delivery_place: req.legal_info?.delivery_place || 'Мира 2А', // По умолчанию
+        pickup: req.legal_info?.pickup || 'ДА', // По умолчанию
+        delivery_date: req.legal_info?.delivery_date || '', 
+        quality: req.legal_info?.quality || 'Новое', 
+        warranty: req.legal_info?.warranty || '12 месяцев', // По умолчанию
+        initiator: req.legal_info?.initiator || req.initiator || '', // Из заявки
+        vat: req.legal_info?.vat || 'ДА'
     });
 
     const [paySum, setPaySum] = useState(req.final_pay_sum || '');
@@ -370,7 +370,7 @@ export default function SED() {
                      </>
                  )}
                  
-                 {/* ПОЛНАЯ ФОРМА КОМЕРЧЕСКОГО ДИРЕКТОРА v4.2 */}
+                 {/* ПОЛНАЯ ФОРМА КОМЕРЧЕСКОГО ДИРЕКТОРА v4.3 */}
                  {role === 'KOMER' && (
                     <div className="pl-3 bg-pink-900/10 border-l-2 border-pink-500 p-3 rounded mb-3 w-full">
                         <div className="flex items-center gap-2 mb-3">
@@ -409,13 +409,13 @@ export default function SED() {
                                     <option value="НЕТ">Доставка</option>
                                     <option value="ДА">Самовывоз</option>
                                 </select>
-                                <input className="bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" placeholder="Срок поставки (дата/дни)" value={formData.delivery_date} onChange={e=>setFormData({...formData, delivery_date: e.target.value})}/>
+                                <input className="bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" placeholder="Срок (недель)" value={formData.delivery_date} onChange={e=>setFormData({...formData, delivery_date: e.target.value})}/>
                                 <input className="bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" placeholder="Гарантия (мес)" value={formData.warranty} onChange={e=>setFormData({...formData, warranty: e.target.value})}/>
                             </div>
 
                             {/* Блок 4: Условия и Инициатор */}
                             <div className="grid grid-cols-1 gap-2">
-                                <input className="w-full bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" placeholder="Порядок оплаты (100% / 50-50 / Отсрочка)" value={formData.payment_terms} onChange={e=>setFormData({...formData, payment_terms: e.target.value})}/>
+                                <input className="w-full bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" placeholder="Порядок оплаты" value={formData.payment_terms} onChange={e=>setFormData({...formData, payment_terms: e.target.value})}/>
                                 <div className="grid grid-cols-2 gap-2">
                                     <select className="bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" value={formData.quality} onChange={e=>setFormData({...formData, quality: e.target.value})}>
                                         <option value="Новое">Товар: НОВЫЙ</option>
