@@ -5,10 +5,10 @@ import {
   RefreshCw, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, 
   ExternalLink, AlertTriangle, Table, Truck, Wrench, Info, DollarSign, Calendar, 
   MapPin, Eye, Clock, BarChart3, Phone, User, Factory, AlertCircle, Briefcase, FileSignature, 
-  Package, Scale, ShieldCheck, Keyboard 
+  Package, Scale, ShieldCheck, Keyboard, History, ChevronRight 
 } from 'lucide-react';
 
-const APP_VERSION = "v4.8 (Stable & Complete)"; 
+const APP_VERSION = "v5.0 (Transparent History Tree)"; 
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
 
@@ -24,7 +24,11 @@ export default function SED() {
   const [requests, setRequests] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState('active'); 
-  const [modal, setModal] = useState({ open: false, req: null, type: '' });
+  
+  // Modals
+  const [modal, setModal] = useState({ open: false, req: null, type: '' }); // Upload Modal
+  const [historyModal, setHistoryModal] = useState({ open: false, req: null }); // History Modal
+  
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState('');
   
@@ -37,6 +41,12 @@ export default function SED() {
     "2014": "SKLAD_CENTRAL", "2525": "SKLAD_ZAP", "197": "SKLAD_STOL",
     "504": "SKLAD_MTF", "505": "SKLAD_MEHTOK", "506": "SKLAD_ZNKI",
     "507": "SKLAD_BUH", "508": "SKLAD_GSM"
+  };
+
+  const ROLE_NAMES = {
+    "DIRECTOR": "Директор", "KOMER": "Коммерческий", "FIN_DIR": "Фин.Директор",
+    "LAWYER": "Юрист", "FINANCE": "Финансист", "ACCOUNTANT": "Бухгалтер",
+    "ECONOMIST": "Экономист", "SKLAD_CENTRAL": "Центральный Склад", "SKLAD_ZAP": "Склад Запчастей"
   };
 
   const handleLogin = (e) => {
@@ -95,6 +105,7 @@ export default function SED() {
     window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&dates=${dates}`, '_blank');
   };
 
+  // --- ГЛАВНАЯ ФУНКЦИЯ ОБНОВЛЕНИЯ С ЗАПИСЬЮ ИСТОРИИ ---
   const updateStatus = async (req, action, extraUpdates = {}) => {
     if (role !== 'LAWYER' && role !== 'ECONOMIST' && !confirm(`Выполнить: ${action}?`)) return;
     
@@ -110,9 +121,23 @@ export default function SED() {
     let updates = { ...extraUpdates, last_role: role };
     if (comments) updates.fix_comment = "СКЛАД: " + comments; 
 
+    // --- ЛОГИКА ИСТОРИИ (НОВОЕ) ---
+    // 1. Берем текущую историю или создаем пустую
+    const currentHistory = req.history || [];
+    // 2. Создаем новую запись
+    const newHistoryEntry = {
+        role: ROLE_NAMES[role] || role,
+        action: action,
+        date: new Date().toLocaleString("ru-RU", { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }),
+        comment: comments || extraUpdates.fix_comment || null
+    };
+    // 3. Добавляем в массив
+    updates.history = [...currentHistory, newHistoryEntry];
+
     let newStatus = req.status; 
     let nextStep = req.current_step;
 
+    // ЛОГИКА СМЕНЫ СТАТУСОВ
     if (role === 'DIRECTOR') {
         if (action === 'ОДОБРЕНО') { 
             newStatus = "ОДОБРЕНО"; 
@@ -247,6 +272,7 @@ export default function SED() {
       <div className={`bg-[#161b22] border ${borderColor} rounded-xl p-5 shadow-xl relative overflow-hidden group flex flex-col h-full`}>
          <div className={`absolute left-0 top-0 bottom-0 w-1 ${stripColor}`}></div>
          
+         {/* ШАПКА */}
          <div className="flex justify-between items-start mb-2 pl-3">
             <div>
                 <h3 className="text-xl font-bold flex items-center gap-2 text-white">#{req.req_number}</h3>
@@ -254,10 +280,15 @@ export default function SED() {
             </div>
             <div className="flex flex-col items-end gap-1">
                 <div className={`px-2 py-1 rounded text-xs border font-bold ${req.status.includes('ОТКАЗ') ? 'bg-red-900/40 text-red-400 border-red-800' : 'bg-gray-800 text-gray-400 border-gray-700'}`}>{req.status}</div>
+                {/* КНОПКА ИСТОРИИ */}
+                <button onClick={() => setHistoryModal({open: true, req: req})} className="bg-gray-800 hover:bg-gray-700 text-gray-400 px-2 py-0.5 rounded text-[10px] flex items-center gap-1 transition">
+                    <History size={10}/> История
+                </button>
                 {isUrgent && <div className="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded animate-pulse font-bold flex items-center gap-1"><AlertCircle size={10}/> СРОЧНО</div>}
             </div>
          </div>
 
+         {/* ИНИЦИАТОР */}
          <div className="pl-3 mb-3 flex items-center gap-3 bg-[#0d1117] p-2 rounded border border-gray-800">
              <div className="bg-gray-800 p-1.5 rounded-full"><User size={14} className="text-gray-400"/></div>
              <div className="flex-1">
@@ -269,6 +300,7 @@ export default function SED() {
              )}
          </div>
 
+         {/* ТЕЛО ЗАЯВКИ */}
          <div className="text-sm pl-3 mb-4 space-y-2 text-gray-300 flex-grow">
             <div className="flex items-start gap-2">
                 {isService ? <Wrench className="text-purple-400 shrink-0" size={18}/> : <Truck className="text-blue-400 shrink-0" size={18}/>}
@@ -320,6 +352,7 @@ export default function SED() {
              </div>
          )}
 
+         {/* ПАНЕЛЬ ДЕЙСТВИЙ */}
          {viewMode === 'active' && (
              <div className="pl-3 flex flex-wrap gap-2 mt-auto">
                  {role === 'LAWYER' && (
@@ -391,6 +424,7 @@ export default function SED() {
                             <Briefcase size={14} className="text-pink-500"/>
                             <span className="text-xs font-bold text-pink-400">ПОДГОТОВКА ДОГОВОРА</span>
                         </div>
+                        {/* ФОРМА (БЕЗ ИЗМЕНЕНИЙ) */}
                         <div className="space-y-3 mb-4">
                             <div className="grid grid-cols-2 gap-2">
                                 <input className="bg-[#0d1117] border border-gray-700 p-2 rounded text-white text-xs" placeholder="Продавец" value={formData.seller} onChange={e=>setFormData({...formData, seller: e.target.value})}/>
@@ -517,6 +551,64 @@ export default function SED() {
 
   return (
     <div className="min-h-screen bg-[#0d1117] text-gray-300 pb-20 font-sans flex flex-col">
+      {/* МОДАЛКА ИСТОРИИ (НОВАЯ) */}
+      {historyModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+           <div className="bg-[#161b22] border border-gray-700 rounded-2xl w-full max-w-md p-6 shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh]">
+              <div className="flex justify-between items-center mb-4 border-b border-gray-800 pb-2">
+                 <h3 className="text-lg font-bold text-white flex items-center gap-2"><Clock size={20} className="text-blue-500"/> История заявки</h3>
+                 <button onClick={()=>setHistoryModal({open:false, req:null})}><X className="text-gray-500 hover:text-white"/></button>
+              </div>
+              
+              {/* ДЕРЕВО (ВИЗУАЛЬНЫЙ ПУТЬ) */}
+              <div className="flex items-center justify-between text-[10px] text-gray-500 mb-6 px-2">
+                  {/* Простой визуализатор этапов */}
+                  <div className={`flex flex-col items-center ${historyModal.req.request_type === 'service' ? 'opacity-30' : ''}`}>
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center border ${historyModal.req.warehouse_status ? 'bg-green-900/50 border-green-500 text-green-500' : 'border-gray-700'}`}><Package size={14}/></div>
+                      <span className="mt-1">Склад</span>
+                  </div>
+                  <div className="h-0.5 w-4 bg-gray-800"></div>
+                  <div className="flex flex-col items-center">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center border ${historyModal.req.economist_status ? 'bg-green-900/50 border-green-500 text-green-500' : 'border-gray-700'}`}><BarChart3 size={14}/></div>
+                      <span className="mt-1">Эконом</span>
+                  </div>
+                  <div className="h-0.5 w-4 bg-gray-800"></div>
+                  <div className="flex flex-col items-center">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center border ${historyModal.req.status === 'ДОГОВОР' || historyModal.req.status === 'ОДОБРЕНО' ? 'bg-green-900/50 border-green-500 text-green-500' : 'border-gray-700'}`}><Briefcase size={14}/></div>
+                      <span className="mt-1">Комер</span>
+                  </div>
+                  <div className="h-0.5 w-4 bg-gray-800"></div>
+                   <div className="flex flex-col items-center">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center border ${historyModal.req.fin_dir_status === 'ОДОБРЕНО' ? 'bg-green-900/50 border-green-500 text-green-500' : 'border-gray-700'}`}><Scale size={14}/></div>
+                      <span className="mt-1">ФинДир</span>
+                  </div>
+              </div>
+
+              <div className="overflow-y-auto pr-2 space-y-4">
+                  {(!historyModal.req.history || historyModal.req.history.length === 0) ? (
+                      <div className="text-center text-gray-500 text-xs py-10">История пуста (Старая заявка)</div>
+                  ) : (
+                      [...historyModal.req.history].reverse().map((step, idx) => (
+                          <div key={idx} className="relative pl-6 border-l-2 border-gray-800 last:border-0 pb-4">
+                              <div className="absolute -left-[5px] top-0 w-2.5 h-2.5 bg-blue-600 rounded-full border-2 border-[#161b22]"></div>
+                              <div className="text-xs text-gray-500 mb-0.5">{step.date}</div>
+                              <div className="text-sm font-bold text-white mb-1">{step.role}</div>
+                              <div className={`text-xs inline-block px-2 py-0.5 rounded border ${step.action.includes('ОТКАЗ') || step.action.includes('ОТКЛОНЕНО') ? 'bg-red-900/30 border-red-800 text-red-400' : 'bg-gray-800 border-gray-700 text-gray-300'}`}>
+                                  {step.action}
+                              </div>
+                              {step.comment && (
+                                  <div className="mt-2 bg-[#0d1117] p-2 rounded border border-gray-800 text-xs text-gray-400 italic">
+                                      "{step.comment}"
+                                  </div>
+                              )}
+                          </div>
+                      ))
+                  )}
+              </div>
+           </div>
+        </div>
+      )}
+
       {modal.open && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
               <div className="bg-[#161b22] border border-gray-700 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
