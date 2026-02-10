@@ -5,10 +5,10 @@ import {
   RefreshCw, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, 
   ExternalLink, AlertTriangle, Table, Truck, Wrench, Info, DollarSign, Calendar, 
   MapPin, Eye, Clock, BarChart3, Phone, User, Factory, AlertCircle, Briefcase, FileSignature, 
-  Package, Scale, ShieldCheck, Keyboard, History, GitMerge, Settings, ChevronRight, MessageCircle
+  Package, Scale, ShieldCheck, Keyboard, History, GitMerge, Settings, ChevronRight, MessageCircle, Paperclip
 } from 'lucide-react';
 
-const APP_VERSION = "v9.1 (Smart Warehouses + Flags + Contacts)"; 
+const APP_VERSION = "v9.2 (Full Info Cards)"; 
 // Вставь свои ссылки:
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
@@ -332,9 +332,7 @@ export default function SED() {
     // Функция для очистки номера (превращает 8777... в 7777...)
     const getCleanPhone = (phoneStr) => {
         if (!phoneStr) return null;
-        // Оставляем только цифры
         let p = phoneStr.toString().replace(/\D/g, '');
-        // Если начинается с 8 (Казахстан), меняем на 7
         if (p.startsWith('8')) p = '7' + p.slice(1);
         return p;
     };
@@ -353,8 +351,35 @@ export default function SED() {
 
          {/* Основная инфо */}
          <div className="text-sm space-y-2 text-gray-300 flex-grow mb-4">
-             <div className="font-bold text-white text-lg">{req.item_name}</div>
+             {/* Заголовок и Количество */}
+             <div className="flex justify-between items-start">
+                 <div className="font-bold text-white text-lg leading-tight">{req.item_name}</div>
+                 {req.quantity && <div className="bg-gray-700 px-2 py-1 rounded text-white font-mono text-xs whitespace-nowrap ml-2">{req.quantity}</div>}
+             </div>
+             
              <div className="text-xs text-gray-400">Категория: {req.cost_category || "Не указана"}</div>
+
+             {/* Блок Производитель и Место (Новое) */}
+             {(req.manufacturer || req.destination) && (
+                 <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-400 mt-2 bg-gray-800/50 p-2 rounded">
+                     {req.manufacturer && <div className="flex items-center gap-1"><Factory size={12}/> {req.manufacturer}</div>}
+                     {req.destination && <div className="flex items-center gap-1"><MapPin size={12}/> {req.destination}</div>}
+                 </div>
+             )}
+
+             {/* Описание / Цель (Новое) */}
+             {req.purpose && (
+                  <div className="bg-[#0d1117] p-2 rounded text-xs text-gray-300 italic mt-2 border-l-2 border-gray-600">
+                     "{req.purpose}"
+                  </div>
+             )}
+
+             {/* Файл инициатора (Новое) */}
+             {req.attachment_url && (
+                 <a href={req.attachment_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-blue-400 text-xs hover:text-blue-300 mt-2 border border-blue-900/30 p-1.5 rounded bg-blue-900/10">
+                     <Paperclip size={12}/> <span>Файл инициатора</span>
+                 </a>
+             )}
              
              {/* Блок Инициатора с кнопками связи */}
              <div className="flex justify-between items-center border-t border-gray-700 pt-2 mt-2">
