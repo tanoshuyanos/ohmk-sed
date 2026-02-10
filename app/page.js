@@ -16,7 +16,75 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
+// --- НОВАЯ ЛОГИКА: ПИШЕМ В ИСТОРИЮ, БАЗА САМА ОБНОВЛЯЕТ СТАТУС ---
+  const handleAction = async (req, btn) => {
+      if (btn.ask_comment) {
+          const c = prompt("Комментарий:");
+          if (!c) return;
+          req.temp_comment = c;
+      }
+      // Спец. действия (загрузка, календарь) - без изменений
+      if (btn.action === 'upload_draft') { setModal({open:true, req:req, type:'DRAFT'}); return; }
+      if (btn.action === 'upload_final') { setModal({open:true, req:req, type:'FINAL'}); return; }
+      if (btn.action === 'calendar') { 
+          const title = encodeURIComponent(`Оплата: ${req.item_name} (${req.final_pay_sum} ₸)`);
+          const details = encodeURIComponent(`Заявка №${req.req_number}\nПоставщик: ${req.legal_info?.seller}`);
+          const dateStr = req.payment_date ? req.payment_date.replace(/-/g, '') : '';
+          window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&dates=${dateStr}/${dateStr}`, '_blank');
+          return; 
+      }
 
+      // Валидация форм
+      if (btn.require_form && (!req.legal_info?.seller || !req.legal_info?.total)) return alert("Заполните форму!");
+      if (btn.require_draft && !req.draft_url) return alert("Сначала загрузите проект!");
+      if (btn.require_contract && !req.contract_url) return alert("Сначала загрузите скан!");
+      if (btn.require_payment_data && (!req.final_pay_sum || !req.payment_date)) return alert("Заполните сумму и дату!");
+
+      if (!confirm(`Выполнить: ${btn.label}?`)) return;
+
+      // 1. Вычисляем следующий шаг (по Матрице)
+      let nextStep = btn.next_step;
+      if (typeof nextStep === 'function') nextStep = nextStep(req);
+      
+      // Если это Экономист (параллельно) - шаг не меняем, берем текущий
+      if (role === 'ECONOMIST') nextStep = req.current_step;
+
+      // 2. Сначала обновляем ДАННЫЕ в заявке (цены, ссылки, комментарии)
+      // Это не меняет статус, только инфу.
+      let dataUpdates = { last_role: role };
+      if (role.includes('SKLAD')) dataUpdates.warehouse_status = btn.action;
+      if (role === 'KOMER' && req.temp_legal_info) dataUpdates.legal_info = req.temp_legal_info;
+      if (role === 'FIN_DIR') dataUpdates.fin_dir_status = btn.action;
+      if (role === 'ECONOMIST') dataUpdates.economist_status = btn.label;
+      if (req.temp_comment) dataUpdates.fix_comment = req.temp_comment;
+      if (req.temp_pay_sum) dataUpdates.final_pay_sum = req.temp_pay_sum;
+      if (req.temp_pay_date) dataUpdates.payment_date = req.temp_pay_date;
+
+      await supabase.from('requests').update(dataUpdates).eq('id', req.id);
+
+      // 3. САМОЕ ВАЖНОЕ: Добавляем запись в request_moves
+      // Именно это действие запустит Триггер в базе, который обновит статус и шаг
+      const { error } = await supabase.from('request_moves').insert({
+          request_id: req.id,
+          role: role,
+          action: btn.label, // Название кнопки (Одобрить)
+          status: btn.action, // Статус (ОДОБРЕНО)
+          step: nextStep,     // Технический шаг (KOMER_WORK)
+          comment: req.temp_comment || null
+      });
+
+      if (error) {
+          alert("Ошибка движения: " + error.message);
+      } else {
+          // Убираем заявку с экрана (оптимистично), так как она ушла на другой этап
+          if (role !== 'ECONOMIST') {
+              setRequests(prev => prev.filter(r => r.id !== req.id));
+          } else {
+              // Экономист остается на странице
+              fetchRequests(role, viewMode);
+          }
+      }
+  };
 // =================================================================================
 // 🛠 НАСТРОЙКА ПУТЕЙ (ROUTES)
 // Менять путь движения заявок ЗДЕСЬ. Это безопасно.
