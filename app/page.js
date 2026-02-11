@@ -8,7 +8,7 @@ import {
   Package, Scale, ShieldCheck, Keyboard, History, GitMerge, Settings, ChevronRight, MessageCircle, Paperclip, Hash, CreditCard, Layers
 } from 'lucide-react';
 
-const APP_VERSION = "v10.3 (ALL FEATURES INCLUDED)"; 
+const APP_VERSION = "v10.6 (Full Info Read Mode)"; 
 // Вставь свои ссылки:
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
@@ -118,7 +118,7 @@ export default function SED() {
   };
 
   const handleAction = async (req, actionType, payload = {}) => {
-      // ПРОВЕРКИ (Для Комера убрали require_form)
+      // ПРОВЕРКИ
       if (payload.require_draft && !req.draft_url) return alert("Загрузите проект!");
       if (payload.require_scan && !req.contract_url) return alert("Загрузите скан!");
       if (payload.require_contract_sum && !req.contract_sum) return alert("Укажите сумму договора!");
@@ -217,23 +217,44 @@ export default function SED() {
       const fileInput = document.getElementById('file-upload');
       if (!fileInput.files[0]) return alert("Выберите файл!");
       const file = fileInput.files[0];
+      
       setUploadStatus('uploading');
       const reader = new FileReader();
       reader.readAsDataURL(file);
+      
       reader.onload = async function() {
           try {
+              // 1. Отправляем на сервер (Google Script), он сам обновит Supabase
               await fetch(STAND_URL, {
-                  method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ file: reader.result, fileName: file.name, reqNum: modal.req.req_number, reqId: modal.req.id, type: modal.type })
+                  method: 'POST', 
+                  mode: 'no-cors', 
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ 
+                      file: reader.result, 
+                      fileName: file.name, 
+                      reqNum: modal.req.req_number, 
+                      reqId: modal.req.id, 
+                      contractNum: document.getElementById('contract-num')?.value, 
+                      type: modal.type 
+                  })
               });
+
               setUploadStatus('success');
-              setTimeout(async () => { setModal({ open: false, req: null, type: '' }); setUploadStatus(''); fetchRequests(role, viewMode); }, 2000); 
-          } catch (e) { setUploadStatus('error'); alert("Ошибка: " + e.message); }
+              
+              setTimeout(async () => { 
+                  setModal({ open: false, req: null, type: '' }); 
+                  setUploadStatus(''); 
+                  fetchRequests(role, viewMode); 
+              }, 3000); 
+              
+          } catch (e) { 
+              setUploadStatus('error'); 
+              alert("Ошибка отправки: " + e.message); 
+          }
       };
   };
 
   const RequestCard = ({ req }) => {
-    // ДЕТЕКТОР: ТОВАР ИЛИ УСЛУГА?
     const isService = req.request_type === 'service';
 
     const [formData, setFormData] = useState(req.legal_info || { 
@@ -284,12 +305,11 @@ export default function SED() {
          {req.fix_comment && <div className="bg-orange-900/30 border border-orange-600 p-2 rounded mb-3 text-xs text-orange-200"><b className="block mb-1">⚠️ ТРЕБУЮТСЯ ПРАВКИ:</b>{req.fix_comment}</div>}
 
          <div className="text-sm space-y-2 text-gray-300 mb-4">
-             {/* ЗАГОЛОВОК: ТОВАР ИЛИ УСЛУГА */}
              <div className="font-bold text-white text-lg leading-tight break-words pr-2">
                  {isService ? (req.service_name || req.item_name) : req.item_name}
              </div>
              
-             {/* === БЛОК: ТОВАРЫ (ПОКАЗЫВАЕМ КОЛИЧЕСТВО) === */}
+             {/* Блок КОЛИЧЕСТВО (для Товаров) */}
              {!isService && req.quantity && (
                  <div className="flex items-start gap-3 mt-2 bg-[#0d1117] p-2 rounded border border-gray-700">
                     <div className="bg-blue-900/20 p-2 rounded text-blue-400 mt-0.5"><Package size={18}/></div>
@@ -300,46 +320,57 @@ export default function SED() {
                  </div>
              )}
 
-             {/* === БЛОК: УСЛУГИ (ОТДЕЛ, ТИП, ОПИСАНИЕ) === */}
+             {/* Блок УСЛУГИ */}
              {isService && (
                  <div className="mt-2 space-y-2">
                      <div className="flex flex-wrap gap-2">
                          {req.service_type && <span className="bg-purple-900/40 text-purple-300 text-[10px] px-2 py-1 rounded border border-purple-700 uppercase flex items-center gap-1"><Layers size={10}/> {req.service_type}</span>}
                          {req.target_dept_service && <span className="bg-blue-900/40 text-blue-300 text-[10px] px-2 py-1 rounded border border-blue-700 uppercase">{req.target_dept_service}</span>}
                      </div>
-                     
-                     {/* Описание Услуги */}
-                     {req.service_description && (
-                        <div className="bg-[#0d1117] p-2 rounded text-xs text-gray-300 italic border-l-2 border-purple-600 whitespace-pre-wrap break-words">
-                            {req.service_description}
-                        </div>
-                     )}
-
-                     {/* Дедлайн Услуги */}
-                     {req.deadline_service && (
-                         <div className="flex items-center gap-2 text-red-300 text-xs bg-red-900/10 p-1.5 rounded w-fit border border-red-900/30">
-                             <Clock size={12}/> Крайний срок: <b>{req.deadline_service}</b>
-                         </div>
-                     )}
+                     {req.service_description && <div className="bg-[#0d1117] p-2 rounded text-xs text-gray-300 italic border-l-2 border-purple-600 whitespace-pre-wrap break-words">{req.service_description}</div>}
+                     {req.deadline_service && <div className="flex items-center gap-2 text-red-300 text-xs bg-red-900/10 p-1.5 rounded w-fit border border-red-900/30"><Clock size={12}/> Крайний срок: <b>{req.deadline_service}</b></div>}
                  </div>
              )}
 
-             {/* === БЛОК: УСЛОВИЯ СДЕЛКИ (ПРОТОКОЛ) - ВИДЯТ ВСЕ === */}
+             {/* === ПОЛНЫЙ ПРОТОКОЛ СДЕЛКИ (ВИДЯТ ВСЕ) === */}
              {req.legal_info && (
-                 <div className="mt-3 bg-gray-800/40 p-3 rounded border border-gray-700 text-xs space-y-2">
-                     <div className="text-gray-500 font-bold text-[10px] uppercase mb-1 flex items-center gap-1"><Briefcase size={12}/> Протокол сделки:</div>
-                     <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                         <div className="text-gray-500">Продавец:</div> <div className="text-white font-bold">{req.legal_info.seller}</div>
-                         <div className="text-gray-500">ИТОГО:</div> <div className="text-green-400 font-bold">{req.legal_info.total}</div>
-                         <div className="text-gray-500">Оплата:</div> <div className="text-white">{req.legal_info.payment_terms}</div>
-                         <div className="text-gray-500">Поставка до:</div> <div className="text-white">{req.legal_info.delivery_date}</div>
+                 <div className="mt-3 bg-[#0d1117] border border-gray-700 p-3 rounded text-[11px] leading-relaxed">
+                     <div className="text-blue-400 font-bold uppercase mb-2 flex items-center gap-2 pb-1 border-b border-gray-800">
+                         <FileText size={14}/> Протокол согласования
+                     </div>
+                     
+                     {/* Сетка данных */}
+                     <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                         <div><span className="text-gray-500 block">Продавец</span><span className="text-white font-medium">{req.legal_info.seller}</span></div>
+                         <div><span className="text-gray-500 block">Покупатель</span><span className="text-white">{req.legal_info.buyer}</span></div>
+                         
+                         <div className="col-span-2"><span className="text-gray-500 block">Предмет</span><span className="text-white italic">{req.legal_info.subject}</span></div>
+                         
+                         <div><span className="text-gray-500 block">Цена/ед</span><span className="text-white">{req.legal_info.price_unit}</span></div>
+                         <div><span className="text-gray-500 block">Кол-во</span><span className="text-white">{req.legal_info.qty}</span></div>
+                         
+                         <div><span className="text-gray-500 block">ИТОГО</span><span className="text-green-400 font-bold text-sm">{req.legal_info.total}</span></div>
+                         <div><span className="text-gray-500 block">НДС</span><span className="text-white">{req.legal_info.vat}</span></div>
+                         
+                         <div className="col-span-2"><span className="text-gray-500 block">Условия оплаты</span><span className="text-white">{req.legal_info.payment_terms}</span></div>
+                         
+                         <div><span className="text-gray-500 block">Поставка до</span><span className="text-white">{req.legal_info.delivery_date}</span></div>
+                         <div><span className="text-gray-500 block">Место</span><span className="text-white truncate">{req.legal_info.delivery_place}</span></div>
+                         
+                         <div><span className="text-gray-500 block">Гарантия</span><span className="text-white">{req.legal_info.warranty}</span></div>
+                         <div><span className="text-gray-500 block">Качество</span><span className="text-white">{req.legal_info.quality}</span></div>
+                         
+                         <div className="col-span-2 mt-1 pt-1 border-t border-gray-800 flex justify-between items-center">
+                             <span className="text-gray-500">Инициатор:</span>
+                             <span className="text-gray-400">{req.legal_info.initiator}</span>
+                         </div>
                      </div>
                  </div>
              )}
 
              <div className="text-xs text-gray-400 mt-2">Категория: <span className="text-gray-300">{req.cost_category || "Не указана"}</span></div>
 
-             {/* ХАРАКТЕРИСТИКИ ТОВАРА (ТОЛЬКО ДЛЯ ТОВАРОВ) */}
+             {/* ХАРАКТЕРИСТИКИ ТОВАРА */}
              {!isService && (req.manufacturer || req.destination) && (
                  <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-400 mt-2 bg-gray-800/50 p-2 rounded">
                      {req.manufacturer && <div className="flex items-center gap-1 break-words"><Factory size={12}/> {req.manufacturer}</div>}
@@ -347,39 +378,23 @@ export default function SED() {
                  </div>
              )}
 
-             {/* ОПИСАНИЕ ТОВАРА (ЕСЛИ ЕСТЬ) */}
              {!isService && req.purpose && (
                   <div className="bg-[#0d1117] p-2 rounded text-xs text-gray-300 italic mt-2 border-l-2 border-gray-600 whitespace-pre-wrap break-words">
                      "{req.purpose}"
                   </div>
              )}
 
-             {/* ССЫЛКИ НА ФАЙЛЫ */}
+             {/* ССЫЛКИ */}
              <div className="flex flex-wrap gap-2 mt-2">
-                 {req.attachment_url && (
-                     <a href={req.attachment_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-blue-400 text-xs hover:text-blue-300 border border-blue-900/30 p-1.5 rounded bg-blue-900/10">
-                         <Paperclip size={12}/> <span>Заявка</span>
-                     </a>
-                 )}
-                 {/* ДОП. ФАЙЛ (ДЛЯ ТОВАРОВ - ФОТО, ДЛЯ УСЛУГ - ТЗ) */}
-                 {req.attachment_goods_url && (
-                     <a href={req.attachment_goods_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-purple-400 text-xs hover:text-purple-300 border border-purple-900/30 p-1.5 rounded bg-purple-900/10">
-                         <Paperclip size={12}/> <span>{isService ? "ТЗ / Доп. файл" : "Фото товара"}</span>
-                     </a>
-                 )}
+                 {req.attachment_url && <a href={req.attachment_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-blue-400 text-xs hover:text-blue-300 border border-blue-900/30 p-1.5 rounded bg-blue-900/10"><Paperclip size={12}/> <span>Заявка</span></a>}
+                 {req.draft_url && <a href={req.draft_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-yellow-400 text-xs hover:text-yellow-300 border border-yellow-900/30 p-1.5 rounded bg-yellow-900/10"><FileSignature size={12}/> <span>Проект</span></a>}
+                 {req.attachment_goods_url && <a href={req.attachment_goods_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-purple-400 text-xs hover:text-purple-300 border border-purple-900/30 p-1.5 rounded bg-purple-900/10"><Paperclip size={12}/> <span>{isService ? "ТЗ / Доп. файл" : "Фото"}</span></a>}
+                 {req.contract_url && <a href={req.contract_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-green-400 text-xs hover:text-green-300 border border-green-900/30 p-1.5 rounded bg-green-900/10"><CheckCircle size={12}/> <span>Скан</span></a>}
              </div>
              
              <div className="flex justify-between items-center border-t border-gray-700 pt-2 mt-2">
-                 <div className="flex flex-col">
-                     <span className="text-[10px] text-gray-500 font-bold">ИНИЦИАТОР</span>
-                     <span className="text-xs text-gray-300">{req.initiator}</span>
-                 </div>
-                 {cleanPhone && (
-                     <div className="flex gap-2">
-                         <a href={`https://wa.me/${cleanPhone}`} target="_blank" rel="noreferrer" className="bg-green-600 hover:bg-green-500 text-white p-1.5 rounded-lg transition"><MessageCircle size={14} /></a>
-                         <a href={`tel:+${cleanPhone}`} className="bg-blue-600 hover:bg-blue-500 text-white p-1.5 rounded-lg transition"><Phone size={14} /></a>
-                     </div>
-                 )}
+                 <div className="flex flex-col"><span className="text-[10px] text-gray-500 font-bold">ИНИЦИАТОР</span><span className="text-xs text-gray-300">{req.initiator}</span></div>
+                 {cleanPhone && <div className="flex gap-2"><a href={`https://wa.me/${cleanPhone}`} target="_blank" rel="noreferrer" className="bg-green-600 hover:bg-green-500 text-white p-1.5 rounded-lg transition"><MessageCircle size={14} /></a><a href={`tel:+${cleanPhone}`} className="bg-blue-600 hover:bg-blue-500 text-white p-1.5 rounded-lg transition"><Phone size={14} /></a></div>}
              </div>
              
              {req.target_warehouse_code && (
@@ -408,104 +423,17 @@ export default function SED() {
                  </div>
              )}
              
-             {/* ========================================================= */}
-             {/* ФОРМА КОММЕРЧЕСКОГО (14 ПУНКТОВ) - РЕДАКТИРОВАНИЕ */}
-             {/* ========================================================= */}
              {role === 'KOMER' && (
                  <div className="bg-[#0d1117] p-3 rounded border border-gray-700 space-y-3 text-xs">
                      <div className="text-blue-400 font-bold uppercase border-b border-gray-700 pb-1">ДАННЫЕ ДЛЯ ДОГОВОРА:</div>
-                     
-                     {/* 1. СТОРОНЫ */}
-                     <div className="grid grid-cols-2 gap-2">
-                        <div>
-                            <span className="text-gray-500 text-[9px]">Продавец</span>
-                            <input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.seller} onChange={e=>setFormData({...formData, seller: e.target.value})}/>
-                        </div>
-                        <div>
-                            <span className="text-gray-500 text-[9px]">Покупатель</span>
-                            <input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.buyer} onChange={e=>setFormData({...formData, buyer: e.target.value})}/>
-                        </div>
-                     </div>
-
-                     {/* 2. ПРЕДМЕТ И КОЛ-ВО */}
-                     <div>
-                        <span className="text-gray-500 text-[9px]">Предмет договора</span>
-                        <input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white mb-2" value={formData.subject} onChange={e=>setFormData({...formData, subject: e.target.value})}/>
-                        <div className="grid grid-cols-2 gap-2">
-                             <div>
-                                <span className="text-gray-500 text-[9px]">Кол-во</span>
-                                <input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.qty} onChange={e=>setFormData({...formData, qty: e.target.value})}/>
-                             </div>
-                             <div>
-                                <span className="text-gray-500 text-[9px]">Цена за ед.</span>
-                                <input type="number" className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.price_unit} onChange={e=>setFormData({...formData, price_unit: e.target.value})}/>
-                             </div>
-                        </div>
-                     </div>
-
-                     {/* 3. ИТОГО И ОПЛАТА */}
-                     <div className="grid grid-cols-2 gap-2 bg-gray-800/50 p-2 rounded">
-                         <div>
-                             <span className="text-gray-500 text-[9px]">ОБЩАЯ СТОИМОСТЬ</span>
-                             <div className="text-green-400 font-bold">{formData.total}</div>
-                         </div>
-                         <div>
-                             <span className="text-gray-500 text-[9px]">НДС</span>
-                             <select className="w-full bg-gray-800 border border-gray-600 p-1 rounded text-white" value={formData.vat} onChange={e=>setFormData({...formData, vat: e.target.value})}>
-                                <option>с НДС</option>
-                                <option>без НДС</option>
-                             </select>
-                         </div>
-                     </div>
-
-                     {/* 4. УСЛОВИЯ */}
-                     <div>
-                        <span className="text-gray-500 text-[9px]">Порядок оплаты</span>
-                        <select className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.payment_terms} onChange={e=>setFormData({...formData, payment_terms: e.target.value})}>
-                            <option>Постоплата 100%</option>
-                            <option>Предоплата 100%</option>
-                            <option>Предоплата 30% / 70%</option>
-                            <option>Предоплата 50% / 50%</option>
-                        </select>
-                     </div>
-
-                     {/* 5. ЛОГИСТИКА */}
-                     <div className="grid grid-cols-2 gap-2">
-                        <div>
-                            <span className="text-gray-500 text-[9px]">Место поставки</span>
-                            <input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.delivery_place} onChange={e=>setFormData({...formData, delivery_place: e.target.value})}/>
-                        </div>
-                         <div>
-                            <span className="text-gray-500 text-[9px]">Самовывоз?</span>
-                            <select className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.pickup} onChange={e=>setFormData({...formData, pickup: e.target.value})}>
-                                <option>Нет (Доставка)</option>
-                                <option>Да (Самовывоз)</option>
-                            </select>
-                        </div>
-                     </div>
-
-                     {/* 6. СРОКИ И КАЧЕСТВО */}
-                     <div className="grid grid-cols-2 gap-2">
-                        <div>
-                            <span className="text-gray-500 text-[9px]">Срок поставки (Дата)</span>
-                            <input type="date" className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.delivery_date} onChange={e=>setFormData({...formData, delivery_date: e.target.value})}/>
-                        </div>
-                        <div>
-                            <span className="text-gray-500 text-[9px]">Гарантия</span>
-                            <input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.warranty} onChange={e=>setFormData({...formData, warranty: e.target.value})}/>
-                        </div>
-                     </div>
-                     <div>
-                        <span className="text-gray-500 text-[9px]">Качество товара</span>
-                        <input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.quality} onChange={e=>setFormData({...formData, quality: e.target.value})}/>
-                     </div>
-
-                     {/* 7. ИНИЦИАТОР (READ ONLY) */}
-                     <div className="flex justify-between items-center bg-gray-900 p-1.5 rounded border border-gray-800">
-                         <span className="text-gray-500 text-[9px]">ФИО Инициатора:</span>
-                         <span className="text-gray-300 font-bold">{formData.initiator}</span>
-                     </div>
-
+                     <div className="grid grid-cols-2 gap-2"><div><span className="text-gray-500 text-[9px]">Продавец</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.seller} onChange={e=>setFormData({...formData, seller: e.target.value})}/></div><div><span className="text-gray-500 text-[9px]">Покупатель</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.buyer} onChange={e=>setFormData({...formData, buyer: e.target.value})}/></div></div>
+                     <div><span className="text-gray-500 text-[9px]">Предмет договора</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white mb-2" value={formData.subject} onChange={e=>setFormData({...formData, subject: e.target.value})}/><div className="grid grid-cols-2 gap-2"><div><span className="text-gray-500 text-[9px]">Кол-во</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.qty} onChange={e=>setFormData({...formData, qty: e.target.value})}/></div><div><span className="text-gray-500 text-[9px]">Цена за ед.</span><input type="number" className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.price_unit} onChange={e=>setFormData({...formData, price_unit: e.target.value})}/></div></div></div>
+                     <div className="grid grid-cols-2 gap-2 bg-gray-800/50 p-2 rounded"><div><span className="text-gray-500 text-[9px]">ОБЩАЯ СТОИМОСТЬ</span><div className="text-green-400 font-bold">{formData.total}</div></div><div><span className="text-gray-500 text-[9px]">НДС</span><select className="w-full bg-gray-800 border border-gray-600 p-1 rounded text-white" value={formData.vat} onChange={e=>setFormData({...formData, vat: e.target.value})}><option>с НДС</option><option>без НДС</option></select></div></div>
+                     <div><span className="text-gray-500 text-[9px]">Порядок оплаты</span><select className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.payment_terms} onChange={e=>setFormData({...formData, payment_terms: e.target.value})}><option>Постоплата 100%</option><option>Предоплата 100%</option><option>Предоплата 30% / 70%</option><option>Предоплата 50% / 50%</option></select></div>
+                     <div className="grid grid-cols-2 gap-2"><div><span className="text-gray-500 text-[9px]">Место поставки</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.delivery_place} onChange={e=>setFormData({...formData, delivery_place: e.target.value})}/></div><div><span className="text-gray-500 text-[9px]">Самовывоз?</span><select className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.pickup} onChange={e=>setFormData({...formData, pickup: e.target.value})}><option>Нет (Доставка)</option><option>Да (Самовывоз)</option></select></div></div>
+                     <div className="grid grid-cols-2 gap-2"><div><span className="text-gray-500 text-[9px]">Срок поставки (Дата)</span><input type="date" className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.delivery_date} onChange={e=>setFormData({...formData, delivery_date: e.target.value})}/></div><div><span className="text-gray-500 text-[9px]">Гарантия</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.warranty} onChange={e=>setFormData({...formData, warranty: e.target.value})}/></div></div>
+                     <div><span className="text-gray-500 text-[9px]">Качество товара</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.quality} onChange={e=>setFormData({...formData, quality: e.target.value})}/></div>
+                     <div className="flex justify-between items-center bg-gray-900 p-1.5 rounded border border-gray-800"><span className="text-gray-500 text-[9px]">ФИО Инициатора:</span><span className="text-gray-300 font-bold">{formData.initiator}</span></div>
                      <button onClick={()=>handleAction(req, 'SEND', {require_form: true})} className="w-full bg-pink-700 hover:bg-pink-600 py-2.5 rounded text-xs font-bold text-white shadow-lg shadow-pink-900/20 mt-2">ОТПРАВИТЬ ЮРИСТУ (1)</button>
                      <button onClick={()=>handleAction(req, 'REJECT')} className="w-full border border-red-600 text-red-400 py-1.5 rounded text-xs hover:bg-red-900/20">❌ ОТКАЗ (ОТМЕНА)</button>
                  </div>
