@@ -8,7 +8,7 @@ import {
   Package, Scale, ShieldCheck, Keyboard, History, GitMerge, Settings, ChevronRight, MessageCircle, Paperclip, Hash, CreditCard, Layers
 } from 'lucide-react';
 
-const APP_VERSION = "v10.6 (Full Info Read Mode)"; 
+const APP_VERSION = "v10.7 (Accountant Fix)"; 
 // Вставь свои ссылки:
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
@@ -121,8 +121,12 @@ export default function SED() {
       // ПРОВЕРКИ
       if (payload.require_draft && !req.draft_url) return alert("Загрузите проект!");
       if (payload.require_scan && !req.contract_url) return alert("Загрузите скан!");
-      if (payload.require_contract_sum && !req.contract_sum) return alert("Укажите сумму договора!");
-      if (payload.require_pay_data && (!req.payment_sum || !req.payment_date)) return alert("Укажите сумму и дату!");
+      
+      // ИСПРАВЛЕНО: Теперь смотрим на temp_contract_sum (то что ввел юзер)
+      if (payload.require_contract_sum && !req.temp_contract_sum) return alert("Укажите сумму договора!");
+      
+      // ИСПРАВЛЕНО: Теперь смотрим на temp_pay_sum и temp_pay_date (то что ввела Бухгалтер)
+      if (payload.require_pay_data && (!req.temp_pay_sum || !req.temp_pay_date)) return alert("Укажите сумму и дату!");
 
       if (!confirm("Выполнить действие?")) return;
 
@@ -224,7 +228,6 @@ export default function SED() {
       
       reader.onload = async function() {
           try {
-              // 1. Отправляем на сервер (Google Script), он сам обновит Supabase
               await fetch(STAND_URL, {
                   method: 'POST', 
                   mode: 'no-cors', 
@@ -309,7 +312,6 @@ export default function SED() {
                  {isService ? (req.service_name || req.item_name) : req.item_name}
              </div>
              
-             {/* Блок КОЛИЧЕСТВО (для Товаров) */}
              {!isService && req.quantity && (
                  <div className="flex items-start gap-3 mt-2 bg-[#0d1117] p-2 rounded border border-gray-700">
                     <div className="bg-blue-900/20 p-2 rounded text-blue-400 mt-0.5"><Package size={18}/></div>
@@ -320,7 +322,6 @@ export default function SED() {
                  </div>
              )}
 
-             {/* Блок УСЛУГИ */}
              {isService && (
                  <div className="mt-2 space-y-2">
                      <div className="flex flex-wrap gap-2">
@@ -332,34 +333,24 @@ export default function SED() {
                  </div>
              )}
 
-             {/* === ПОЛНЫЙ ПРОТОКОЛ СДЕЛКИ (ВИДЯТ ВСЕ) === */}
              {req.legal_info && (
                  <div className="mt-3 bg-[#0d1117] border border-gray-700 p-3 rounded text-[11px] leading-relaxed">
                      <div className="text-blue-400 font-bold uppercase mb-2 flex items-center gap-2 pb-1 border-b border-gray-800">
                          <FileText size={14}/> Протокол согласования
                      </div>
-                     
-                     {/* Сетка данных */}
                      <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                          <div><span className="text-gray-500 block">Продавец</span><span className="text-white font-medium">{req.legal_info.seller}</span></div>
                          <div><span className="text-gray-500 block">Покупатель</span><span className="text-white">{req.legal_info.buyer}</span></div>
-                         
                          <div className="col-span-2"><span className="text-gray-500 block">Предмет</span><span className="text-white italic">{req.legal_info.subject}</span></div>
-                         
                          <div><span className="text-gray-500 block">Цена/ед</span><span className="text-white">{req.legal_info.price_unit}</span></div>
                          <div><span className="text-gray-500 block">Кол-во</span><span className="text-white">{req.legal_info.qty}</span></div>
-                         
                          <div><span className="text-gray-500 block">ИТОГО</span><span className="text-green-400 font-bold text-sm">{req.legal_info.total}</span></div>
                          <div><span className="text-gray-500 block">НДС</span><span className="text-white">{req.legal_info.vat}</span></div>
-                         
                          <div className="col-span-2"><span className="text-gray-500 block">Условия оплаты</span><span className="text-white">{req.legal_info.payment_terms}</span></div>
-                         
                          <div><span className="text-gray-500 block">Поставка до</span><span className="text-white">{req.legal_info.delivery_date}</span></div>
                          <div><span className="text-gray-500 block">Место</span><span className="text-white truncate">{req.legal_info.delivery_place}</span></div>
-                         
                          <div><span className="text-gray-500 block">Гарантия</span><span className="text-white">{req.legal_info.warranty}</span></div>
                          <div><span className="text-gray-500 block">Качество</span><span className="text-white">{req.legal_info.quality}</span></div>
-                         
                          <div className="col-span-2 mt-1 pt-1 border-t border-gray-800 flex justify-between items-center">
                              <span className="text-gray-500">Инициатор:</span>
                              <span className="text-gray-400">{req.legal_info.initiator}</span>
@@ -370,7 +361,6 @@ export default function SED() {
 
              <div className="text-xs text-gray-400 mt-2">Категория: <span className="text-gray-300">{req.cost_category || "Не указана"}</span></div>
 
-             {/* ХАРАКТЕРИСТИКИ ТОВАРА */}
              {!isService && (req.manufacturer || req.destination) && (
                  <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-400 mt-2 bg-gray-800/50 p-2 rounded">
                      {req.manufacturer && <div className="flex items-center gap-1 break-words"><Factory size={12}/> {req.manufacturer}</div>}
@@ -384,7 +374,6 @@ export default function SED() {
                   </div>
              )}
 
-             {/* ССЫЛКИ */}
              <div className="flex flex-wrap gap-2 mt-2">
                  {req.attachment_url && <a href={req.attachment_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-blue-400 text-xs hover:text-blue-300 border border-blue-900/30 p-1.5 rounded bg-blue-900/10"><Paperclip size={12}/> <span>Заявка</span></a>}
                  {req.draft_url && <a href={req.draft_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-yellow-400 text-xs hover:text-yellow-300 border border-yellow-900/30 p-1.5 rounded bg-yellow-900/10"><FileSignature size={12}/> <span>Проект</span></a>}
