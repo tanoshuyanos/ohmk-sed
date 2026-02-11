@@ -5,10 +5,10 @@ import {
   RefreshCw, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, 
   ExternalLink, AlertTriangle, Table, Truck, Wrench, Info, DollarSign, Calendar, 
   MapPin, Eye, Clock, BarChart3, Phone, User, Factory, AlertCircle, Briefcase, FileSignature, 
-  Package, Scale, ShieldCheck, Keyboard, History, GitMerge, Settings, ChevronRight, MessageCircle, Paperclip, Hash, CreditCard
+  Package, Scale, ShieldCheck, Keyboard, History, GitMerge, Settings, ChevronRight, MessageCircle, Paperclip, Hash, CreditCard, Layers
 } from 'lucide-react';
 
-const APP_VERSION = "v10.1 (No Validation)"; 
+const APP_VERSION = "v10.3 (ALL FEATURES INCLUDED)"; 
 // Вставь свои ссылки:
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
@@ -118,7 +118,7 @@ export default function SED() {
   };
 
   const handleAction = async (req, actionType, payload = {}) => {
-      // ПРОВЕРКИ ТОЛЬКО НА ФАЙЛЫ И СУММЫ (Коммерческого не трогаем)
+      // ПРОВЕРКИ (Для Комера убрали require_form)
       if (payload.require_draft && !req.draft_url) return alert("Загрузите проект!");
       if (payload.require_scan && !req.contract_url) return alert("Загрузите скан!");
       if (payload.require_contract_sum && !req.contract_sum) return alert("Укажите сумму договора!");
@@ -233,29 +233,21 @@ export default function SED() {
   };
 
   const RequestCard = ({ req }) => {
-    // === ПОЛНАЯ СТРУКТУРА ДАННЫХ СДЕЛКИ (14 ПУНКТОВ) ===
+    // ДЕТЕКТОР: ТОВАР ИЛИ УСЛУГА?
+    const isService = req.request_type === 'service';
+
     const [formData, setFormData] = useState(req.legal_info || { 
-        seller: '', 
-        buyer: 'ТОО ОХМК', 
-        subject: req.item_name,
-        qty: req.quantity || '1',
-        price_unit: '', 
-        total: '', 
-        payment_terms: 'Постоплата 100%', 
-        delivery_place: 'Склад Покупателя',
-        pickup: 'Нет', // Самовывоз: Да/Нет
-        delivery_date: '', 
-        quality: 'Новое',
-        warranty: '12 месяцев',
-        initiator: req.initiator,
-        vat: 'с НДС'
+        seller: '', buyer: 'ТОО ОХМК', 
+        subject: isService ? (req.service_name || req.item_name) : req.item_name,
+        qty: req.quantity || '1', price_unit: '', total: '', payment_terms: 'Постоплата 100%', 
+        delivery_place: 'Склад Покупателя', pickup: 'Нет', delivery_date: '', quality: 'Новое', warranty: '12 месяцев',
+        initiator: req.initiator, vat: 'с НДС'
     });
 
     const [contractSum, setContractSum] = useState(req.contract_sum || '');
     const [paySum, setPaySum] = useState(req.payment_sum || '');
     const [payDate, setPayDate] = useState(req.payment_date || '');
 
-    // Авторасчет суммы
     useEffect(() => {
         if(formData.qty && formData.price_unit) {
             const qtyNum = parseFloat(String(formData.qty).replace(/[^0-9.]/g, '')) || 1;
@@ -292,9 +284,13 @@ export default function SED() {
          {req.fix_comment && <div className="bg-orange-900/30 border border-orange-600 p-2 rounded mb-3 text-xs text-orange-200"><b className="block mb-1">⚠️ ТРЕБУЮТСЯ ПРАВКИ:</b>{req.fix_comment}</div>}
 
          <div className="text-sm space-y-2 text-gray-300 mb-4">
-             <div className="font-bold text-white text-lg leading-tight break-words pr-2">{req.item_name}</div>
+             {/* ЗАГОЛОВОК: ТОВАР ИЛИ УСЛУГА */}
+             <div className="font-bold text-white text-lg leading-tight break-words pr-2">
+                 {isService ? (req.service_name || req.item_name) : req.item_name}
+             </div>
              
-             {req.quantity && (
+             {/* === БЛОК: ТОВАРЫ (ПОКАЗЫВАЕМ КОЛИЧЕСТВО) === */}
+             {!isService && req.quantity && (
                  <div className="flex items-start gap-3 mt-2 bg-[#0d1117] p-2 rounded border border-gray-700">
                     <div className="bg-blue-900/20 p-2 rounded text-blue-400 mt-0.5"><Package size={18}/></div>
                     <div className="flex flex-col">
@@ -304,18 +300,37 @@ export default function SED() {
                  </div>
              )}
 
-             {/* === БЛОК: УСЛОВИЯ СДЕЛКИ (ОТОБРАЖЕНИЕ ДЛЯ ВСЕХ) === */}
+             {/* === БЛОК: УСЛУГИ (ОТДЕЛ, ТИП, ОПИСАНИЕ) === */}
+             {isService && (
+                 <div className="mt-2 space-y-2">
+                     <div className="flex flex-wrap gap-2">
+                         {req.service_type && <span className="bg-purple-900/40 text-purple-300 text-[10px] px-2 py-1 rounded border border-purple-700 uppercase flex items-center gap-1"><Layers size={10}/> {req.service_type}</span>}
+                         {req.target_dept_service && <span className="bg-blue-900/40 text-blue-300 text-[10px] px-2 py-1 rounded border border-blue-700 uppercase">{req.target_dept_service}</span>}
+                     </div>
+                     
+                     {/* Описание Услуги */}
+                     {req.service_description && (
+                        <div className="bg-[#0d1117] p-2 rounded text-xs text-gray-300 italic border-l-2 border-purple-600 whitespace-pre-wrap break-words">
+                            {req.service_description}
+                        </div>
+                     )}
+
+                     {/* Дедлайн Услуги */}
+                     {req.deadline_service && (
+                         <div className="flex items-center gap-2 text-red-300 text-xs bg-red-900/10 p-1.5 rounded w-fit border border-red-900/30">
+                             <Clock size={12}/> Крайний срок: <b>{req.deadline_service}</b>
+                         </div>
+                     )}
+                 </div>
+             )}
+
+             {/* === БЛОК: УСЛОВИЯ СДЕЛКИ (ПРОТОКОЛ) - ВИДЯТ ВСЕ === */}
              {req.legal_info && (
                  <div className="mt-3 bg-gray-800/40 p-3 rounded border border-gray-700 text-xs space-y-2">
                      <div className="text-gray-500 font-bold text-[10px] uppercase mb-1 flex items-center gap-1"><Briefcase size={12}/> Протокол сделки:</div>
-                     
                      <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                          <div className="text-gray-500">Продавец:</div> <div className="text-white font-bold">{req.legal_info.seller}</div>
-                         <div className="text-gray-500">Покупатель:</div> <div className="text-white">{req.legal_info.buyer}</div>
-                         <div className="text-gray-500">Предмет:</div> <div className="text-white truncate">{req.legal_info.subject}</div>
-                         <div className="text-gray-500">Цена/ед:</div> <div className="text-white">{req.legal_info.price_unit}</div>
                          <div className="text-gray-500">ИТОГО:</div> <div className="text-green-400 font-bold">{req.legal_info.total}</div>
-                         <div className="text-gray-500">НДС:</div> <div className="text-white">{req.legal_info.vat}</div>
                          <div className="text-gray-500">Оплата:</div> <div className="text-white">{req.legal_info.payment_terms}</div>
                          <div className="text-gray-500">Поставка до:</div> <div className="text-white">{req.legal_info.delivery_date}</div>
                      </div>
@@ -324,24 +339,35 @@ export default function SED() {
 
              <div className="text-xs text-gray-400 mt-2">Категория: <span className="text-gray-300">{req.cost_category || "Не указана"}</span></div>
 
-             {(req.manufacturer || req.destination) && (
+             {/* ХАРАКТЕРИСТИКИ ТОВАРА (ТОЛЬКО ДЛЯ ТОВАРОВ) */}
+             {!isService && (req.manufacturer || req.destination) && (
                  <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-400 mt-2 bg-gray-800/50 p-2 rounded">
                      {req.manufacturer && <div className="flex items-center gap-1 break-words"><Factory size={12}/> {req.manufacturer}</div>}
                      {req.destination && <div className="flex items-center gap-1 break-words"><MapPin size={12}/> {req.destination}</div>}
                  </div>
              )}
 
-             {req.purpose && (
+             {/* ОПИСАНИЕ ТОВАРА (ЕСЛИ ЕСТЬ) */}
+             {!isService && req.purpose && (
                   <div className="bg-[#0d1117] p-2 rounded text-xs text-gray-300 italic mt-2 border-l-2 border-gray-600 whitespace-pre-wrap break-words">
                      "{req.purpose}"
                   </div>
              )}
 
-             {req.attachment_url && (
-                 <a href={req.attachment_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-blue-400 text-xs hover:text-blue-300 mt-2 border border-blue-900/30 p-1.5 rounded bg-blue-900/10 w-fit">
-                     <Paperclip size={12}/> <span>Файл инициатора</span>
-                 </a>
-             )}
+             {/* ССЫЛКИ НА ФАЙЛЫ */}
+             <div className="flex flex-wrap gap-2 mt-2">
+                 {req.attachment_url && (
+                     <a href={req.attachment_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-blue-400 text-xs hover:text-blue-300 border border-blue-900/30 p-1.5 rounded bg-blue-900/10">
+                         <Paperclip size={12}/> <span>Заявка</span>
+                     </a>
+                 )}
+                 {/* ДОП. ФАЙЛ (ДЛЯ ТОВАРОВ - ФОТО, ДЛЯ УСЛУГ - ТЗ) */}
+                 {req.attachment_goods_url && (
+                     <a href={req.attachment_goods_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-purple-400 text-xs hover:text-purple-300 border border-purple-900/30 p-1.5 rounded bg-purple-900/10">
+                         <Paperclip size={12}/> <span>{isService ? "ТЗ / Доп. файл" : "Фото товара"}</span>
+                     </a>
+                 )}
+             </div>
              
              <div className="flex justify-between items-center border-t border-gray-700 pt-2 mt-2">
                  <div className="flex flex-col">
