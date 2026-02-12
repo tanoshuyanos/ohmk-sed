@@ -5,11 +5,13 @@ import {
   RefreshCw, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, 
   ExternalLink, AlertTriangle, Table, Truck, Wrench, Info, DollarSign, Calendar, 
   MapPin, Eye, Clock, BarChart3, Phone, User, Factory, AlertCircle, Briefcase, FileSignature, 
-  Package, Scale, ShieldCheck, Keyboard, History, GitMerge, Settings, ChevronRight, MessageCircle, Paperclip, Hash, CreditCard, Layers
+  Package, Scale, ShieldCheck, Keyboard, History, GitMerge, Settings, ChevronRight, MessageCircle, Paperclip, Hash, CreditCard, Layers,
+  Monitor // <--- Добавил иконку
 } from 'lucide-react';
 
-const APP_VERSION = "v10.8 (Mobile Fix)"; 
+const APP_VERSION = "v10.10 (Stable + Stand Link)"; 
 // Вставь свои ссылки:
+const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; 
 
@@ -28,12 +30,11 @@ const WAREHOUSE_NAMES = {
   "SKLAD_MEHTOK": "Мехток"
 };
 
-// --- ФУНКЦИЯ БЕЗОПАСНОЙ ДАТЫ (ЧТОБЫ НЕ ПАДАЛО НА АЙФОНАХ) ---
 const safeDate = (dateString) => {
     if (!dateString) return '';
     try {
         const d = new Date(dateString);
-        if (isNaN(d.getTime())) return dateString; // Если дата кривая, возвращаем как есть
+        if (isNaN(d.getTime())) return dateString; 
         return d.toLocaleDateString("ru-RU");
     } catch (e) {
         return '';
@@ -71,13 +72,9 @@ export default function SED() {
     "508":  "SKLAD_GSM"
   };
 
-  // --- БЕЗОПАСНЫЕ УВЕДОМЛЕНИЯ ---
   useEffect(() => {
-    // Проверяем, есть ли вообще уведомления в браузере (на телефоне может не быть)
     const supportsNotification = typeof window !== 'undefined' && 'Notification' in window;
-
     if (supportsNotification && Notification.permission !== 'granted') {
-       // Запрашиваем аккуратно
        try { Notification.requestPermission(); } catch(e) {}
     }
 
@@ -88,8 +85,6 @@ export default function SED() {
         { event: '*', schema: 'public', table: 'requests' },
         (payload) => {
           fetchRequests(role, viewMode);
-
-          // Уведомления (только если поддерживаются)
           if (supportsNotification && payload.eventType === 'INSERT') {
              sendDesktopNotification("🔔 Новая заявка!", `#${payload.new.req_number}`);
           }
@@ -102,17 +97,13 @@ export default function SED() {
 
   const sendDesktopNotification = (title, body) => {
     if (typeof window === 'undefined' || !('Notification' in window)) return;
-    
-    // Звук пробуем играть
     try {
         const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-        audio.play().catch(() => {}); // Игнорируем ошибку авто-воспроизведения
+        audio.play().catch(() => {}); 
     } catch(e) {}
 
     if (Notification.permission === 'granted') {
-      try {
-          new Notification(title, { body: body, silent: true });
-      } catch(e) {}
+      try { new Notification(title, { body: body, silent: true }); } catch(e) {}
     }
   };
 
@@ -127,7 +118,7 @@ export default function SED() {
 
   const fetchRequests = async (userRole, mode) => {
     setLoading(true);
-    let query = supabase.from('requests').select('*').order('created_at', { ascending: false });
+    let query = supabase.from('requests').select('*').order('req_number', { ascending: false }); // Сортировка 100, 99...
 
     if (mode === 'history') query = query.limit(100);
     else {
@@ -180,7 +171,6 @@ export default function SED() {
       // ПРОВЕРКИ
       if (payload.require_draft && !req.draft_url) return alert("Загрузите проект!");
       if (payload.require_scan && !req.contract_url) return alert("Загрузите скан!");
-      
       if (payload.require_contract_sum && !req.temp_contract_sum) return alert("Укажите сумму договора!");
       if (payload.require_pay_data && (!req.temp_pay_sum || !req.temp_pay_date)) return alert("Укажите сумму и дату!");
 
@@ -553,6 +543,12 @@ export default function SED() {
             <button type="button" onClick={() => pinInputRef.current?.focus()} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-600 p-2"><Keyboard size={20}/></button>
         </div>
         <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl text-lg shadow-lg shadow-blue-900/20 transition transform active:scale-95">ВОЙТИ</button>
+        
+        {/* === ВОТ ТУТ КНОПКА ТАБЛО === */}
+        <a href={STAND_SCRIPT_URL} target="_blank" rel="noreferrer" className="mt-4 w-full block text-center border border-gray-600 text-gray-400 hover:text-white hover:border-white py-3 rounded-xl transition flex items-center justify-center gap-2">
+          <Monitor size={18}/> ОТКРЫТЬ ТАБЛО
+        </a>
+
       </form>
       <div className="absolute bottom-5 text-gray-700 text-[10px]">{APP_VERSION}</div>
     </div>
