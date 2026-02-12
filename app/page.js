@@ -8,7 +8,7 @@ import {
   Package, Scale, ShieldCheck, Keyboard, History, GitMerge, Settings, ChevronRight, MessageCircle, Paperclip, Hash, CreditCard, Layers
 } from 'lucide-react';
 
-const APP_VERSION = "v10.7 (Accountant Fix)"; 
+const APP_VERSION = "v10.8 (Uvedomlenya)"; 
 // Вставь свои ссылки:
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; 
@@ -297,6 +297,69 @@ export default function SED() {
     };
     
     const cleanPhone = getCleanPhone(req.phone);
+    // --- УВЕДОМЛЕНИЯ НА РАБОЧИЙ СТОЛ ---
+  useEffect(() => {
+    // 1. Просим разрешение у браузера при запуске
+    if (Notification.permission !== 'granted') {
+      Notification.requestPermission();
+    }
+
+    // 2. Включаем "слушателя" Supabase (Realtime)
+    const channel = supabase
+      .channel('requests-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'requests' },
+        (payload) => {
+          // Если что-то изменилось в базе, сразу обновляем таблицу на экране
+          fetchRequests(role, viewMode);
+
+          // ЛОГИКА УВЕДОМЛЕНИЙ
+          
+          // А) Если создана НОВАЯ заявка (INSERT)
+          if (payload.eventType === 'INSERT') {
+             // Если мы Директор, Комер или просто хотим знать
+             sendDesktopNotification(
+                "🔔 Новая заявка!", 
+                `#${payload.new.req_number}: ${payload.new.item_name} (${payload.new.initiator})`
+             );
+          }
+
+          // Б) Если статус изменился на UPDATE (например, оплачено)
+          if (payload.eventType === 'UPDATE') {
+             // Пример: Если статус стал "ОПЛАЧЕНО"
+             if (payload.new.status === 'ОПЛАЧЕНО' && payload.old.status !== 'ОПЛАЧЕНО') {
+                sendDesktopNotification(
+                   "✅ ОПЛАЧЕНО!", 
+                   `Заявка #${payload.new.req_number} готова к закупу!`
+                );
+             }
+          }
+        }
+      )
+      .subscribe();
+
+    // Отключаемся при выходе
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [role, viewMode]); // Перезапускаем, если меняется роль
+
+  // Функция самого уведомления + Звук
+  const sendDesktopNotification = (title, body) => {
+    // 1. Звук (приятный "дзынь")
+    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+    audio.play().catch(e => console.log("Нужен клик для звука"));
+
+    // 2. Визуальное уведомление
+    if (Notification.permission === 'granted') {
+      new Notification(title, {
+        body: body,
+        icon: 'https://cdn-icons-png.flaticon.com/512/3602/3602145.png', // Иконка колокольчика
+        silent: true // Мы сами проиграли звук выше
+      });
+    }
+  };
 
     return (
       <div className={`bg-[#161b22] border ${borderColor} rounded-xl p-5 shadow-xl flex flex-col`}>
