@@ -8,7 +8,7 @@ import {
   Package, Scale, ShieldCheck, Keyboard, History, GitMerge, Settings, ChevronRight, MessageCircle, Paperclip, Hash, CreditCard, Layers
 } from 'lucide-react';
 
-const APP_VERSION = "v10.8 (Uvedomlenya)"; 
+const APP_VERSION = "v10.8 (Mobile Fix)"; 
 // Вставь свои ссылки:
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; 
@@ -26,6 +26,18 @@ const WAREHOUSE_NAMES = {
   "SKLAD_MTF": "Склад МТФ (Вет)",
   "SKLAD_ZNKI": "Склад ЗНКИ (Корма)",
   "SKLAD_MEHTOK": "Мехток"
+};
+
+// --- ФУНКЦИЯ БЕЗОПАСНОЙ ДАТЫ (ЧТОБЫ НЕ ПАДАЛО НА АЙФОНАХ) ---
+const safeDate = (dateString) => {
+    if (!dateString) return '';
+    try {
+        const d = new Date(dateString);
+        if (isNaN(d.getTime())) return dateString; // Если дата кривая, возвращаем как есть
+        return d.toLocaleDateString("ru-RU");
+    } catch (e) {
+        return '';
+    }
 };
 
 export default function SED() {
@@ -59,6 +71,51 @@ export default function SED() {
     "508":  "SKLAD_GSM"
   };
 
+  // --- БЕЗОПАСНЫЕ УВЕДОМЛЕНИЯ ---
+  useEffect(() => {
+    // Проверяем, есть ли вообще уведомления в браузере (на телефоне может не быть)
+    const supportsNotification = typeof window !== 'undefined' && 'Notification' in window;
+
+    if (supportsNotification && Notification.permission !== 'granted') {
+       // Запрашиваем аккуратно
+       try { Notification.requestPermission(); } catch(e) {}
+    }
+
+    const channel = supabase
+      .channel('requests-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'requests' },
+        (payload) => {
+          fetchRequests(role, viewMode);
+
+          // Уведомления (только если поддерживаются)
+          if (supportsNotification && payload.eventType === 'INSERT') {
+             sendDesktopNotification("🔔 Новая заявка!", `#${payload.new.req_number}`);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [role, viewMode]);
+
+  const sendDesktopNotification = (title, body) => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    
+    // Звук пробуем играть
+    try {
+        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+        audio.play().catch(() => {}); // Игнорируем ошибку авто-воспроизведения
+    } catch(e) {}
+
+    if (Notification.permission === 'granted') {
+      try {
+          new Notification(title, { body: body, silent: true });
+      } catch(e) {}
+    }
+  };
+
   const handleLogin = (e) => {
     e.preventDefault();
     if (ROLES[pin]) {
@@ -84,7 +141,9 @@ export default function SED() {
         else if (userRole === "ACCOUNTANT") query = query.or('and(step_lawyer_final.eq.1,step_accountant_req.is.null),and(step_finance_pay.eq.1,step_accountant_done.is.null)');
     }
 
-    const { data } = await query;
+    const { data, error } = await query;
+    if (error) { console.error("Error fetching:", error); setLoading(false); return; }
+    
     let filtered = data || [];
 
     if (mode === 'active') {
@@ -122,10 +181,7 @@ export default function SED() {
       if (payload.require_draft && !req.draft_url) return alert("Загрузите проект!");
       if (payload.require_scan && !req.contract_url) return alert("Загрузите скан!");
       
-      // ИСПРАВЛЕНО: Теперь смотрим на temp_contract_sum (то что ввел юзер)
       if (payload.require_contract_sum && !req.temp_contract_sum) return alert("Укажите сумму договора!");
-      
-      // ИСПРАВЛЕНО: Теперь смотрим на temp_pay_sum и temp_pay_date (то что ввела Бухгалтер)
       if (payload.require_pay_data && (!req.temp_pay_sum || !req.temp_pay_date)) return alert("Укажите сумму и дату!");
 
       if (!confirm("Выполнить действие?")) return;
@@ -297,74 +353,11 @@ export default function SED() {
     };
     
     const cleanPhone = getCleanPhone(req.phone);
-    // --- УВЕДОМЛЕНИЯ НА РАБОЧИЙ СТОЛ ---
-  useEffect(() => {
-    // 1. Просим разрешение у браузера при запуске
-    if (Notification.permission !== 'granted') {
-      Notification.requestPermission();
-    }
-
-    // 2. Включаем "слушателя" Supabase (Realtime)
-    const channel = supabase
-      .channel('requests-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'requests' },
-        (payload) => {
-          // Если что-то изменилось в базе, сразу обновляем таблицу на экране
-          fetchRequests(role, viewMode);
-
-          // ЛОГИКА УВЕДОМЛЕНИЙ
-          
-          // А) Если создана НОВАЯ заявка (INSERT)
-          if (payload.eventType === 'INSERT') {
-             // Если мы Директор, Комер или просто хотим знать
-             sendDesktopNotification(
-                "🔔 Новая заявка!", 
-                `#${payload.new.req_number}: ${payload.new.item_name} (${payload.new.initiator})`
-             );
-          }
-
-          // Б) Если статус изменился на UPDATE (например, оплачено)
-          if (payload.eventType === 'UPDATE') {
-             // Пример: Если статус стал "ОПЛАЧЕНО"
-             if (payload.new.status === 'ОПЛАЧЕНО' && payload.old.status !== 'ОПЛАЧЕНО') {
-                sendDesktopNotification(
-                   "✅ ОПЛАЧЕНО!", 
-                   `Заявка #${payload.new.req_number} готова к закупу!`
-                );
-             }
-          }
-        }
-      )
-      .subscribe();
-
-    // Отключаемся при выходе
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [role, viewMode]); // Перезапускаем, если меняется роль
-
-  // Функция самого уведомления + Звук
-  const sendDesktopNotification = (title, body) => {
-    // 1. Звук (приятный "дзынь")
-    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-    audio.play().catch(e => console.log("Нужен клик для звука"));
-
-    // 2. Визуальное уведомление
-    if (Notification.permission === 'granted') {
-      new Notification(title, {
-        body: body,
-        icon: 'https://cdn-icons-png.flaticon.com/512/3602/3602145.png', // Иконка колокольчика
-        silent: true // Мы сами проиграли звук выше
-      });
-    }
-  };
 
     return (
       <div className={`bg-[#161b22] border ${borderColor} rounded-xl p-5 shadow-xl flex flex-col`}>
          <div className="flex justify-between items-start mb-2">
-            <div><h3 className="text-xl font-bold text-white">#{req.req_number}</h3><div className="text-xs text-gray-500">{new Date(req.created_at).toLocaleDateString()}</div></div>
+            <div><h3 className="text-xl font-bold text-white">#{req.req_number}</h3><div className="text-xs text-gray-500">{safeDate(req.created_at)}</div></div>
             {isUrgent && <div className="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded animate-pulse font-bold">СРОЧНО</div>}
          </div>
 
@@ -392,7 +385,7 @@ export default function SED() {
                          {req.target_dept_service && <span className="bg-blue-900/40 text-blue-300 text-[10px] px-2 py-1 rounded border border-blue-700 uppercase">{req.target_dept_service}</span>}
                      </div>
                      {req.service_description && <div className="bg-[#0d1117] p-2 rounded text-xs text-gray-300 italic border-l-2 border-purple-600 whitespace-pre-wrap break-words">{req.service_description}</div>}
-                     {req.deadline_service && <div className="flex items-center gap-2 text-red-300 text-xs bg-red-900/10 p-1.5 rounded w-fit border border-red-900/30"><Clock size={12}/> Крайний срок: <b>{req.deadline_service}</b></div>}
+                     {req.deadline_service && <div className="flex items-center gap-2 text-red-300 text-xs bg-red-900/10 p-1.5 rounded w-fit border border-red-900/30"><Clock size={12}/> Крайний срок: <b>{safeDate(req.deadline_service)}</b></div>}
                  </div>
              )}
 
