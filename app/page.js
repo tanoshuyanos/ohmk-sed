@@ -11,7 +11,7 @@ import {
 const APP_VERSION = "v10.7 (Accountant Fix)"; 
 // Вставь свои ссылки:
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
-const SHEET_URL = "https://docs.google.com/spreadsheets/d/1Bf...ВАША_ССЫЛКА.../edit"; 
+const SHEET_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; 
 
 const supabase = createClient(
   "https://ykmvlughekjnqgdyddmp.supabase.co",
