@@ -67,7 +67,7 @@ export default function SED() {
     "2014": "SKLAD_CENTRAL", 
     "2525": "SKLAD_ZAP", 
     "197":  "SKLAD_STOL",
-    "504":  "SKLAD_MTF",
+    "2026":  "SKLAD_MTF",
     "506":  "SKLAD_ZNKI",
     "508":  "SKLAD_GSM"
   };
