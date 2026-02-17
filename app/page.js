@@ -9,7 +9,7 @@ import {
   Monitor // <--- Добавил иконку
 } from 'lucide-react';
 
-const APP_VERSION = "v10.10 (Stable + Stand Link)"; 
+const APP_VERSION = "v10.11 (Arhiv+poisk)"; 
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
@@ -48,10 +48,10 @@ export default function SED() {
   const [requests, setRequests] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState('active'); 
-  
+   
   const [modal, setModal] = useState({ open: false, req: null, type: '' }); 
   const [historyModal, setHistoryModal] = useState({ open: false, req: null });
-  
+   
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState('');
   const pinInputRef = useRef(null);
@@ -419,7 +419,7 @@ export default function SED() {
 
              {!isService && req.purpose && (
                   <div className="bg-[#0d1117] p-2 rounded text-xs text-gray-300 italic mt-2 border-l-2 border-gray-600 whitespace-pre-wrap break-words">
-                     "{req.purpose}"
+                      "{req.purpose}"
                   </div>
              )}
 
@@ -536,7 +536,7 @@ export default function SED() {
       </div>
     );
   };
-  
+   
   if (!role) return (
     <div className="min-h-screen bg-[#0d1117] flex flex-col items-center justify-center p-4 relative">
       <div className="text-center mb-8"><h1 className="text-4xl font-bold text-blue-500 tracking-widest">ОХМК СЭД</h1><p className="text-gray-500 text-xs mt-2">CORPORATE SYSTEM</p></div>
@@ -604,7 +604,15 @@ export default function SED() {
           </div>
       </div>
       <div className="max-w-7xl mx-auto w-full p-4 flex-grow">
-          {loading && requests.length === 0 ? (<div className="text-center py-20 text-gray-500 animate-pulse">Загрузка данных...</div>) : (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">{requests.filter(r => searchQuery ? String(r.req_number).includes(searchQuery) : true).map(req => (<RequestCard key={req.id} req={req} />))}</div>)}
+          {loading && requests.length === 0 ? (<div className="text-center py-20 text-gray-500 animate-pulse">Загрузка данных...</div>) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">
+            {requests.filter(req => {
+                if (!searchQuery) return true;
+                // Ищем везде (превращаем всю заявку в текст и ищем совпадение)
+                return JSON.stringify(req).toLowerCase().includes(searchQuery.toLowerCase());
+            }).map(req => (<RequestCard key={req.id} req={req} />))}
+            </div>
+          )}
           {!loading && requests.length === 0 && <div className="text-center py-20 opacity-30 flex flex-col items-center"><Archive size={48} className="mb-2"/><div>Список пуст</div></div>}
       </div>
       <div className="text-center py-4 text-gray-800 text-[10px]">{APP_VERSION}</div>
