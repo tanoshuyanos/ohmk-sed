@@ -120,7 +120,10 @@ export default function SED() {
     setLoading(true);
     let query = supabase.from('requests').select('*').order('req_number', { ascending: false }); // Сортировка 100, 99...
 
-    if (mode === 'history') query = query.limit(100);
+    // 2. УБРАЛИ ЛИМИТ ДЛЯ АРХИВА (раньше было query.limit(100))
+    if (mode === 'history') {
+        // Ничего не ограничиваем, грузим всё, что есть в базе
+    } 
     else {
         if (userRole === "DIRECTOR") query = query.is('step_director', null);
         else if (userRole === "FIN_DIR") query = query.eq('step_komer', 1).is('step_findir', null);
