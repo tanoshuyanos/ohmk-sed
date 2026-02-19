@@ -9,7 +9,7 @@ import {
   Monitor // <--- Добавил иконку
 } from 'lucide-react';
 
-const APP_VERSION = "v10.11 (Arhiv+poisk)"; 
+const APP_VERSION = "v10.12 (SR)"; 
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
@@ -333,10 +333,11 @@ export default function SED() {
 
     useEffect(() => { req.temp_pay_sum = paySum; req.temp_pay_date = payDate; req.temp_contract_sum = contractSum; }, [paySum, payDate, contractSum]);
 
-    const isUrgent = (req.urgency || "").toLowerCase().includes("срочно");
+    const urgencyValue = (req.urgency || "").toLowerCase().trim();
+    const isUrgent = urgencyValue === "срочно";
     let borderColor = 'border-[#30363d]';
     if (req.fix_comment) borderColor = 'border-orange-500'; 
-    if (isUrgent) borderColor = 'border-red-500';
+    else if (isUrgent) borderColor = 'border-red-500';
 
     const getCleanPhone = (phoneStr) => {
         if (!phoneStr) return null;
