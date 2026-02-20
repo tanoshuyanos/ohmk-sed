@@ -9,7 +9,7 @@ import {
   Monitor // <--- Добавил иконку
 } from 'lucide-react';
 
-const APP_VERSION = "v10.13 (KOMDIR)"; 
+const APP_VERSION = "v10.14 (KOMDIR+History)"; 
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
@@ -254,12 +254,29 @@ export default function SED() {
 
       if (role !== 'ECONOMIST') setRequests(prev => prev.filter(r => r.id !== req.id));
       
-      if (comments) {
-          const currentHistory = req.history || [];
-          updates.history = [...currentHistory, {
-              role: role, action: "КОММЕНТАРИЙ / ОТКАЗ", date: new Date().toLocaleString("ru-RU"), comment: comments
-          }];
-      }
+      // СТАЛО ТАК: ЗАПИСЫВАЕМ ВСЕ ДЕЙСТВИЯ
+      // Переводим технические действия на нормальный русский
+      const actionNames = {
+          'APPROVE': 'ОДОБРЕНО', 'REJECT': 'ОТКАЗ / ОТМЕНА',
+          'YES': 'ЕСТЬ НА СКЛАДЕ', 'NO': 'НЕТ НА СКЛАДЕ', 'PARTIAL': 'ЧАСТИЧНО НА СКЛАДЕ',
+          'PLAN': 'ПО ПЛАНУ', 'UNPLANNED': 'ВНЕ ПЛАНА',
+          'SEND': 'ОТПРАВЛЕНО ЮРИСТУ', 'FIX': 'ВОЗВРАТ НА ДОРАБОТКУ',
+          'SEND_DRAFT': 'ПРОЕКТ ОТПРАВЛЕН', 'SIGN': 'ДОГОВОР ПОДПИСАН',
+          'REVIEW_OK': 'ДОГОВОР СОГЛАСОВАН', 'REVIEW_FIX': 'ПРАВКИ ПО ДОГОВОРУ',
+          'PAY_OK': 'ОПЛАТА ОДОБРЕНА', 'PAY_FIX': 'ПРАВКИ ПО ОПЛАТЕ',
+          'REQ_PAY': 'ЗАПРОС НА ОПЛАТУ', 'DONE': 'ПРОВЕДЕНО (ОПЛАЧЕНО)'
+      };
+
+      const actionText = actionNames[actionType] || actionType;
+      const currentHistory = req.history || [];
+      
+      // Теперь пушим в историю вообще всё
+      updates.history = [...currentHistory, {
+          role: role, 
+          action: actionText, 
+          date: new Date().toLocaleString("ru-RU"), 
+          comment: comments || "" 
+      }];
 
       const { error } = await supabase.from('requests').update(updates).eq('id', req.id);
       if (error) alert("Ошибка: " + error.message);
