@@ -9,7 +9,7 @@ import {
   Monitor // <--- Добавил иконку
 } from 'lucide-react';
 
-const APP_VERSION = "v10.12 (SR)"; 
+const APP_VERSION = "v10.13 (KOMDIR)"; 
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
@@ -429,6 +429,7 @@ export default function SED() {
                  {req.draft_url && <a href={req.draft_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-yellow-400 text-xs hover:text-yellow-300 border border-yellow-900/30 p-1.5 rounded bg-yellow-900/10"><FileSignature size={12}/> <span>Проект</span></a>}
                  {req.attachment_goods_url && <a href={req.attachment_goods_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-purple-400 text-xs hover:text-purple-300 border border-purple-900/30 p-1.5 rounded bg-purple-900/10"><Paperclip size={12}/> <span>{isService ? "ТЗ / Доп. файл" : "Фото"}</span></a>}
                  {req.contract_url && <a href={req.contract_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-green-400 text-xs hover:text-green-300 border border-green-900/30 p-1.5 rounded bg-green-900/10"><CheckCircle size={12}/> <span>Скан</span></a>}
+                 {req.invoice_url && <a href={req.invoice_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-cyan-400 text-xs hover:text-cyan-300 border border-cyan-900/30 p-1.5 rounded bg-cyan-900/10"><DollarSign size={12}/> <span>Счет на оплату</span></a>}
              </div>
              
              <div className="flex justify-between items-center border-t border-gray-700 pt-2 mt-2">
@@ -472,9 +473,17 @@ export default function SED() {
                      <div className="grid grid-cols-2 gap-2"><div><span className="text-gray-500 text-[9px]">Место поставки</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.delivery_place} onChange={e=>setFormData({...formData, delivery_place: e.target.value})}/></div><div><span className="text-gray-500 text-[9px]">Самовывоз?</span><select className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.pickup} onChange={e=>setFormData({...formData, pickup: e.target.value})}><option>Нет (Доставка)</option><option>Да (Самовывоз)</option></select></div></div>
                      <div className="grid grid-cols-2 gap-2"><div><span className="text-gray-500 text-[9px]">Срок поставки (Дата)</span><input type="date" className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.delivery_date} onChange={e=>setFormData({...formData, delivery_date: e.target.value})}/></div><div><span className="text-gray-500 text-[9px]">Гарантия</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.warranty} onChange={e=>setFormData({...formData, warranty: e.target.value})}/></div></div>
                      <div><span className="text-gray-500 text-[9px]">Качество товара</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.quality} onChange={e=>setFormData({...formData, quality: e.target.value})}/></div>
+                     
                      <div className="flex justify-between items-center bg-gray-900 p-1.5 rounded border border-gray-800"><span className="text-gray-500 text-[9px]">ФИО Инициатора:</span><span className="text-gray-300 font-bold">{formData.initiator}</span></div>
+                     
+                     {!req.invoice_url && (
+                         <button onClick={(e) => { e.preventDefault(); setModal({open:true, req:req, type:'INVOICE'}); }} className="w-full bg-cyan-700 hover:bg-cyan-600 py-2.5 rounded text-xs font-bold text-white mt-2 shadow-lg shadow-cyan-900/20 flex items-center justify-center gap-2">
+                             <UploadCloud size={16}/> ПРИКРЕПИТЬ СЧЕТ (ЕСЛИ ЕСТЬ)
+                         </button>
+                     )}
+                     
                      <button onClick={()=>handleAction(req, 'SEND', {require_form: true})} className="w-full bg-pink-700 hover:bg-pink-600 py-2.5 rounded text-xs font-bold text-white shadow-lg shadow-pink-900/20 mt-2">ОТПРАВИТЬ ЮРИСТУ (1)</button>
-                     <button onClick={()=>handleAction(req, 'REJECT')} className="w-full border border-red-600 text-red-400 py-1.5 rounded text-xs hover:bg-red-900/20">❌ ОТКАЗ (ОТМЕНА)</button>
+                     <button onClick={()=>handleAction(req, 'REJECT')} className="w-full border border-red-600 text-red-400 py-1.5 rounded text-xs hover:bg-red-900/20 mt-2">❌ ОТКАЗ (ОТМЕНА)</button>
                  </div>
              )}
              
@@ -563,9 +572,9 @@ export default function SED() {
       {modal.open && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
               <div className="bg-[#161b22] border border-gray-700 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
-                  <div className="flex justify-between items-center mb-6"><h3 className="text-lg font-bold text-white flex items-center gap-2"><UploadCloud className="text-blue-500"/> {modal.type === 'DRAFT' ? 'Проект' : 'Финал'}</h3><button onClick={()=>setModal({...modal, open:false})}><X className="text-gray-500 hover:text-white"/></button></div>
+                  <div className="flex justify-between items-center mb-6"><h3 className="text-lg font-bold text-white flex items-center gap-2"><UploadCloud className="text-blue-500"/> {modal.type === 'DRAFT' ? 'Проект' : modal.type === 'FINAL' ? 'Финал' : 'Счет'}</h3><button onClick={()=>setModal({...modal, open:false})}><X className="text-gray-500 hover:text-white"/></button></div>
                   {uploadStatus === 'success' ? (<div className="text-center py-6"><CheckCircle size={48} className="text-green-500 mx-auto mb-2"/><p className="text-white font-bold">Загружено!</p></div>) : (
-                      <div className="space-y-4"><div className="bg-[#0d1117] border border-dashed border-gray-600 rounded-xl p-6 text-center cursor-pointer hover:border-blue-500 transition relative"><input type="file" id="file-upload" className="absolute inset-0 opacity-0 cursor-pointer"/><div className="text-gray-400 text-sm">Выбрать файл<br/>(PDF, DOCX)</div></div>
+                      <div className="space-y-4"><div className="bg-[#0d1117] border border-dashed border-gray-600 rounded-xl p-6 text-center cursor-pointer hover:border-blue-500 transition relative"><input type="file" id="file-upload" accept="image/*,.pdf,.doc,.docx" className="absolute inset-0 opacity-0 cursor-pointer"/><div className="text-gray-400 text-sm">Выбрать файл<br/>(Фото или PDF)</div></div>
                           {modal.type === 'FINAL' && (<div className="space-y-2"><input id="contract-num" className="w-full bg-[#0d1117] border border-gray-700 rounded p-3 text-white text-sm" placeholder="№ Договора"/><input id="contract-amount" type="number" className="w-full bg-[#0d1117] border border-gray-700 rounded p-3 text-white text-sm" placeholder="Сумма договора"/></div>)}
                           {uploadStatus === 'uploading' && <div className="w-full bg-gray-700 rounded-full h-2.5 mt-4 overflow-hidden"><div className="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style={{width: `${uploadProgress}%`}}></div></div>}
                           <button onClick={handleUpload} disabled={uploadStatus === 'uploading'} className={`w-full py-3 rounded-xl font-bold text-white transition ${uploadStatus==='uploading' ? 'bg-gray-600 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500'}`}>{uploadStatus === 'uploading' ? `...` : 'ОТПРАВИТЬ'}</button>
