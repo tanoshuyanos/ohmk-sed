@@ -9,7 +9,7 @@ import {
   Monitor // <--- Добавил иконку
 } from 'lucide-react';
 
-const APP_VERSION = "v10.14 (KOMDIR+History)"; 
+const APP_VERSION = "v10.15 (KOMDIR Unified)"; 
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
@@ -335,6 +335,7 @@ export default function SED() {
     const [contractSum, setContractSum] = useState(req.contract_sum || '');
     const [paySum, setPaySum] = useState(req.payment_sum || '');
     const [payDate, setPayDate] = useState(req.payment_date || '');
+    const [isUploading, setIsUploading] = useState(false); // Для загрузки счета фоном
 
     useEffect(() => {
         if(formData.qty && formData.price_unit) {
@@ -347,6 +348,33 @@ export default function SED() {
     }, [formData]);
 
     useEffect(() => { req.temp_pay_sum = paySum; req.temp_pay_date = payDate; req.temp_contract_sum = contractSum; }, [paySum, payDate, contractSum]);
+
+    // Функция Ком Дира: отправка файла + смена статуса
+    const handleKomerSend = (e) => {
+        e.preventDefault();
+        const fileInput = document.getElementById(`invoice-file-${req.id}`);
+        const file = fileInput ? fileInput.files[0] : null;
+
+        if (file) {
+            setIsUploading(true);
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = function() {
+                fetch(STAND_URL, {
+                    method: 'POST', mode: 'no-cors', 
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ file: reader.result, fileName: file.name, reqNum: req.req_number, reqId: req.id, type: 'INVOICE' })
+                });
+                
+                setTimeout(() => {
+                    handleAction(req, 'SEND', {require_form: true});
+                    setIsUploading(false);
+                }, 500); 
+            };
+        } else {
+            handleAction(req, 'SEND', {require_form: true});
+        }
+    };
 
     const urgencyValue = (req.urgency || "").toLowerCase().trim();
     const isUrgent = urgencyValue === "срочно";
@@ -492,12 +520,18 @@ export default function SED() {
                      <div className="flex justify-between items-center bg-gray-900 p-1.5 rounded border border-gray-800"><span className="text-gray-500 text-[9px]">ФИО Инициатора:</span><span className="text-gray-300 font-bold">{formData.initiator}</span></div>
                      
                      {!req.invoice_url && (
-                         <button onClick={(e) => { e.preventDefault(); setModal({open:true, req:req, type:'INVOICE'}); }} className="w-full bg-cyan-700 hover:bg-cyan-600 py-2.5 rounded text-xs font-bold text-white mt-2 shadow-lg shadow-cyan-900/20 flex items-center justify-center gap-2">
-                             <UploadCloud size={16}/> ПРИКРЕПИТЬ СЧЕТ (ЕСЛИ ЕСТЬ)
-                         </button>
+                         <div className="bg-cyan-900/20 border border-cyan-800 p-2 rounded mt-2">
+                             <span className="text-cyan-400 font-bold text-[10px] uppercase mb-1 flex items-center gap-1">
+                                 <UploadCloud size={12}/> Прикрепить счет (Опционально)
+                             </span>
+                             <input type="file" id={`invoice-file-${req.id}`} accept="image/*,.pdf,.doc,.docx" className="w-full text-xs text-gray-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-bold file:bg-cyan-700 file:text-white hover:file:bg-cyan-600 cursor-pointer"/>
+                         </div>
                      )}
                      
-                     <button onClick={()=>handleAction(req, 'SEND', {require_form: true})} className="w-full bg-pink-700 hover:bg-pink-600 py-2.5 rounded text-xs font-bold text-white shadow-lg shadow-pink-900/20 mt-2">ОТПРАВИТЬ ЮРИСТУ (1)</button>
+                     <button disabled={isUploading} onClick={handleKomerSend} className={`w-full py-2.5 rounded text-xs font-bold text-white shadow-lg mt-2 flex justify-center items-center gap-2 ${isUploading ? 'bg-gray-600 cursor-not-allowed' : 'bg-pink-700 hover:bg-pink-600 shadow-pink-900/20'}`}>
+                         {isUploading ? <Loader2 className="animate-spin" size={16}/> : 'ОТПРАВИТЬ ЮРИСТУ (1)'}
+                     </button>
+                     
                      <button onClick={()=>handleAction(req, 'REJECT')} className="w-full border border-red-600 text-red-400 py-1.5 rounded text-xs hover:bg-red-900/20 mt-2">❌ ОТКАЗ (ОТМЕНА)</button>
                  </div>
              )}
