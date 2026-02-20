@@ -254,8 +254,7 @@ export default function SED() {
 
       if (role !== 'ECONOMIST') setRequests(prev => prev.filter(r => r.id !== req.id));
       
-      // СТАЛО ТАК: ЗАПИСЫВАЕМ ВСЕ ДЕЙСТВИЯ
-      // Переводим технические действия на нормальный русский
+      // === НОВАЯ ЛОГИКА ИСТОРИИ (ЗАПИСЬ ВСЕХ ШАГОВ В БД) ===
       const actionNames = {
           'APPROVE': 'ОДОБРЕНО', 'REJECT': 'ОТКАЗ / ОТМЕНА',
           'YES': 'ЕСТЬ НА СКЛАДЕ', 'NO': 'НЕТ НА СКЛАДЕ', 'PARTIAL': 'ЧАСТИЧНО НА СКЛАДЕ',
@@ -270,7 +269,6 @@ export default function SED() {
       const actionText = actionNames[actionType] || actionType;
       const currentHistory = req.history || [];
       
-      // Теперь пушим в историю вообще всё
       updates.history = [...currentHistory, {
           role: role, 
           action: actionText, 
