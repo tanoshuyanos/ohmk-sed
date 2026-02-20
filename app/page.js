@@ -9,7 +9,7 @@ import {
   Monitor // <--- Добавил иконку
 } from 'lucide-react';
 
-const APP_VERSION = "v10.15 (KOMDIR Unified)"; 
+const APP_VERSION = "v10.16 (Fix numberprohne)"; 
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
@@ -384,8 +384,18 @@ export default function SED() {
 
     const getCleanPhone = (phoneStr) => {
         if (!phoneStr) return null;
+        // Убираем все пробелы, скобки и тире, оставляем только цифры
         let p = phoneStr.toString().replace(/\D/g, '');
-        if (p.startsWith('8')) p = '7' + p.slice(1);
+        
+        // Если номер начинается на 8 и в нем 11 цифр (8777...) -> меняем 8 на 7
+        if (p.startsWith('8') && p.length === 11) {
+            p = '7' + p.slice(1);
+        } 
+        // Если человек ввел просто 10 цифр (777... или 701...) -> добавляем 7 спереди
+        else if (p.length === 10) {
+            p = '7' + p;
+        }
+        
         return p;
     };
     
