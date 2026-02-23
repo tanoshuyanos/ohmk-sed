@@ -9,7 +9,7 @@ import {
   Monitor
 } from 'lucide-react';
 
-const APP_VERSION = "v10.17 (LAWYER Fix & Phone)"; 
+const APP_VERSION = "v10.18 (Buh)"; 
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
@@ -252,6 +252,21 @@ export default function SED() {
               if (req.temp_pay_sum) updates.payment_sum = req.temp_pay_sum;
               if (req.temp_pay_date) updates.payment_date = req.temp_pay_date;
               updates.fix_comment = null;
+
+              // === ОТПРАВКА ДАННЫХ В НОВУЮ ТАБЛИЦУ ===
+              fetch(STAND_URL, {
+                  method: 'POST', mode: 'no-cors',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ 
+                      type: 'FINANCE_REGISTRY', 
+                      reqNum: req.req_number, 
+                      itemName: req.request_type === 'service' ? (req.service_name || req.item_name) : req.item_name,
+                      seller: req.legal_info?.seller || "Не указан",
+                      paySum: req.temp_pay_sum, 
+                      payDate: req.temp_pay_date 
+                  })
+              }).catch(e => console.error("Ошибка отправки в реестр:", e));
+              // =======================================
           }
           if (actionType === 'DONE') {
               updates.step_accountant_done = 1; updates.status = "ОПЛАЧЕНО";
