@@ -6,10 +6,10 @@ import {
   ExternalLink, AlertTriangle, Table, Truck, Wrench, Info, DollarSign, Calendar, 
   MapPin, Eye, Clock, BarChart3, Phone, User, Factory, AlertCircle, Briefcase, FileSignature, 
   Package, Scale, ShieldCheck, Keyboard, History, GitMerge, Settings, ChevronRight, MessageCircle, Paperclip, Hash, CreditCard, Layers,
-  Monitor // <--- Добавил иконку
+  Monitor
 } from 'lucide-react';
 
-const APP_VERSION = "v10.17 (fix Yurist)"; 
+const APP_VERSION = "v10.17 (LAWYER Fix & Phone)"; 
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
@@ -118,11 +118,10 @@ export default function SED() {
 
   const fetchRequests = async (userRole, mode) => {
     setLoading(true);
-    let query = supabase.from('requests').select('*').order('req_number', { ascending: false }); // Сортировка 100, 99...
+    let query = supabase.from('requests').select('*').order('req_number', { ascending: false }); 
 
-    // 2. УБРАЛИ ЛИМИТ ДЛЯ АРХИВА (раньше было query.limit(100))
     if (mode === 'history') {
-        // Ничего не ограничиваем, грузим всё, что есть в базе
+        // Загружаем всё
     } 
     else {
         if (userRole === "DIRECTOR") query = query.is('step_director', null);
@@ -224,12 +223,11 @@ export default function SED() {
               updates.step_lawyer_final = 1; 
               if (req.temp_contract_sum) updates.contract_sum = req.temp_contract_sum;
           }
-        // === НОВАЯ КНОПКА ВОЗВРАТА КОМ. ДИРУ ===
           if (actionType === 'FIX_TO_KOMER') {
-              const c = prompt("Укажите причину возврата Ком. Директору (ошибка в форме, счет и т.д.):");
+              const c = prompt("Укажите причину возврата Ком. Директору:");
               if (!c) return;
               updates.step_komer = null; 
-              updates.step_findir = null; // Сбрасываем и фин. дира, чтобы он перепроверил после ком. дира
+              updates.step_findir = null; 
               updates.fix_comment = "Юрист: " + c;
           }
       }
@@ -262,7 +260,6 @@ export default function SED() {
 
       if (role !== 'ECONOMIST') setRequests(prev => prev.filter(r => r.id !== req.id));
       
-      // === НОВАЯ ЛОГИКА ИСТОРИИ (ЗАПИСЬ ВСЕХ ШАГОВ В БД) ===
       const actionNames = {
           'APPROVE': 'ОДОБРЕНО', 'REJECT': 'ОТКАЗ / ОТМЕНА',
           'YES': 'ЕСТЬ НА СКЛАДЕ', 'NO': 'НЕТ НА СКЛАДЕ', 'PARTIAL': 'ЧАСТИЧНО НА СКЛАДЕ',
@@ -344,7 +341,7 @@ export default function SED() {
     const [contractSum, setContractSum] = useState(req.contract_sum || '');
     const [paySum, setPaySum] = useState(req.payment_sum || '');
     const [payDate, setPayDate] = useState(req.payment_date || '');
-    const [isUploading, setIsUploading] = useState(false); // Для загрузки счета фоном
+    const [isUploading, setIsUploading] = useState(false); 
 
     useEffect(() => {
         if(formData.qty && formData.price_unit) {
@@ -358,7 +355,6 @@ export default function SED() {
 
     useEffect(() => { req.temp_pay_sum = paySum; req.temp_pay_date = payDate; req.temp_contract_sum = contractSum; }, [paySum, payDate, contractSum]);
 
-    // Функция Ком Дира: отправка файла + смена статуса
     const handleKomerSend = (e) => {
         e.preventDefault();
         const fileInput = document.getElementById(`invoice-file-${req.id}`);
@@ -393,18 +389,12 @@ export default function SED() {
 
     const getCleanPhone = (phoneStr) => {
         if (!phoneStr) return null;
-        // Убираем все пробелы, скобки и тире, оставляем только цифры
         let p = phoneStr.toString().replace(/\D/g, '');
-        
-        // Если номер начинается на 8 и в нем 11 цифр (8777...) -> меняем 8 на 7
         if (p.startsWith('8') && p.length === 11) {
             p = '7' + p.slice(1);
-        } 
-        // Если человек ввел просто 10 цифр (777... или 701...) -> добавляем 7 спереди
-        else if (p.length === 10) {
+        } else if (p.length === 10) {
             p = '7' + p;
         }
-        
         return p;
     };
     
@@ -412,9 +402,18 @@ export default function SED() {
 
     return (
       <div className={`bg-[#161b22] border ${borderColor} rounded-xl p-5 shadow-xl flex flex-col`}>
-         <div className="flex justify-between items-start mb-2">
+         <div className="flex justify-between items-start mb-2 border-b border-gray-800 pb-2">
             <div><h3 className="text-xl font-bold text-white">#{req.req_number}</h3><div className="text-xs text-gray-500">{safeDate(req.created_at)}</div></div>
-            {isUrgent && <div className="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded animate-pulse font-bold">СРОЧНО</div>}
+            <div className="flex items-center gap-2">
+                {isUrgent && <div className="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded animate-pulse font-bold">СРОЧНО</div>}
+                <button 
+                    onClick={() => setHistoryModal({open: true, req: req})} 
+                    className="text-gray-400 hover:text-blue-400 bg-gray-800 hover:bg-gray-700 p-1.5 rounded border border-gray-700 hover:border-blue-500 transition shadow-sm"
+                    title="История статусов"
+                >
+                    <History size={16} />
+                </button>
+            </div>
          </div>
 
          {req.fix_comment && <div className="bg-orange-900/30 border border-orange-600 p-2 rounded mb-3 text-xs text-orange-200"><b className="block mb-1">⚠️ ТРЕБУЮТСЯ ПРАВКИ:</b>{req.fix_comment}</div>}
