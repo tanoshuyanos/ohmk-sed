@@ -9,7 +9,7 @@ import {
   Monitor // <--- Добавил иконку
 } from 'lucide-react';
 
-const APP_VERSION = "v10.16 (Fix numberprohne)"; 
+const APP_VERSION = "v10.17 (fix Yurist)"; 
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
@@ -224,6 +224,14 @@ export default function SED() {
               updates.step_lawyer_final = 1; 
               if (req.temp_contract_sum) updates.contract_sum = req.temp_contract_sum;
           }
+        // === НОВАЯ КНОПКА ВОЗВРАТА КОМ. ДИРУ ===
+          if (actionType === 'FIX_TO_KOMER') {
+              const c = prompt("Укажите причину возврата Ком. Директору (ошибка в форме, счет и т.д.):");
+              if (!c) return;
+              updates.step_komer = null; 
+              updates.step_findir = null; // Сбрасываем и фин. дира, чтобы он перепроверил после ком. дира
+              updates.fix_comment = "Юрист: " + c;
+          }
       }
       else if (role === 'FINANCE') {
           if (actionType === 'REVIEW_OK') { updates.step_finance_review = 1; updates.fix_comment = null; }
@@ -260,6 +268,7 @@ export default function SED() {
           'YES': 'ЕСТЬ НА СКЛАДЕ', 'NO': 'НЕТ НА СКЛАДЕ', 'PARTIAL': 'ЧАСТИЧНО НА СКЛАДЕ',
           'PLAN': 'ПО ПЛАНУ', 'UNPLANNED': 'ВНЕ ПЛАНА',
           'SEND': 'ОТПРАВЛЕНО ЮРИСТУ', 'FIX': 'ВОЗВРАТ НА ДОРАБОТКУ',
+          'FIX_TO_KOMER': 'ВОЗВРАТ КОМ. ДИРУ',
           'SEND_DRAFT': 'ПРОЕКТ ОТПРАВЛЕН', 'SIGN': 'ДОГОВОР ПОДПИСАН',
           'REVIEW_OK': 'ДОГОВОР СОГЛАСОВАН', 'REVIEW_FIX': 'ПРАВКИ ПО ДОГОВОРУ',
           'PAY_OK': 'ОПЛАТА ОДОБРЕНА', 'PAY_FIX': 'ПРАВКИ ПО ОПЛАТЕ',
@@ -556,7 +565,10 @@ export default function SED() {
              {role === 'LAWYER' && !req.step_lawyer_draft && (
                  <>
                      {!req.draft_url && <button onClick={()=>setModal({open:true, req:req, type:'DRAFT'})} className="w-full bg-blue-600 py-2 rounded text-xs text-white mb-2">ЗАГРУЗИТЬ ПРОЕКТ</button>}
-                     <button onClick={()=>handleAction(req, 'SEND_DRAFT', {require_draft: true})} className="w-full bg-indigo-600 py-2 rounded text-xs font-bold text-white">ОТПРАВИТЬ ФИНАНСИСТУ (1)</button>
+                     <div className="flex gap-2">
+                         <button onClick={()=>handleAction(req, 'SEND_DRAFT', {require_draft: true})} className="flex-[2] bg-indigo-600 py-2 rounded text-xs font-bold text-white">ОТПРАВИТЬ ФИНАНСИСТУ (1)</button>
+                         <button onClick={()=>handleAction(req, 'FIX_TO_KOMER')} className="flex-1 bg-orange-600 py-2 rounded text-xs font-bold text-white">ПРАВКИ</button>
+                     </div>
                  </>
              )}
              {role === 'LAWYER' && req.step_finance_review === 1 && (
