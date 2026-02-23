@@ -9,7 +9,7 @@ import {
   Monitor
 } from 'lucide-react';
 
-const APP_VERSION = "v10.18 (Buh)"; 
+const APP_VERSION = "v11.01 (Buh+AI)"; 
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
@@ -610,7 +610,21 @@ export default function SED() {
              )}
              {role === 'ACCOUNTANT' && !req.step_accountant_req && (
                  <div className="bg-[#0d1117] p-2 rounded border border-gray-700">
-                     <div className="flex gap-2 mb-2"><input type="number" placeholder="Сумма" className="w-1/2 bg-gray-800 p-1.5 rounded text-white text-xs" value={paySum} onChange={e=>setPaySum(e.target.value)}/><input type="date" className="w-1/2 bg-gray-800 p-1.5 rounded text-white text-xs" value={payDate} onChange={e=>setPayDate(e.target.value)}/></div>
+                     {/* === БЛОК ИИ ДЛЯ БУХГАЛТЕРА === */}
+                     {req.ai_payment_terms && (
+                         <div className="mb-3 bg-blue-900/20 border border-blue-800 p-2 rounded text-xs text-blue-200">
+                             <div className="font-bold flex items-center gap-1 mb-1 text-blue-400">
+                                 <Monitor size={12}/> ИИ прочитал договор:
+                             </div>
+                             <div className="italic break-words">"{req.ai_payment_terms}"</div>
+                         </div>
+                     )}
+                     {/* =============================== */}
+
+                     <div className="flex gap-2 mb-2">
+                         <input type="number" placeholder="Сумма" className="w-1/2 bg-gray-800 p-1.5 rounded text-white text-xs" value={paySum} onChange={e=>setPaySum(e.target.value)}/>
+                         <input type="date" className="w-1/2 bg-gray-800 p-1.5 rounded text-white text-xs" value={payDate} onChange={e=>setPayDate(e.target.value)}/>
+                     </div>
                      <button onClick={()=>handleAction(req, 'REQ_PAY', {require_pay_data: true})} className="w-full bg-blue-600 py-2 rounded text-xs font-bold text-white">НА СОГЛАСОВАНИЕ (1)</button>
                  </div>
              )}
