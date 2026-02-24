@@ -9,7 +9,7 @@ import {
   Monitor
 } from 'lucide-react';
 
-const APP_VERSION = "v11.04 (Dir+AI+Table)";
+const APP_VERSION = "v11.05 (Dir+AI+Table)";
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
@@ -376,27 +376,42 @@ export default function SED() {
 
     useEffect(() => { req.temp_pay_sum = paySum; req.temp_pay_date = payDate; req.temp_contract_sum = contractSum; }, [paySum, payDate, contractSum]);
 
-    const handleKomerSend = (e) => {
+    const handleKomerSend = async (e) => {
         e.preventDefault();
         const fileInput = document.getElementById(`invoice-file-${req.id}`);
-        const file = fileInput ? fileInput.files[0] : null;
+        const files = fileInput ? fileInput.files : [];
 
-        if (file) {
+        if (files.length > 0) {
             setIsUploading(true);
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = function() {
-                fetch(STAND_URL, {
-                    method: 'POST', mode: 'no-cors', 
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ file: reader.result, fileName: file.name, reqNum: req.req_number, reqId: req.id, type: 'INVOICE' })
+            
+            // Читаем все выбранные файлы
+            const filePromises = Array.from(files).map(file => {
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(file);
+                    reader.onload = () => resolve({ fileBase64: reader.result, fileName: file.name });
                 });
-                
-                setTimeout(() => {
-                    handleAction(req, 'SEND', {require_form: true});
-                    setIsUploading(false);
-                }, 500); 
-            };
+            });
+            
+            const filesData = await Promise.all(filePromises);
+
+            // Отправляем массив файлов в Гугл Скрипт (новый тип INVOICE_MULTIPLE)
+            fetch(STAND_URL, {
+                method: 'POST', mode: 'no-cors', 
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    files: filesData, 
+                    reqNum: req.req_number, 
+                    reqId: req.id, 
+                    type: 'INVOICE_MULTIPLE' 
+                })
+            });
+            
+            // Даем чуть больше времени на загрузку пачки файлов
+            setTimeout(() => {
+                handleAction(req, 'SEND', {require_form: true});
+                setIsUploading(false);
+            }, 1500); 
         } else {
             handleAction(req, 'SEND', {require_form: true});
         }
@@ -511,7 +526,12 @@ export default function SED() {
                  {req.draft_url && <a href={req.draft_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-yellow-400 text-xs hover:text-yellow-300 border border-yellow-900/30 p-1.5 rounded bg-yellow-900/10"><FileSignature size={12}/> <span>Проект</span></a>}
                  {req.attachment_goods_url && <a href={req.attachment_goods_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-purple-400 text-xs hover:text-purple-300 border border-purple-900/30 p-1.5 rounded bg-purple-900/10"><Paperclip size={12}/> <span>{isService ? "ТЗ / Доп. файл" : "Фото"}</span></a>}
                  {req.contract_url && <a href={req.contract_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-green-400 text-xs hover:text-green-300 border border-green-900/30 p-1.5 rounded bg-green-900/10"><CheckCircle size={12}/> <span>Скан</span></a>}
-                 {req.invoice_url && <a href={req.invoice_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-cyan-400 text-xs hover:text-cyan-300 border border-cyan-900/30 p-1.5 rounded bg-cyan-900/10"><DollarSign size={12}/> <span>Счет на оплату</span></a>}
+                 {/* БЛОК ВЫВОДА НЕСКОЛЬКИХ СЧЕТОВ */}
+                 {req.invoice_url && req.invoice_url.split(',').map((url, index) => (
+                     <a key={index} href={url.trim()} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-cyan-400 text-xs hover:text-cyan-300 border border-cyan-900/30 p-1.5 rounded bg-cyan-900/10">
+                         <DollarSign size={12}/> <span>Счет {req.invoice_url.split(',').length > 1 ? index + 1 : ''}</span>
+                     </a>
+                 ))}
              </div>
              
              <div className="flex justify-between items-center border-t border-gray-700 pt-2 mt-2">
@@ -571,7 +591,7 @@ export default function SED() {
                              <span className="text-cyan-400 font-bold text-[10px] uppercase mb-1 flex items-center gap-1">
                                  <UploadCloud size={12}/> Прикрепить счет (Опционально)
                              </span>
-                             <input type="file" id={`invoice-file-${req.id}`} accept="image/*,.pdf,.doc,.docx" className="w-full text-xs text-gray-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-bold file:bg-cyan-700 file:text-white hover:file:bg-cyan-600 cursor-pointer"/>
+                             <input type="file" multiple id={`invoice-file-${req.id}`} accept="image/*,.pdf,.doc,.docx" className="w-full text-xs text-gray-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-bold file:bg-cyan-700 file:text-white hover:file:bg-cyan-600 cursor-pointer"/>
                          </div>
                      )}
                      
