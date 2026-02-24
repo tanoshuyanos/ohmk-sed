@@ -254,7 +254,8 @@ export default function SED() {
               updates.fix_comment = null;
 
               // === ОТПРАВКА ДАННЫХ В НОВУЮ ТАБЛИЦУ ===
-             fetch(STAND_URL, {
+            console.log("ШПИОН - Отправляем условия:", req.ai_payment_terms); 
+            fetch(STAND_URL, {
     method: 'POST', mode: 'no-cors',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ 
