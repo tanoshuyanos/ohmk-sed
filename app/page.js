@@ -9,7 +9,7 @@ import {
   Monitor
 } from 'lucide-react';
 
-const APP_VERSION = "v11.02 (Buh+AI+Table)"; 
+const APP_VERSION = "v11.03 (Dir+AI+Table)";
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
@@ -181,7 +181,10 @@ export default function SED() {
       let updates = { last_role: role };
       let comments = payload.comment || null;
 
-      if (role === 'DIRECTOR') {
+      if (actionType === 'TOGGLE_URGENCY') {
+          updates.urgency = payload.isUrgent ? null : 'срочно';
+      }
+    if (role === 'DIRECTOR') {
           if (actionType === 'APPROVE') updates.step_director = 1;
           if (actionType === 'REJECT') updates.step_director = 0;
       }
@@ -275,7 +278,7 @@ export default function SED() {
           }
       }
 
-      if (role !== 'ECONOMIST') setRequests(prev => prev.filter(r => r.id !== req.id));
+      if (role !== 'ECONOMIST' && actionType !== 'TOGGLE_URGENCY') setRequests(prev => prev.filter(r => r.id !== req.id));
       
       const actionNames = {
           'APPROVE': 'ОДОБРЕНО', 'REJECT': 'ОТКАЗ / ОТМЕНА',
@@ -287,6 +290,7 @@ export default function SED() {
           'REVIEW_OK': 'ДОГОВОР СОГЛАСОВАН', 'REVIEW_FIX': 'ПРАВКИ ПО ДОГОВОРУ',
           'PAY_OK': 'ОПЛАТА ОДОБРЕНА', 'PAY_FIX': 'ПРАВКИ ПО ОПЛАТЕ',
           'REQ_PAY': 'ЗАПРОС НА ОПЛАТУ', 'DONE': 'ПРОВЕДЕНО (ОПЛАЧЕНО)'
+          'TOGGLE_URGENCY': payload.isUrgent ? 'СНЯТ СТАТУС СРОЧНОСТИ' : 'УСТАНОВЛЕН СТАТУС: СРОЧНО'
       };
 
       const actionText = actionNames[actionType] || actionType;
@@ -528,9 +532,17 @@ export default function SED() {
 
          <div className="mt-auto space-y-2">
              {role === 'DIRECTOR' && (
-                 <div className="flex gap-2">
-                     <button onClick={()=>handleAction(req, 'APPROVE')} className="flex-1 bg-green-600 py-2 rounded text-xs font-bold text-white">ОДОБРИТЬ (1)</button>
-                     <button onClick={()=>handleAction(req, 'REJECT')} className="flex-1 bg-red-600 py-2 rounded text-xs font-bold text-white">ОТКАЗ (0)</button>
+                 <div className="flex flex-col gap-2">
+                     <button 
+                         onClick={() => handleAction(req, 'TOGGLE_URGENCY', { isUrgent: isUrgent })} 
+                         className={`w-full py-2 rounded text-xs font-bold transition flex items-center justify-center gap-1 border ${isUrgent ? 'bg-gray-800 border-gray-600 text-gray-400 hover:bg-gray-700' : 'bg-red-900/20 border-red-900 text-red-500 hover:bg-red-900/40'}`}
+                     >
+                         <Zap size={14} /> {isUrgent ? 'УБРАТЬ СРОЧНОСТЬ' : '⚡ СДЕЛАТЬ СРОЧНЫМ'}
+                     </button>
+                     <div className="flex gap-2">
+                         <button onClick={()=>handleAction(req, 'APPROVE')} className="flex-1 bg-green-600 py-2 rounded text-xs font-bold text-white">ОДОБРИТЬ (1)</button>
+                         <button onClick={()=>handleAction(req, 'REJECT')} className="flex-1 bg-red-600 py-2 rounded text-xs font-bold text-white">ОТКАЗ (0)</button>
+                     </div>
                  </div>
              )}
              {role.includes('SKLAD') && (
