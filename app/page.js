@@ -9,7 +9,7 @@ import {
   Monitor
 } from 'lucide-react';
 
-const APP_VERSION = "v11.05 (Dir+AI+Table)";
+const APP_VERSION = "v11.06 (modify AI block)";
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
@@ -549,7 +549,18 @@ export default function SED() {
                 </div>
              )}
          </div>
-
+          {/* === ОБЩИЙ БЛОК ИИ (Видят Фин. дир, Финансист, Бухгалтер и Аналитик) === */}
+         {req.ai_payment_terms && ['FIN_DIR', 'FINANCE', 'ACCOUNTANT', 'ANALYST'].includes(role) && (
+             <div className="mt-3 mb-2 bg-blue-900/20 border border-blue-800 p-3 rounded-xl text-xs shadow-inner">
+                 <div className="font-bold flex items-center gap-2 mb-1 text-blue-400 text-sm">
+                     <Monitor size={14}/> ИИ прочитал документ:
+                 </div>
+                 <div className="italic break-words text-blue-100">
+                     "{req.ai_payment_terms}"
+                 </div>
+             </div>
+         )}
+         {/* ==================================================================== */}
          <div className="mt-auto space-y-2">
              {role === 'DIRECTOR' && (
                  <div className="flex flex-col gap-2">
@@ -644,17 +655,7 @@ export default function SED() {
              )}
              {role === 'ACCOUNTANT' && !req.step_accountant_req && (
                  <div className="bg-[#0d1117] p-2 rounded border border-gray-700">
-                     {/* === БЛОК ИИ ДЛЯ БУХГАЛТЕРА === */}
-                     {req.ai_payment_terms && (
-                         <div className="mb-3 bg-blue-900/20 border border-blue-800 p-2 rounded text-xs text-blue-200">
-                             <div className="font-bold flex items-center gap-1 mb-1 text-blue-400">
-                                 <Monitor size={12}/> ИИ прочитал договор:
-                             </div>
-                             <div className="italic break-words">"{req.ai_payment_terms}"</div>
-                         </div>
-                     )}
-                     {/* =============================== */}
-
+                    
                      <div className="flex gap-2 mb-2">
                          <input type="number" placeholder="Сумма" className="w-1/2 bg-gray-800 p-1.5 rounded text-white text-xs" value={paySum} onChange={e=>setPaySum(e.target.value)}/>
                          <input type="date" className="w-1/2 bg-gray-800 p-1.5 rounded text-white text-xs" value={payDate} onChange={e=>setPayDate(e.target.value)}/>
