@@ -786,7 +786,6 @@ export default function SED() {
                   </div>
               )}
               {/* ======================= */}
-
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">
                 {requests.filter(req => {
                     if (!searchQuery) return true;
@@ -794,7 +793,6 @@ export default function SED() {
                     return JSON.stringify(req).toLowerCase().includes(searchQuery.toLowerCase());
                 }).map(req => (<RequestCard key={req.id} req={req} />))}
               </div>
-
             </> {/* <--- ВАЖНО: ЗАКРЫВАЮЩИЙ ПУСТОЙ ТЕГ */}
           )}
           {!loading && requests.length === 0 && <div className="text-center py-20 opacity-30 flex flex-col items-center"><Archive size={48} className="mb-2"/><div>Список пуст</div></div>}
