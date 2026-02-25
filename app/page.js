@@ -753,9 +753,7 @@ export default function SED() {
       </div>
       <div className="max-w-7xl mx-auto w-full p-4 flex-grow">
           {loading && requests.length === 0 ? (<div className="text-center py-20 text-gray-500 animate-pulse">Загрузка данных...</div>) : (
-            <> {/* <--- ВАЖНО: ОТКРЫВАЮЩИЙ ПУСТОЙ ТЕГ */}
-            
-              {/* === ДАШБОРД АНАЛИТИКА === */}
+            <>
               {role === 'ANALYST' && (
                   <div className="mb-6 bg-[#161b22] border border-gray-700 rounded-xl p-5 shadow-lg">
                       <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
@@ -793,7 +791,7 @@ export default function SED() {
                     return JSON.stringify(req).toLowerCase().includes(searchQuery.toLowerCase());
                 }).map(req => (<RequestCard key={req.id} req={req} />))}
               </div>
-            </> {/* <--- ВАЖНО: ЗАКРЫВАЮЩИЙ ПУСТОЙ ТЕГ */}
+            </>
           )}
           {!loading && requests.length === 0 && <div className="text-center py-20 opacity-30 flex flex-col items-center"><Archive size={48} className="mb-2"/><div>Список пуст</div></div>}
       </div>
