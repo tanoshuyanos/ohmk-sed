@@ -9,7 +9,7 @@ import {
   Monitor
 } from 'lucide-react';
 
-const APP_VERSION = "v11.06 (modify AI block)";
+const APP_VERSION = "v11.07 (Analytik)";
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
@@ -58,6 +58,7 @@ export default function SED() {
 
   const ROLES = {
     "2223": "DIRECTOR", 
+    "2008": "ANALYST",
     "0500": "KOMER", 
     "777": "FIN_DIR", 
     "333": "LAWYER", 
@@ -124,7 +125,10 @@ export default function SED() {
         // Загружаем всё
     } 
     else {
-        if (userRole === "DIRECTOR") query = query.is('step_director', null);
+        if (userRole === "ANALYST") {
+            // Аналитик грузит всё, никаких фильтров для дашборда
+        }
+        else if (userRole === "DIRECTOR") query = query.is('step_director', null);
         else if (userRole === "FIN_DIR") query = query.eq('step_komer', 1).is('step_findir', null);
         else if (userRole === "ECONOMIST") query = query.eq('step_director', 1);
         else if (userRole === "KOMER") query = query.eq('step_director', 1).is('step_komer', null); 
@@ -749,7 +753,38 @@ export default function SED() {
       </div>
       <div className="max-w-7xl mx-auto w-full p-4 flex-grow">
           {loading && requests.length === 0 ? (<div className="text-center py-20 text-gray-500 animate-pulse">Загрузка данных...</div>) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">
+            {/* === ДАШБОРД АНАЛИТИКА === */}
+              {role === 'ANALYST' && (
+                  <div className="mb-6 bg-[#161b22] border border-gray-700 rounded-xl p-5 shadow-lg">
+                      <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                          <BarChart3 className="text-blue-500"/> Сводный Дашборд
+                      </h2>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div className="bg-[#0d1117] border border-gray-800 p-4 rounded-lg">
+                              <div className="text-gray-500 text-[10px] font-bold uppercase mb-1">Всего заявок</div>
+                              <div className="text-2xl font-bold text-white">{requests.length}</div>
+                          </div>
+                          <div className="bg-[#0d1117] border border-blue-900/30 p-4 rounded-lg">
+                              <div className="text-blue-500 text-[10px] font-bold uppercase mb-1">В работе</div>
+                              <div className="text-2xl font-bold text-blue-400">{requests.filter(r => r.step_accountant_done !== 1).length}</div>
+                          </div>
+                          <div className="bg-[#0d1117] border border-green-900/30 p-4 rounded-lg">
+                              <div className="text-green-500 text-[10px] font-bold uppercase mb-1">Оплачено (Завершено)</div>
+                              <div className="text-2xl font-bold text-green-400">{requests.filter(r => r.step_accountant_done === 1).length}</div>
+                          </div>
+                          <div className="bg-green-900/20 border border-green-800 p-4 rounded-lg">
+                              <div className="text-green-400 text-[10px] font-bold uppercase mb-1">Общая сумма оплат</div>
+                              <div className="text-xl font-bold text-white">
+                                  {new Intl.NumberFormat('ru-RU').format(
+                                      requests.filter(r => r.step_accountant_done === 1).reduce((sum, req) => sum + (parseFloat(req.payment_sum) || 0), 0)
+                                  )} ₸
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+              )}
+              {/* ======================= */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">
             {requests.filter(req => {
                 if (!searchQuery) return true;
                 // Ищем везде (превращаем всю заявку в текст и ищем совпадение)
