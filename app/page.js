@@ -9,7 +9,7 @@ import {
   Monitor
 } from 'lucide-react';
 
-const APP_VERSION = "v11.08 (Analytik+Summ)";
+const APP_VERSION = "v12.01 (Telegram)";
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
@@ -49,7 +49,24 @@ const formatMoney = (val) => {
     return new Intl.NumberFormat('ru-RU').format(num);
 };
 // =================================
+// === НАСТРОЙКИ ТЕЛЕГРАМ БОТА ===
+const TELEGRAM_TOKEN = "8524066186:AAEmwX2NCf1P9hV1CMrOodRdvSwvDQ1VECc";
+const CHAT_ID = "6901541090"; // Личный чат с Аскаром
 
+const sendTelegramNotification = async (text) => {
+    if (!text) return;
+    const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
+    try {
+        await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: CHAT_ID, text: text, parse_mode: 'HTML' })
+        });
+    } catch (e) {
+        console.error("Ошибка Telegram:", e);
+    }
+};
+// ===============================
 export default function SED() {
   const [role, setRole] = useState(null);
   const [pin, setPin] = useState('');
@@ -317,8 +334,31 @@ export default function SED() {
       }];
 
       const { error } = await supabase.from('requests').update(updates).eq('id', req.id);
-      if (error) alert("Ошибка: " + error.message);
-      else fetchRequests(role, viewMode);
+      
+      if (error) {
+          alert("Ошибка: " + error.message);
+      } else {
+          fetchRequests(role, viewMode);
+
+          // === ОТПРАВКА УВЕДОМЛЕНИЯ В ТЕЛЕГРАМ ===
+          let tgMessage = "";
+          const reqTitle = req.request_type === 'service' ? (req.service_name || req.item_name) : req.item_name;
+          const itemNameSafe = reqTitle || "Без названия";
+
+          if (actionType === 'TOGGLE_URGENCY' && !payload.isUrgent) tgMessage = `⚡️ <b>СРОЧНО!</b>\nЗаявке #${req.req_number} (${itemNameSafe}) присвоен статус СРОЧНО!`;
+          else if (role === 'DIRECTOR' && actionType === 'APPROVE') tgMessage = `✅ <b>Директор одобрил</b> заявку #${req.req_number} (${itemNameSafe}).\n👉 Очередь Ком. Директора / Склада.`;
+          else if (role === 'KOMER' && actionType === 'SEND') tgMessage = `📝 <b>Ком. Директор обработал</b> заявку #${req.req_number}.\n👉 Ожидает Фин. Директора / Юриста.`;
+          else if (role === 'FIN_DIR' && actionType === 'APPROVE') tgMessage = `✅ <b>Фин. Директор утвердил</b> заявку #${req.req_number}.\n👉 Очередь Юриста.`;
+          else if (role === 'LAWYER' && actionType === 'SEND_DRAFT') tgMessage = `📄 <b>Юрист загрузил проект</b> договора по #${req.req_number}.\n👉 Финансист, проверьте условия!`;
+          else if (role === 'LAWYER' && actionType === 'SIGN') tgMessage = `✍️ <b>Договор подписан</b> (Заявка #${req.req_number}).\n👉 Передано Финансисту/Бухгалтеру.`;
+          else if (role === 'FINANCE' && actionType === 'REVIEW_OK') tgMessage = `🤝 <b>Финансист согласовал договор</b> по #${req.req_number}.\n👉 Ждем подписания Юристом.`;
+          else if (role === 'ACCOUNTANT' && actionType === 'REQ_PAY') tgMessage = `⏳ <b>Запрос на оплату</b> по #${req.req_number}.\nСумма: <b>${formatMoney(req.temp_pay_sum || req.payment_sum)} ₸</b>\n👉 Финансист, ждем апрув!`;
+          else if (role === 'FINANCE' && actionType === 'PAY_OK') tgMessage = `💰 <b>ОПЛАТА ОДОБРЕНА!</b>\nЗаявка #${req.req_number}.\n👉 Бухгалтер, можно проводить оплату!`;
+          else if (role === 'ACCOUNTANT' && actionType === 'DONE') tgMessage = `🏁 <b>ОПЛАЧЕНО И ЗАКРЫТО!</b>\nЗаявка #${req.req_number} (${itemNameSafe}) успешно проведена Бухгалтерией.`;
+
+          if (tgMessage !== "") sendTelegramNotification(tgMessage);
+          // ========================================
+      }
   };
 
   const handleUpload = async () => {
@@ -808,3 +848,18 @@ export default function SED() {
     </div>
   );
 }
+const sendTelegramNotification = async (text) => {
+    const TELEGRAM_TOKEN = "8524066186:AAEmwX2NCf1P9hV1CMrOodRdvSwvDQ1VECc";
+    const CHAT_ID = "-100XXXXXXXXX"; // <--- Сюда вставим твой ID чата
+    const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
+
+    try {
+        await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: CHAT_ID, text: text, parse_mode: 'HTML' })
+        });
+    } catch (e) {
+        console.error("Ошибка Telegram:", e);
+    }
+};
