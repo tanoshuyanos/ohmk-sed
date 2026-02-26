@@ -9,7 +9,7 @@ import {
   Monitor
 } from 'lucide-react';
 
-const APP_VERSION = "v12.10 (Final TG)";
+const APP_VERSION = "v12.11 (Final TG)";
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
@@ -66,9 +66,9 @@ const STAFF_IDS = {
   "DIRECTOR": ["6901541090", "618738455"], 
   "KOMER": "6322560743", 
   "FIN_DIR": "678077575",
-  "LAWYER": "ID_ТУТ",
+  "LAWYER": "6901541090",
   "FINANCE": "709540290",
-  "ACCOUNTANT": "ID_ТУТ"
+  "ACCOUNTANT": "6901541090"
 };
 
 const sendTelegramNotification = async (text, targetId = null) => {
