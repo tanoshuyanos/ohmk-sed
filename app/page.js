@@ -50,7 +50,7 @@ const formatMoney = (val) => {
 
 // === НАСТРОЙКИ ТЕЛЕГРАМ БОТА ===
 const TELEGRAM_TOKEN = "8524066186:AAEmwX2NCf1P9hV1CMrOodRdvSwvDQ1VECc";
-const CHAT_ID = "6901541090";
+const CHAT_ID = "-5169644099";
 
 const sendTelegramNotification = async (text) => {
     if (!text) return;
