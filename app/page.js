@@ -9,7 +9,7 @@ import {
   Monitor
 } from 'lucide-react';
 
-const APP_VERSION = "v12.08 (Valyuta+Komdir)";
+const APP_VERSION = "v12.10 (Final TG)";
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
@@ -61,19 +61,27 @@ const getCurrencySymbol = (currencyCode) => {
 // === НАСТРОЙКИ ТЕЛЕГРАМ БОТА ===
 const TELEGRAM_TOKEN = "8524066186:AAEmwX2NCf1P9hV1CMrOodRdvSwvDQ1VECc";
 const CHAT_ID = "-5169644099";
+// === ЛИЧНЫЕ ID СОТРУДНИКОВ ===
+const STAFF_IDS = {
+  "DIRECTOR": ["6901541090", "618738455"], 
+  "KOMER": "6322560743", 
+  "FIN_DIR": "678077575",
+  "LAWYER": "ID_ТУТ",
+  "FINANCE": "709540290",
+  "ACCOUNTANT": "ID_ТУТ"
+};
 
-const sendTelegramNotification = async (text) => {
+const sendTelegramNotification = async (text, targetId = null) => {
     if (!text) return;
+    const destination = targetId || CHAT_ID; // Если личный ID не передан, шлем в группу
     const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
     try {
         await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: CHAT_ID, text: text, parse_mode: 'HTML' })
+            body: JSON.stringify({ chat_id: destination, text: text, parse_mode: 'HTML' })
         });
-    } catch (e) {
-        console.error("Ошибка Telegram:", e);
-    }
+    } catch (e) { console.error("Ошибка Telegram:", e); }
 };
 // ===============================
 
@@ -334,17 +342,14 @@ export default function SED() {
 
       const actionText = actionNames[actionType] || actionType;
       const currentHistory = req.history || [];
-       
-      updates.history = [...currentHistory, {
+          updates.history = [...currentHistory, {
           role: role, 
           action: actionText, 
           date: new Date().toLocaleString("ru-RU"), 
           comment: comments || "" 
       }];
-
       const { error } = await supabase.from('requests').update(updates).eq('id', req.id);
-       
-      if (error) {
+       if (error) {
           alert("Ошибка: " + error.message);
       } else {
           fetchRequests(role, viewMode);
@@ -411,7 +416,49 @@ export default function SED() {
               tgMessage = `❌ <b>ОТКАЗ В СОГЛАСОВАНИИ: Финансист</b>\n${cardDetails}🚫 В договоре отказано.`;
           }
 
-          if (tgMessage !== "") sendTelegramNotification(tgMessage);
+          if (tgMessage !== "") {
+              // 1. Отправляем в общую группу (как и раньше)
+              sendTelegramNotification(tgMessage);
+
+              // 2. Определяем, кому именно сейчас летит заявка
+              let nextRole = "";
+              
+              // Движение вперед
+              if (role === 'DIRECTOR' && actionType === 'APPROVE') nextRole = "KOMER";
+              else if (role === 'KOMER' && actionType === 'SEND') nextRole = "FIN_DIR";
+              else if (role === 'FIN_DIR' && actionType === 'APPROVE') nextRole = "LAWYER";
+              else if (role === 'LAWYER' && actionType === 'SEND_DRAFT') nextRole = "FINANCE";
+              else if (role === 'FINANCE' && actionType === 'REVIEW_OK') nextRole = "LAWYER";
+              else if (role === 'LAWYER' && actionType === 'SIGN') nextRole = "ACCOUNTANT";
+              else if (role === 'ACCOUNTANT' && actionType === 'REQ_PAY') nextRole = "FINANCE";
+              else if (role === 'FINANCE' && actionType === 'PAY_OK') nextRole = "ACCOUNTANT";
+              
+              // Движение назад (Правки)
+              else if (actionType === 'FIX' || actionType === 'FIX_TO_KOMER') nextRole = "KOMER";
+              else if (actionType === 'REVIEW_FIX') nextRole = "LAWYER";
+              else if (actionType === 'PAY_FIX') nextRole = "ACCOUNTANT";
+
+              // 3. Если нашли ID (один или список) — дублируем в личку
+              const target = STAFF_IDS[nextRole];
+              if (target) {
+                  const personalMsg = `🔔 <b>ВАМ ЗАДАНИЕ:</b>\n` + tgMessage;
+                  
+                  if (Array.isArray(target)) {
+                      // Если это список (массив), бот напишет каждому из списка
+                      target.forEach(id => {
+                          // Чистая проверка на настоящий ID (больше 5 символов и не заглушка)
+                          if (id && id.length > 5 && !id.includes("ID_")) {
+                              sendTelegramNotification(personalMsg, id);
+                          }
+                      });
+                  } else {
+                      // Если это один человек (строка)
+                      if (target && target.length > 5 && !target.includes("ID_")) {
+                          sendTelegramNotification(personalMsg, target);
+                      }
+                  }
+              }
+          }
           // =========================================================
       }
   };
