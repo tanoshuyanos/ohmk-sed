@@ -9,7 +9,7 @@ import {
   Monitor, PieChart, ShoppingCart, TrendingUp
 } from 'lucide-react';
 
-const APP_VERSION = "v12.12 (Pro Analytics Dashboard)";
+const APP_VERSION = "v12.12 (FIN_DIR Dashboard)";
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
@@ -68,9 +68,9 @@ const STAFF_IDS = {
   "DIRECTOR": ["6901541090", "618738455"], 
   "KOMER": "6322560743", 
   "FIN_DIR": "678077575",
-  "LAWYER": "ID_ТУТ",
+  "LAWYER": "6901541090",
   "FINANCE": "709540290",
-  "ACCOUNTANT": "ID_ТУТ"
+  "ACCOUNTANT": "6901541090"
 };
 
 const sendTelegramNotification = async (text, targetId = null) => {
@@ -91,6 +91,7 @@ export default function SED() {
   const [pin, setPin] = useState('');
   const [loading, setLoading] = useState(false);
   const [requests, setRequests] = useState([]);
+  const [allRequests, setAllRequests] = useState([]); // Стейт для полной базы Дашборда
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState('active'); 
    
@@ -164,6 +165,13 @@ export default function SED() {
 
   const fetchRequests = async (userRole, mode) => {
     setLoading(true);
+
+    // === ГРУЗИМ ВСЮ БАЗУ ДЛЯ ДАШБОРДА (Аналитик и Фин.дир) ===
+    if (['ANALYST', 'FIN_DIR'].includes(userRole)) {
+        const { data: fullDB } = await supabase.from('requests').select('*').order('req_number', { ascending: false });
+        setAllRequests(fullDB || []);
+    }
+
     let query = supabase.from('requests').select('*').order('req_number', { ascending: false }); 
 
     if (mode === 'history') {
@@ -218,26 +226,27 @@ export default function SED() {
     window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&dates=${dateStr}/${dateStr}`, '_blank');
   };
 
-  // === ВЫЧИСЛЕНИЕ АНАЛИТИКИ (УМНЫЙ ДАШБОРД) ===
+  // === ВЫЧИСЛЕНИЕ АНАЛИТИКИ НА ОСНОВЕ ALL_REQUESTS ===
   const analyticsData = useMemo(() => {
       let sellers = {};
       let items = {};
       let categories = {};
 
-      requests.forEach(req => {
+      // Берем все заявки, чтобы у ФинДира была полная картина
+      const sourceData = allRequests.length > 0 ? allRequests : requests;
+
+      sourceData.forEach(req => {
           const seller = req.legal_info?.seller?.trim();
           const isPaid = req.step_accountant_done === 1;
           const isKZT = !req.legal_info?.currency || req.legal_info?.currency === 'KZT';
           const paySum = parseFloat(req.payment_sum) || 0;
 
-          // Подсчет контрагентов
           if (seller && seller !== "") {
               if (!sellers[seller]) sellers[seller] = { count: 0, sumKzt: 0 };
               sellers[seller].count += 1;
               if (isPaid && isKZT) sellers[seller].sumKzt += paySum;
           }
 
-          // Подсчет популярных товаров
           const item = req.request_type === 'service' ? (req.service_name || req.item_name) : req.item_name;
           if (item) {
               const cleanItem = item.length > 35 ? item.substring(0, 35) + '...' : item;
@@ -245,24 +254,20 @@ export default function SED() {
               items[cleanItem].count += 1;
           }
 
-          // Подсчет по категориям
           const cat = req.cost_category || 'Без категории';
           if (!categories[cat]) categories[cat] = { count: 0, sumKzt: 0 };
           categories[cat].count += 1;
           if (isPaid && isKZT) categories[cat].sumKzt += paySum;
       });
 
-      // Сортировка (Топ 5)
       return {
           topSellers: Object.entries(sellers).map(([n, d]) => ({name: n, ...d})).sort((a, b) => b.sumKzt - a.sumKzt).slice(0, 5),
           topItems: Object.entries(items).map(([n, d]) => ({name: n, ...d})).sort((a, b) => b.count - a.count).slice(0, 5),
           topCategories: Object.entries(categories).map(([n, d]) => ({name: n, ...d})).sort((a, b) => b.sumKzt - a.sumKzt).slice(0, 5)
       };
-  }, [requests]);
-  // ===========================================
+  }, [allRequests, requests]);
 
   const handleAction = async (req, actionType, payload = {}) => {
-      // ПРОВЕРКИ
       if (payload.require_draft && !req.draft_url) return alert("Загрузите проект!");
       if (payload.require_scan && !req.contract_url) return alert("Загрузите скан!");
       if (payload.require_contract_sum && !req.temp_contract_sum) return alert("Укажите сумму договора!");
@@ -348,7 +353,6 @@ export default function SED() {
               if (req.temp_pay_date) updates.payment_date = req.temp_pay_date;
               updates.fix_comment = null;
 
-              // === ОТПРАВКА ДАННЫХ В НОВУЮ ТАБЛИЦУ ===
             fetch(STAND_URL, {
                 method: 'POST', mode: 'no-cors',
                 headers: { 'Content-Type': 'application/json' },
@@ -362,7 +366,6 @@ export default function SED() {
                     payDate: req.temp_pay_date 
                 })
             }).catch(e => console.error("Ошибка отправки в реестр:", e));
-              // =======================================
           }
           if (actionType === 'DONE') {
               updates.step_accountant_done = 1; updates.status = "ОПЛАЧЕНО";
@@ -398,16 +401,12 @@ export default function SED() {
       } else {
           fetchRequests(role, viewMode);
 
-          // === ОТПРАВКА УВЕДОМЛЕНИЯ В ТЕЛЕГРАМ (ПРО-КАРТОЧКА + ОТКАЗЫ) ===
           const reqTitle = req.request_type === 'service' ? (req.service_name || req.item_name) : req.item_name;
           const itemNameSafe = reqTitle || "Без названия";
           const initiatorSafe = req.initiator || "Не указан";
           const sumSafe = req.temp_pay_sum || req.payment_sum || req.temp_contract_sum || req.contract_sum;
-          
-          // Вытаскиваем комментарий с причиной возврата (если он есть)
           const fixReason = updates.fix_comment || comments || "Причина не указана";
 
-          // Собираем тело карточки
           let cardDetails = `<blockquote>`;
           cardDetails += `🔹 <b>Заявка:</b> #${req.req_number}\n`;
           cardDetails += `📦 <b>Предмет:</b> ${itemNameSafe}\n`;
@@ -418,7 +417,6 @@ export default function SED() {
 
           let tgMessage = "";
 
-          // --- 🟢 ДВИЖЕНИЕ ВПЕРЕД ---
           if (actionType === 'TOGGLE_URGENCY' && !payload.isUrgent) {
               tgMessage = `⚡️ <b>СТАТУС ОБНОВЛЕН: СРОЧНО!</b>\n${cardDetails}👉 <i>Просьба ускорить обработку по цепочке.</i>`;
           } else if (role === 'DIRECTOR' && actionType === 'APPROVE') {
@@ -440,8 +438,6 @@ export default function SED() {
           } else if (role === 'ACCOUNTANT' && actionType === 'DONE') {
               tgMessage = `🏁 <b>УСПЕШНО ОПЛАЧЕНО И ЗАКРЫТО</b>\n${cardDetails}🎉 Процесс по заявке полностью завершен.`;
           }
-          
-          // --- 🔴 ВОЗВРАТЫ И ОТКАЗЫ (ДВИЖЕНИЕ НАЗАД) ---
           else if (role === 'DIRECTOR' && actionType === 'REJECT') {
               tgMessage = `❌ <b>ОТКАЗ: Директор</b>\n${cardDetails}🚫 Заявка отклонена и заморожена.`;
           } else if (role === 'KOMER' && actionType === 'REJECT') {
@@ -461,13 +457,9 @@ export default function SED() {
           }
 
           if (tgMessage !== "") {
-              // 1. Отправляем в общую группу (как и раньше)
               sendTelegramNotification(tgMessage);
-
-              // 2. Определяем, кому именно сейчас летит заявка
               let nextRole = "";
               
-              // Движение вперед
               if (role === 'DIRECTOR' && actionType === 'APPROVE') nextRole = "KOMER";
               else if (role === 'KOMER' && actionType === 'SEND') nextRole = "FIN_DIR";
               else if (role === 'FIN_DIR' && actionType === 'APPROVE') nextRole = "LAWYER";
@@ -477,16 +469,13 @@ export default function SED() {
               else if (role === 'ACCOUNTANT' && actionType === 'REQ_PAY') nextRole = "FINANCE";
               else if (role === 'FINANCE' && actionType === 'PAY_OK') nextRole = "ACCOUNTANT";
               
-              // Движение назад (Правки)
               else if (actionType === 'FIX' || actionType === 'FIX_TO_KOMER') nextRole = "KOMER";
               else if (actionType === 'REVIEW_FIX') nextRole = "LAWYER";
               else if (actionType === 'PAY_FIX') nextRole = "ACCOUNTANT";
 
-              // 3. Если нашли ID (один или список) — дублируем в личку
               const target = STAFF_IDS[nextRole];
               if (target) {
                   const personalMsg = `🔔 <b>ВАМ ЗАДАНИЕ:</b>\n` + tgMessage;
-                  
                   if (Array.isArray(target)) {
                       target.forEach(id => {
                           if (id && id.length > 5 && !id.includes("ID_")) {
@@ -500,7 +489,6 @@ export default function SED() {
                   }
               }
           }
-          // =========================================================
       }
   };
 
@@ -516,30 +504,23 @@ export default function SED() {
       reader.onload = async function() {
           try {
               await fetch(STAND_URL, {
-                  method: 'POST', 
-                  mode: 'no-cors', 
+                  method: 'POST', mode: 'no-cors', 
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ 
-                      file: reader.result, 
-                      fileName: file.name, 
-                      reqNum: modal.req.req_number, 
-                      reqId: modal.req.id, 
+                      file: reader.result, fileName: file.name, 
+                      reqNum: modal.req.req_number, reqId: modal.req.id, 
                       contractNum: document.getElementById('contract-num')?.value, 
                       type: modal.type 
                   })
               });
-
               setUploadStatus('success');
-               
               setTimeout(async () => { 
                   setModal({ open: false, req: null, type: '' }); 
                   setUploadStatus(''); 
                   fetchRequests(role, viewMode); 
               }, 3000); 
-               
           } catch (e) { 
-              setUploadStatus('error'); 
-              alert("Ошибка отправки: " + e.message); 
+              setUploadStatus('error'); alert("Ошибка отправки: " + e.message); 
           }
       };
   };
@@ -585,7 +566,6 @@ export default function SED() {
 
         if (files.length > 0) {
             setIsUploading(true);
-            
             const filePromises = Array.from(files).map(file => {
                 return new Promise((resolve) => {
                     const reader = new FileReader();
@@ -593,18 +573,12 @@ export default function SED() {
                     reader.onload = () => resolve({ fileBase64: reader.result, fileName: file.name });
                 });
             });
-            
             const filesData = await Promise.all(filePromises);
 
             fetch(STAND_URL, {
                 method: 'POST', mode: 'no-cors', 
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    files: filesData, 
-                    reqNum: req.req_number, 
-                    reqId: req.id, 
-                    type: 'INVOICE_MULTIPLE' 
-                })
+                body: JSON.stringify({ files: filesData, reqNum: req.req_number, reqId: req.id, type: 'INVOICE_MULTIPLE' })
             });
             
             setTimeout(() => {
@@ -641,11 +615,7 @@ export default function SED() {
             <div><h3 className="text-xl font-bold text-white">#{req.req_number}</h3><div className="text-xs text-gray-500">{safeDate(req.created_at)}</div></div>
             <div className="flex items-center gap-2">
                 {isUrgent && <div className="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded animate-pulse font-bold">СРОЧНО</div>}
-                <button 
-                    onClick={() => setHistoryModal({open: true, req: req})} 
-                    className="text-gray-400 hover:text-blue-400 bg-gray-800 hover:bg-gray-700 p-1.5 rounded border border-gray-700 hover:border-blue-500 transition shadow-sm"
-                    title="История статусов"
-                >
+                <button onClick={() => setHistoryModal({open: true, req: req})} className="text-gray-400 hover:text-blue-400 bg-gray-800 hover:bg-gray-700 p-1.5 rounded border border-gray-700 hover:border-blue-500 transition shadow-sm" title="История статусов">
                     <History size={16} />
                 </button>
             </div>
@@ -661,10 +631,7 @@ export default function SED() {
              {!isService && req.quantity && (
                  <div className="flex items-start gap-3 mt-2 bg-[#0d1117] p-2 rounded border border-gray-700">
                     <div className="bg-blue-900/20 p-2 rounded text-blue-400 mt-0.5"><Package size={18}/></div>
-                    <div className="flex flex-col">
-                        <span className="text-[10px] text-gray-500 font-bold uppercase">Количество (Заявка)</span>
-                        <span className="text-sm text-white font-mono break-words whitespace-pre-wrap">{req.quantity}</span>
-                    </div>
+                    <div className="flex flex-col"><span className="text-[10px] text-gray-500 font-bold uppercase">Количество (Заявка)</span><span className="text-sm text-white font-mono break-words whitespace-pre-wrap">{req.quantity}</span></div>
                  </div>
              )}
 
@@ -681,9 +648,7 @@ export default function SED() {
 
              {req.legal_info && (
                  <div className="mt-3 bg-[#0d1117] border border-gray-700 p-3 rounded text-[11px] leading-relaxed">
-                     <div className="text-blue-400 font-bold uppercase mb-2 flex items-center gap-2 pb-1 border-b border-gray-800">
-                         <FileText size={14}/> Протокол согласования
-                     </div>
+                     <div className="text-blue-400 font-bold uppercase mb-2 flex items-center gap-2 pb-1 border-b border-gray-800"><FileText size={14}/> Протокол согласования</div>
                      <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                          <div><span className="text-gray-500 block">Продавец</span><span className="text-white font-medium">{req.legal_info.seller}</span></div>
                          <div><span className="text-gray-500 block">Покупатель</span><span className="text-white">{req.legal_info.buyer}</span></div>
@@ -697,10 +662,7 @@ export default function SED() {
                          <div><span className="text-gray-500 block">Место</span><span className="text-white truncate">{req.legal_info.delivery_place}</span></div>
                          <div><span className="text-gray-500 block">Гарантия</span><span className="text-white">{req.legal_info.warranty}</span></div>
                          <div><span className="text-gray-500 block">Качество</span><span className="text-white">{req.legal_info.quality}</span></div>
-                         <div className="col-span-2 mt-1 pt-1 border-t border-gray-800 flex justify-between items-center">
-                             <span className="text-gray-500">Инициатор:</span>
-                             <span className="text-gray-400">{req.legal_info.initiator}</span>
-                         </div>
+                         <div className="col-span-2 mt-1 pt-1 border-t border-gray-800 flex justify-between items-center"><span className="text-gray-500">Инициатор:</span><span className="text-gray-400">{req.legal_info.initiator}</span></div>
                      </div>
                  </div>
              )}
@@ -715,9 +677,7 @@ export default function SED() {
              )}
 
              {!isService && req.purpose && (
-                  <div className="bg-[#0d1117] p-2 rounded text-xs text-gray-300 italic mt-2 border-l-2 border-gray-600 whitespace-pre-wrap break-words">
-                      "{req.purpose}"
-                  </div>
+                  <div className="bg-[#0d1117] p-2 rounded text-xs text-gray-300 italic mt-2 border-l-2 border-gray-600 whitespace-pre-wrap break-words">"{req.purpose}"</div>
              )}
 
              <div className="flex flex-wrap gap-2 mt-2">
@@ -725,11 +685,8 @@ export default function SED() {
                  {req.draft_url && <a href={req.draft_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-yellow-400 text-xs hover:text-yellow-300 border border-yellow-900/30 p-1.5 rounded bg-yellow-900/10"><FileSignature size={12}/> <span>Проект</span></a>}
                  {req.attachment_goods_url && <a href={req.attachment_goods_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-purple-400 text-xs hover:text-purple-300 border border-purple-900/30 p-1.5 rounded bg-purple-900/10"><Paperclip size={12}/> <span>{isService ? "ТЗ / Доп. файл" : "Фото"}</span></a>}
                  {req.contract_url && <a href={req.contract_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-green-400 text-xs hover:text-green-300 border border-green-900/30 p-1.5 rounded bg-green-900/10"><CheckCircle size={12}/> <span>Скан</span></a>}
-                 {/* БЛОК ВЫВОДА НЕСКОЛЬКИХ СЧЕТОВ */}
                  {req.invoice_url && req.invoice_url.split(',').map((url, index) => (
-                     <a key={index} href={url.trim()} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-cyan-400 text-xs hover:text-cyan-300 border border-cyan-900/30 p-1.5 rounded bg-cyan-900/10">
-                         <DollarSign size={12}/> <span>Счет {req.invoice_url.split(',').length > 1 ? index + 1 : ''}</span>
-                     </a>
+                     <a key={index} href={url.trim()} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-cyan-400 text-xs hover:text-cyan-300 border border-cyan-900/30 p-1.5 rounded bg-cyan-900/10"><DollarSign size={12}/> <span>Счет {req.invoice_url.split(',').length > 1 ? index + 1 : ''}</span></a>
                  ))}
              </div>
              
@@ -748,25 +705,18 @@ export default function SED() {
                 </div>
              )}
          </div>
-          {/* === ОБЩИЙ БЛОК ИИ (Видят Фин. дир, Финансист, Бухгалтер и Аналитик) === */}
+
          {req.ai_payment_terms && ['FIN_DIR', 'FINANCE', 'ACCOUNTANT', 'ANALYST'].includes(role) && (
              <div className="mt-3 mb-2 bg-blue-900/20 border border-blue-800 p-3 rounded-xl text-xs shadow-inner">
-                 <div className="font-bold flex items-center gap-2 mb-1 text-blue-400 text-sm">
-                     <Monitor size={14}/> ИИ прочитал документ:
-                 </div>
-                 <div className="italic break-words text-blue-100">
-                     "{req.ai_payment_terms}"
-                 </div>
+                 <div className="font-bold flex items-center gap-2 mb-1 text-blue-400 text-sm"><Monitor size={14}/> ИИ прочитал документ:</div>
+                 <div className="italic break-words text-blue-100">"{req.ai_payment_terms}"</div>
              </div>
          )}
-         {/* ==================================================================== */}
+         
          <div className="mt-auto space-y-2">
              {role === 'DIRECTOR' && (
                  <div className="flex flex-col gap-2">
-                     <button 
-                         onClick={() => handleAction(req, 'TOGGLE_URGENCY', { isUrgent: isUrgent })} 
-                         className={`w-full py-2 rounded text-xs font-bold transition flex items-center justify-center gap-1 border ${isUrgent ? 'bg-gray-800 border-gray-600 text-gray-400 hover:bg-gray-700' : 'bg-red-900/20 border-red-900 text-red-500 hover:bg-red-900/40'}`}
-                     >
+                     <button onClick={() => handleAction(req, 'TOGGLE_URGENCY', { isUrgent: isUrgent })} className={`w-full py-2 rounded text-xs font-bold transition flex items-center justify-center gap-1 border ${isUrgent ? 'bg-gray-800 border-gray-600 text-gray-400 hover:bg-gray-700' : 'bg-red-900/20 border-red-900 text-red-500 hover:bg-red-900/40'}`}>
                          <Zap size={14} /> {isUrgent ? 'УБРАТЬ СРОЧНОСТЬ' : '⚡ СДЕЛАТЬ СРОЧНЫМ'}
                      </button>
                      <div className="flex gap-2">
@@ -793,38 +743,15 @@ export default function SED() {
                          <div><span className="text-gray-500 text-[9px]">Валюта</span><select className="w-full bg-gray-900 border border-gray-600 p-1 rounded text-white text-xs" value={formData.currency || 'KZT'} onChange={e=>setFormData({...formData, currency: e.target.value})}><option value="KZT">Тенге (KZT)</option><option value="RUB">Рубли (RUB)</option><option value="USD">Доллары (USD)</option><option value="EUR">Евро (EUR)</option><option value="CNY">Юани (CNY)</option></select></div>
                          <div><span className="text-gray-500 text-[9px]">НДС</span><select className="w-full bg-gray-900 border border-gray-600 p-1 rounded text-white text-xs" value={formData.vat} onChange={e=>setFormData({...formData, vat: e.target.value})}><option>с НДС</option><option>без НДС</option></select></div>
                      </div>
-                     {/* === УМНЫЙ БЛОК ОПЛАТЫ === */}
                      <div>
                          <span className="text-gray-500 text-[9px]">Порядок оплаты</span>
                          {isCustomPayment ? (
                              <div className="flex gap-1">
-                                 <input 
-                                     type="text" 
-                                     className="w-full bg-gray-900 border border-blue-600 p-1.5 rounded text-white text-xs" 
-                                     placeholder="Например: 20% аванс, 80% по факту" 
-                                     value={formData.payment_terms} 
-                                     onChange={e => setFormData({...formData, payment_terms: e.target.value})}
-                                     autoFocus
-                                 />
-                                 <button 
-                                     onClick={() => { setIsCustomPayment(false); setFormData({...formData, payment_terms: 'Постоплата 100%'}); }} 
-                                     className="bg-gray-700 hover:bg-red-600 px-2 rounded text-white transition"
-                                     title="Вернуться к списку"
-                                 >✕</button>
+                                 <input type="text" className="w-full bg-gray-900 border border-blue-600 p-1.5 rounded text-white text-xs" placeholder="Например: 20% аванс, 80% по факту" value={formData.payment_terms} onChange={e => setFormData({...formData, payment_terms: e.target.value})} autoFocus />
+                                 <button onClick={() => { setIsCustomPayment(false); setFormData({...formData, payment_terms: 'Постоплата 100%'}); }} className="bg-gray-700 hover:bg-red-600 px-2 rounded text-white transition" title="Вернуться к списку">✕</button>
                              </div>
                          ) : (
-                             <select 
-                                 className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" 
-                                 value={formData.payment_terms} 
-                                 onChange={e => {
-                                     if (e.target.value === 'custom') {
-                                         setIsCustomPayment(true);
-                                         setFormData({...formData, payment_terms: ''});
-                                     } else {
-                                         setFormData({...formData, payment_terms: e.target.value});
-                                     }
-                                 }}
-                             >
+                             <select className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.payment_terms} onChange={e => { if (e.target.value === 'custom') { setIsCustomPayment(true); setFormData({...formData, payment_terms: ''}); } else { setFormData({...formData, payment_terms: e.target.value}); } }}>
                                  <option value="Постоплата 100%">Постоплата 100%</option>
                                  <option value="Предоплата 100%">Предоплата 100%</option>
                                  <option value="Предоплата 30% / 70%">Предоплата 30% / 70%</option>
@@ -833,7 +760,6 @@ export default function SED() {
                              </select>
                          )}
                      </div>
-                     {/* ========================= */}
                      <div className="grid grid-cols-2 gap-2"><div><span className="text-gray-500 text-[9px]">Место поставки</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.delivery_place} onChange={e=>setFormData({...formData, delivery_place: e.target.value})}/></div><div><span className="text-gray-500 text-[9px]">Самовывоз?</span><select className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.pickup} onChange={e=>setFormData({...formData, pickup: e.target.value})}><option>Нет (Доставка)</option><option>Да (Самовывоз)</option></select></div></div>
                      <div className="grid grid-cols-2 gap-2"><div><span className="text-gray-500 text-[9px]">Срок поставки (Дата)</span><input type="date" className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.delivery_date} onChange={e=>setFormData({...formData, delivery_date: e.target.value})}/></div><div><span className="text-gray-500 text-[9px]">Гарантия</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.warranty} onChange={e=>setFormData({...formData, warranty: e.target.value})}/></div></div>
                      <div><span className="text-gray-500 text-[9px]">Качество товара</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.quality} onChange={e=>setFormData({...formData, quality: e.target.value})}/></div>
@@ -842,9 +768,7 @@ export default function SED() {
                      
                      {!req.invoice_url && (
                          <div className="bg-cyan-900/20 border border-cyan-800 p-2 rounded mt-2">
-                             <span className="text-cyan-400 font-bold text-[10px] uppercase mb-1 flex items-center gap-1">
-                                 <UploadCloud size={12}/> Прикрепить счет (Опционально)
-                             </span>
+                             <span className="text-cyan-400 font-bold text-[10px] uppercase mb-1 flex items-center gap-1"><UploadCloud size={12}/> Прикрепить счет (Опционально)</span>
                              <input type="file" multiple id={`invoice-file-${req.id}`} accept="image/*,.pdf,.doc,.docx" className="w-full text-xs text-gray-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-bold file:bg-cyan-700 file:text-white hover:file:bg-cyan-600 cursor-pointer"/>
                          </div>
                      )}
@@ -898,7 +822,6 @@ export default function SED() {
              )}
              {role === 'ACCOUNTANT' && !req.step_accountant_req && (
                  <div className="bg-[#0d1117] p-2 rounded border border-gray-700">
-                     
                      <div className="flex gap-2 mb-2">
                          <input type="number" placeholder="Сумма" className="w-1/2 bg-gray-800 p-1.5 rounded text-white text-xs" value={paySum} onChange={e=>setPaySum(e.target.value)}/>
                          <input type="date" className="w-1/2 bg-gray-800 p-1.5 rounded text-white text-xs" value={payDate} onChange={e=>setPayDate(e.target.value)}/>
@@ -933,12 +856,9 @@ export default function SED() {
             <button type="button" onClick={() => pinInputRef.current?.focus()} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-600 p-2"><Keyboard size={20}/></button>
         </div>
         <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl text-lg shadow-lg shadow-blue-900/20 transition transform active:scale-95">ВОЙТИ</button>
-        
-        {/* === ВОТ ТУТ КНОПКА ТАБЛО === */}
         <a href={STAND_SCRIPT_URL} target="_blank" rel="noreferrer" className="mt-4 w-full block text-center border border-gray-600 text-gray-400 hover:text-white hover:border-white py-3 rounded-xl transition flex items-center justify-center gap-2">
           <Monitor size={18}/> ОТКРЫТЬ ТАБЛО
         </a>
-
       </form>
       <div className="absolute bottom-5 text-gray-700 text-[10px]">{APP_VERSION}</div>
     </div>
@@ -994,30 +914,30 @@ export default function SED() {
           {loading && requests.length === 0 ? (<div className="text-center py-20 text-gray-500 animate-pulse">Загрузка данных...</div>) : (
             <> 
              
-              {/* === ДАШБОРД АНАЛИТИКА === */}
-              {role === 'ANALYST' && (
+              {/* === ДАШБОРД АНАЛИТИКА И ФИН.ДИРЕКТОРА === */}
+              {['ANALYST', 'FIN_DIR'].includes(role) && (
                   <div className="mb-6 bg-[#161b22] border border-gray-700 rounded-xl p-5 shadow-lg">
                       <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                          <BarChart3 className="text-blue-500"/> Сводный Дашборд
+                          <BarChart3 className="text-blue-500"/> Сводный Дашборд {role === 'FIN_DIR' ? '(Фин. Директор)' : ''}
                       </h2>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                           <div className="bg-[#0d1117] border border-gray-800 p-4 rounded-lg">
                               <div className="text-gray-500 text-[10px] font-bold uppercase mb-1">Всего заявок</div>
-                              <div className="text-2xl font-bold text-white">{requests.length}</div>
+                              <div className="text-2xl font-bold text-white">{(allRequests.length > 0 ? allRequests : requests).length}</div>
                           </div>
                           <div className="bg-[#0d1117] border border-blue-900/30 p-4 rounded-lg">
                               <div className="text-blue-500 text-[10px] font-bold uppercase mb-1">В работе</div>
-                              <div className="text-2xl font-bold text-blue-400">{requests.filter(r => r.step_accountant_done !== 1).length}</div>
+                              <div className="text-2xl font-bold text-blue-400">{(allRequests.length > 0 ? allRequests : requests).filter(r => r.step_accountant_done !== 1).length}</div>
                           </div>
                           <div className="bg-[#0d1117] border border-green-900/30 p-4 rounded-lg">
                               <div className="text-green-500 text-[10px] font-bold uppercase mb-1">Оплачено (Завершено)</div>
-                              <div className="text-2xl font-bold text-green-400">{requests.filter(r => r.step_accountant_done === 1).length}</div>
+                              <div className="text-2xl font-bold text-green-400">{(allRequests.length > 0 ? allRequests : requests).filter(r => r.step_accountant_done === 1).length}</div>
                           </div>
                           <div className="bg-green-900/20 border border-green-800 p-4 rounded-lg">
                               <div className="text-green-400 text-[10px] font-bold uppercase mb-1">Сумма оплат (KZT)</div>
                               <div className="text-xl font-bold text-white">
                                   {new Intl.NumberFormat('ru-RU').format(
-                                      requests
+                                      (allRequests.length > 0 ? allRequests : requests)
                                       .filter(r => r.step_accountant_done === 1 && (!r.legal_info?.currency || r.legal_info?.currency === 'KZT'))
                                       .reduce((sum, req) => sum + (parseFloat(req.payment_sum) || 0), 0)
                                   )} ₸
@@ -1025,14 +945,11 @@ export default function SED() {
                           </div>
                       </div>
 
-                      {/* НОВЫЙ БЛОК: ТАБЛИЦЫ АНАЛИТИКИ */}
+                      {/* ТАБЛИЦЫ АНАЛИТИКИ */}
                       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
-                          
                           {/* Топ Поставщики */}
                           <div className="bg-[#0d1117] border border-gray-800 rounded-lg p-4">
-                              <h3 className="text-gray-400 font-bold text-xs uppercase mb-3 flex items-center gap-2">
-                                  <Briefcase size={14}/> Топ-5 Контрагентов (KZT)
-                              </h3>
+                              <h3 className="text-gray-400 font-bold text-xs uppercase mb-3 flex items-center gap-2"><Briefcase size={14}/> Топ-5 Контрагентов (KZT)</h3>
                               <div className="space-y-2">
                                   {analyticsData.topSellers.map((s, i) => (
                                       <div key={i} className="flex justify-between items-center text-xs border-b border-gray-800 pb-1 last:border-0">
@@ -1045,12 +962,9 @@ export default function SED() {
                                   ))}
                               </div>
                           </div>
-
                           {/* Топ Категории */}
                           <div className="bg-[#0d1117] border border-gray-800 rounded-lg p-4">
-                              <h3 className="text-gray-400 font-bold text-xs uppercase mb-3 flex items-center gap-2">
-                                  <PieChart size={14}/> Затраты по категориям
-                              </h3>
+                              <h3 className="text-gray-400 font-bold text-xs uppercase mb-3 flex items-center gap-2"><PieChart size={14}/> Затраты по категориям</h3>
                               <div className="space-y-2">
                                   {analyticsData.topCategories.map((c, i) => (
                                       <div key={i} className="flex justify-between items-center text-xs border-b border-gray-800 pb-1 last:border-0">
@@ -1063,12 +977,9 @@ export default function SED() {
                                   ))}
                               </div>
                           </div>
-
                           {/* Самые частые товары */}
                           <div className="bg-[#0d1117] border border-gray-800 rounded-lg p-4">
-                              <h3 className="text-gray-400 font-bold text-xs uppercase mb-3 flex items-center gap-2">
-                                  <ShoppingCart size={14}/> Частые покупки
-                              </h3>
+                              <h3 className="text-gray-400 font-bold text-xs uppercase mb-3 flex items-center gap-2"><ShoppingCart size={14}/> Частые покупки</h3>
                               <div className="space-y-2">
                                   {analyticsData.topItems.map((item, i) => (
                                       <div key={i} className="flex justify-between items-center text-xs border-b border-gray-800 pb-1 last:border-0">
@@ -1078,9 +989,7 @@ export default function SED() {
                                   ))}
                               </div>
                           </div>
-
                       </div>
-                      {/* КОНЕЦ НОВОГО БЛОКА */}
                   </div>
               )}
               {/* ======================= */}
@@ -1088,7 +997,6 @@ export default function SED() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">
                 {requests.filter(req => {
                     if (!searchQuery) return true;
-                    // Ищем везде (превращаем всю заявку в текст и ищем совпадение)
                     return JSON.stringify(req).toLowerCase().includes(searchQuery.toLowerCase());
                 }).map(req => (<RequestCard key={req.id} req={req} />))}
               </div>
