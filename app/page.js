@@ -9,7 +9,7 @@ import {
   Monitor
 } from 'lucide-react';
 
-const APP_VERSION = "v12.01 (Telegram)";
+const APP_VERSION = "v12.02 (Telegram PRO)";
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
@@ -41,17 +41,16 @@ const safeDate = (dateString) => {
     }
 };
 
-// === ДОБАВЛЯЕМ ВОТ ЭТУ ФУНКЦИЮ ===
 const formatMoney = (val) => {
     if (!val) return '';
     const num = parseFloat(String(val).replace(/[^0-9.]/g, ''));
     if (isNaN(num)) return val;
     return new Intl.NumberFormat('ru-RU').format(num);
 };
-// =================================
+
 // === НАСТРОЙКИ ТЕЛЕГРАМ БОТА ===
 const TELEGRAM_TOKEN = "8524066186:AAEmwX2NCf1P9hV1CMrOodRdvSwvDQ1VECc";
-const CHAT_ID = "6901541090"; // Личный чат с Аскаром
+const CHAT_ID = "6901541090";
 
 const sendTelegramNotification = async (text) => {
     if (!text) return;
@@ -67,6 +66,7 @@ const sendTelegramNotification = async (text) => {
     }
 };
 // ===============================
+
 export default function SED() {
   const [role, setRole] = useState(null);
   const [pin, setPin] = useState('');
@@ -287,20 +287,19 @@ export default function SED() {
               updates.fix_comment = null;
 
               // === ОТПРАВКА ДАННЫХ В НОВУЮ ТАБЛИЦУ ===
-            console.log("ШПИОН - Отправляем условия:", req.ai_payment_terms); 
             fetch(STAND_URL, {
-    method: 'POST', mode: 'no-cors',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ 
-        type: 'FINANCE_REGISTRY', 
-        reqNum: req.req_number, 
-        itemName: req.request_type === 'service' ? (req.service_name || req.item_name) : req.item_name,
-        seller: req.legal_info?.seller || "Не указан",
-        paymentTerms: req.ai_payment_terms || req.legal_info?.payment_terms || "Не указаны", // <--- ОБНОВЛЕННАЯ СТРОКА
-        paySum: req.temp_pay_sum, 
-        payDate: req.temp_pay_date 
-    })
-}).catch(e => console.error("Ошибка отправки в реестр:", e));
+                method: 'POST', mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    type: 'FINANCE_REGISTRY', 
+                    reqNum: req.req_number, 
+                    itemName: req.request_type === 'service' ? (req.service_name || req.item_name) : req.item_name,
+                    seller: req.legal_info?.seller || "Не указан",
+                    paymentTerms: req.ai_payment_terms || req.legal_info?.payment_terms || "Не указаны",
+                    paySum: req.temp_pay_sum, 
+                    payDate: req.temp_pay_date 
+                })
+            }).catch(e => console.error("Ошибка отправки в реестр:", e));
               // =======================================
           }
           if (actionType === 'DONE') {
@@ -309,7 +308,7 @@ export default function SED() {
       }
 
       if (role !== 'ECONOMIST' && actionType !== 'TOGGLE_URGENCY') setRequests(prev => prev.filter(r => r.id !== req.id));
-      
+       
       const actionNames = {
           'APPROVE': 'ОДОБРЕНО', 'REJECT': 'ОТКАЗ / ОТМЕНА',
           'YES': 'ЕСТЬ НА СКЛАДЕ', 'NO': 'НЕТ НА СКЛАДЕ', 'PARTIAL': 'ЧАСТИЧНО НА СКЛАДЕ',
@@ -325,7 +324,7 @@ export default function SED() {
 
       const actionText = actionNames[actionType] || actionType;
       const currentHistory = req.history || [];
-      
+       
       updates.history = [...currentHistory, {
           role: role, 
           action: actionText, 
@@ -334,7 +333,7 @@ export default function SED() {
       }];
 
       const { error } = await supabase.from('requests').update(updates).eq('id', req.id);
-      
+       
       if (error) {
           alert("Ошибка: " + error.message);
       } else {
@@ -365,11 +364,11 @@ export default function SED() {
       const fileInput = document.getElementById('file-upload');
       if (!fileInput.files[0]) return alert("Выберите файл!");
       const file = fileInput.files[0];
-      
+       
       setUploadStatus('uploading');
       const reader = new FileReader();
       reader.readAsDataURL(file);
-      
+       
       reader.onload = async function() {
           try {
               await fetch(STAND_URL, {
@@ -387,13 +386,13 @@ export default function SED() {
               });
 
               setUploadStatus('success');
-              
+               
               setTimeout(async () => { 
                   setModal({ open: false, req: null, type: '' }); 
                   setUploadStatus(''); 
                   fetchRequests(role, viewMode); 
               }, 3000); 
-              
+               
           } catch (e) { 
               setUploadStatus('error'); 
               alert("Ошибка отправки: " + e.message); 
@@ -437,7 +436,6 @@ export default function SED() {
         if (files.length > 0) {
             setIsUploading(true);
             
-            // Читаем все выбранные файлы
             const filePromises = Array.from(files).map(file => {
                 return new Promise((resolve) => {
                     const reader = new FileReader();
@@ -448,7 +446,6 @@ export default function SED() {
             
             const filesData = await Promise.all(filePromises);
 
-            // Отправляем массив файлов в Гугл Скрипт (новый тип INVOICE_MULTIPLE)
             fetch(STAND_URL, {
                 method: 'POST', mode: 'no-cors', 
                 headers: { 'Content-Type': 'application/json' },
@@ -460,7 +457,6 @@ export default function SED() {
                 })
             });
             
-            // Даем чуть больше времени на загрузку пачки файлов
             setTimeout(() => {
                 handleAction(req, 'SEND', {require_form: true});
                 setIsUploading(false);
@@ -708,7 +704,7 @@ export default function SED() {
              )}
              {role === 'ACCOUNTANT' && !req.step_accountant_req && (
                  <div className="bg-[#0d1117] p-2 rounded border border-gray-700">
-                    
+                     
                      <div className="flex gap-2 mb-2">
                          <input type="number" placeholder="Сумма" className="w-1/2 bg-gray-800 p-1.5 rounded text-white text-xs" value={paySum} onChange={e=>setPaySum(e.target.value)}/>
                          <input type="date" className="w-1/2 bg-gray-800 p-1.5 rounded text-white text-xs" value={payDate} onChange={e=>setPayDate(e.target.value)}/>
@@ -802,7 +798,9 @@ export default function SED() {
       </div>
       <div className="max-w-7xl mx-auto w-full p-4 flex-grow">
           {loading && requests.length === 0 ? (<div className="text-center py-20 text-gray-500 animate-pulse">Загрузка данных...</div>) : (
-            <>
+            <> 
+             
+              {/* === ДАШБОРД АНАЛИТИКА === */}
               {role === 'ANALYST' && (
                   <div className="mb-6 bg-[#161b22] border border-gray-700 rounded-xl p-5 shadow-lg">
                       <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
@@ -833,6 +831,7 @@ export default function SED() {
                   </div>
               )}
               {/* ======================= */}
+
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">
                 {requests.filter(req => {
                     if (!searchQuery) return true;
@@ -840,6 +839,7 @@ export default function SED() {
                     return JSON.stringify(req).toLowerCase().includes(searchQuery.toLowerCase());
                 }).map(req => (<RequestCard key={req.id} req={req} />))}
               </div>
+
             </>
           )}
           {!loading && requests.length === 0 && <div className="text-center py-20 opacity-30 flex flex-col items-center"><Archive size={48} className="mb-2"/><div>Список пуст</div></div>}
@@ -848,18 +848,3 @@ export default function SED() {
     </div>
   );
 }
-const sendTelegramNotification = async (text) => {
-    const TELEGRAM_TOKEN = "8524066186:AAEmwX2NCf1P9hV1CMrOodRdvSwvDQ1VECc";
-    const CHAT_ID = "-100XXXXXXXXX"; // <--- Сюда вставим твой ID чата
-    const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
-
-    try {
-        await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: CHAT_ID, text: text, parse_mode: 'HTML' })
-        });
-    } catch (e) {
-        console.error("Ошибка Telegram:", e);
-    }
-};
