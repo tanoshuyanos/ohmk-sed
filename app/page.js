@@ -9,7 +9,7 @@ import {
   Monitor
 } from 'lucide-react';
 
-const APP_VERSION = "v12.05 (Telegram Cards)";
+const APP_VERSION = "v12.07 (Valyuta)";
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
@@ -47,7 +47,17 @@ const formatMoney = (val) => {
     if (isNaN(num)) return val;
     return new Intl.NumberFormat('ru-RU').format(num);
 };
-
+// === ФУНКЦИЯ ДЛЯ ВАЛЮТЫ ===
+const getCurrencySymbol = (currencyCode) => {
+    switch (currencyCode) {
+        case 'RUB': return '₽';
+        case 'USD': return '$';
+        case 'EUR': return '€';
+        case 'CNY': return '¥';
+        default: return '₸'; // По умолчанию всегда тенге
+    }
+};
+// ==========================
 // === НАСТРОЙКИ ТЕЛЕГРАМ БОТА ===
 const TELEGRAM_TOKEN = "8524066186:AAEmwX2NCf1P9hV1CMrOodRdvSwvDQ1VECc";
 const CHAT_ID = "-5169644099";
@@ -339,22 +349,27 @@ export default function SED() {
       } else {
           fetchRequests(role, viewMode);
 
-          // === ОТПРАВКА УВЕДОМЛЕНИЯ В ТЕЛЕГРАМ (ПРО-КАРТОЧКА) ===
+          // === ОТПРАВКА УВЕДОМЛЕНИЯ В ТЕЛЕГРАМ (ПРО-КАРТОЧКА + ОТКАЗЫ) ===
           const reqTitle = req.request_type === 'service' ? (req.service_name || req.item_name) : req.item_name;
           const itemNameSafe = reqTitle || "Без названия";
           const initiatorSafe = req.initiator || "Не указан";
           const sumSafe = req.temp_pay_sum || req.payment_sum || req.temp_contract_sum || req.contract_sum;
+          
+          // Вытаскиваем комментарий с причиной возврата (если он есть)
+          const fixReason = updates.fix_comment || comments || "Причина не указана";
 
-          // Собираем тело карточки (с вертикальной линией сбоку)
+          // Собираем тело карточки
           let cardDetails = `<blockquote>`;
           cardDetails += `🔹 <b>Заявка:</b> #${req.req_number}\n`;
           cardDetails += `📦 <b>Предмет:</b> ${itemNameSafe}\n`;
           cardDetails += `👤 <b>Инициатор:</b> ${initiatorSafe}`;
-          if (sumSafe) cardDetails += `\n💰 <b>Сумма:</b> ${formatMoney(sumSafe)} ₸`;
+          const currSym = getCurrencySymbol(req.legal_info?.currency);
+          if (sumSafe) cardDetails += `\n💰 <b>Сумма:</b> ${formatMoney(sumSafe)} ${currSym}`;
           cardDetails += `</blockquote>\n`;
 
           let tgMessage = "";
 
+          // --- 🟢 ДВИЖЕНИЕ ВПЕРЕД ---
           if (actionType === 'TOGGLE_URGENCY' && !payload.isUrgent) {
               tgMessage = `⚡️ <b>СТАТУС ОБНОВЛЕН: СРОЧНО!</b>\n${cardDetails}👉 <i>Просьба ускорить обработку по цепочке.</i>`;
           } else if (role === 'DIRECTOR' && actionType === 'APPROVE') {
@@ -375,6 +390,25 @@ export default function SED() {
               tgMessage = `💰 <b>ОПЛАТА ОДОБРЕНА: Финансист</b>\n${cardDetails}👉 <b>Очередь:</b> Бухгалтер (провести платеж)`;
           } else if (role === 'ACCOUNTANT' && actionType === 'DONE') {
               tgMessage = `🏁 <b>УСПЕШНО ОПЛАЧЕНО И ЗАКРЫТО</b>\n${cardDetails}🎉 Процесс по заявке полностью завершен.`;
+          }
+          
+          // --- 🔴 ВОЗВРАТЫ И ОТКАЗЫ (ДВИЖЕНИЕ НАЗАД) ---
+          else if (role === 'DIRECTOR' && actionType === 'REJECT') {
+              tgMessage = `❌ <b>ОТКАЗ: Директор</b>\n${cardDetails}🚫 Заявка отклонена и заморожена.`;
+          } else if (role === 'KOMER' && actionType === 'REJECT') {
+              tgMessage = `❌ <b>ОТМЕНЕНО: Ком. Директор</b>\n${cardDetails}💬 <b>Причина:</b> <i>${fixReason}</i>`;
+          } else if (role === 'FIN_DIR' && actionType === 'REJECT') {
+              tgMessage = `❌ <b>ОТКАЗ: Фин. Директор</b>\n${cardDetails}🚫 Заявка отклонена и заморожена.`;
+          } else if (role === 'FIN_DIR' && actionType === 'FIX') {
+              tgMessage = `⚠️ <b>ВОЗВРАТ НА ДОРАБОТКУ: Фин. Директор</b>\n${cardDetails}👉 <b>Вернулось к:</b> Ком. Директор\n💬 <b>Что исправить:</b> <i>${fixReason}</i>`;
+          } else if (role === 'LAWYER' && actionType === 'FIX_TO_KOMER') {
+              tgMessage = `⚠️ <b>ВОЗВРАТ КОМ. ДИРУ: Юрист</b>\n${cardDetails}👉 <b>Вернулось к:</b> Ком. Директор\n💬 <b>Что исправить:</b> <i>${fixReason}</i>`;
+          } else if (role === 'FINANCE' && actionType === 'REVIEW_FIX') {
+              tgMessage = `⚠️ <b>ПРАВКИ ПО ДОГОВОРУ: Финансист</b>\n${cardDetails}👉 <b>Вернулось к:</b> Юрист\n💬 <b>Что исправить:</b> <i>${fixReason}</i>`;
+          } else if (role === 'FINANCE' && actionType === 'PAY_FIX') {
+              tgMessage = `⚠️ <b>ПРАВКИ ПО ОПЛАТЕ: Финансист</b>\n${cardDetails}👉 <b>Вернулось к:</b> Бухгалтер\n💬 <b>Что исправить:</b> <i>${fixReason}</i>`;
+          } else if (role === 'FINANCE' && actionType === 'REJECT') {
+              tgMessage = `❌ <b>ОТКАЗ В СОГЛАСОВАНИИ: Финансист</b>\n${cardDetails}🚫 В договоре отказано.`;
           }
 
           if (tgMessage !== "") sendTelegramNotification(tgMessage);
@@ -430,7 +464,7 @@ export default function SED() {
         subject: isService ? (req.service_name || req.item_name) : req.item_name,
         qty: req.quantity || '1', price_unit: '', total: '', payment_terms: 'Постоплата 100%', 
         delivery_place: 'Склад Покупателя', pickup: 'Нет', delivery_date: '', quality: 'Новое', warranty: '12 месяцев',
-        initiator: req.initiator, vat: 'с НДС'
+        initiator: req.initiator, vat: 'с НДС', currency: 'KZT' // <--- ДОБАВИЛИ ВАЛЮТУ
     });
 
     const [contractSum, setContractSum] = useState(req.contract_sum || '');
@@ -560,9 +594,9 @@ export default function SED() {
                          <div><span className="text-gray-500 block">Продавец</span><span className="text-white font-medium">{req.legal_info.seller}</span></div>
                          <div><span className="text-gray-500 block">Покупатель</span><span className="text-white">{req.legal_info.buyer}</span></div>
                          <div className="col-span-2"><span className="text-gray-500 block">Предмет</span><span className="text-white italic">{req.legal_info.subject}</span></div>
-                         <div><span className="text-gray-500 block">Цена/ед</span><span className="text-white">{formatMoney(req.legal_info.price_unit)} ₸</span></div>
+                         <div><span className="text-gray-500 block">Цена/ед</span><span className="text-white">{formatMoney(req.legal_info.price_unit)} {getCurrencySymbol(req.legal_info.currency)}</span></div>
                          <div><span className="text-gray-500 block">Кол-во</span><span className="text-white">{req.legal_info.qty}</span></div>
-                         <div><span className="text-gray-500 block">ИТОГО</span><span className="text-green-400 font-bold text-sm">{formatMoney(req.legal_info.total)} ₸</span></div>
+                         <div><span className="text-gray-500 block">ИТОГО</span><span className="text-green-400 font-bold text-sm">{formatMoney(req.legal_info.total)} {getCurrencySymbol(req.legal_info.currency)}</span></div>
                          <div><span className="text-gray-500 block">НДС</span><span className="text-white">{req.legal_info.vat}</span></div>
                          <div className="col-span-2"><span className="text-gray-500 block">Условия оплаты</span><span className="text-white">{req.legal_info.payment_terms}</span></div>
                          <div><span className="text-gray-500 block">Поставка до</span><span className="text-white">{req.legal_info.delivery_date}</span></div>
@@ -660,7 +694,11 @@ export default function SED() {
                      <div className="text-blue-400 font-bold uppercase border-b border-gray-700 pb-1">ДАННЫЕ ДЛЯ ДОГОВОРА:</div>
                      <div className="grid grid-cols-2 gap-2"><div><span className="text-gray-500 text-[9px]">Продавец</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.seller} onChange={e=>setFormData({...formData, seller: e.target.value})}/></div><div><span className="text-gray-500 text-[9px]">Покупатель</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.buyer} onChange={e=>setFormData({...formData, buyer: e.target.value})}/></div></div>
                      <div><span className="text-gray-500 text-[9px]">Предмет договора</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white mb-2" value={formData.subject} onChange={e=>setFormData({...formData, subject: e.target.value})}/><div className="grid grid-cols-2 gap-2"><div><span className="text-gray-500 text-[9px]">Кол-во</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.qty} onChange={e=>setFormData({...formData, qty: e.target.value})}/></div><div><span className="text-gray-500 text-[9px]">Цена за ед.</span><input type="number" className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.price_unit} onChange={e=>setFormData({...formData, price_unit: e.target.value})}/></div></div></div>
-                     <div className="grid grid-cols-2 gap-2 bg-gray-800/50 p-2 rounded"><div><span className="text-gray-500 text-[9px]">ОБЩАЯ СТОИМОСТЬ</span><div className="text-green-400 font-bold">{formatMoney(formData.total)} ₸</div></div><div><span className="text-gray-500 text-[9px]">НДС</span><select className="w-full bg-gray-800 border border-gray-600 p-1 rounded text-white" value={formData.vat} onChange={e=>setFormData({...formData, vat: e.target.value})}><option>с НДС</option><option>без НДС</option></select></div></div>
+                     <div className="grid grid-cols-3 gap-2 bg-gray-800/50 p-2 rounded">
+                         <div><span className="text-gray-500 text-[9px]">ОБЩАЯ СТОИМОСТЬ</span><div className="text-green-400 font-bold">{formatMoney(formData.total)} {getCurrencySymbol(formData.currency)}</div></div>
+                         <div><span className="text-gray-500 text-[9px]">Валюта</span><select className="w-full bg-gray-900 border border-gray-600 p-1 rounded text-white text-xs" value={formData.currency || 'KZT'} onChange={e=>setFormData({...formData, currency: e.target.value})}><option value="KZT">Тенге (KZT)</option><option value="RUB">Рубли (RUB)</option><option value="USD">Доллары (USD)</option><option value="EUR">Евро (EUR)</option><option value="CNY">Юани (CNY)</option></select></div>
+                         <div><span className="text-gray-500 text-[9px]">НДС</span><select className="w-full bg-gray-900 border border-gray-600 p-1 rounded text-white text-xs" value={formData.vat} onChange={e=>setFormData({...formData, vat: e.target.value})}><option>с НДС</option><option>без НДС</option></select></div>
+                     </div>
                      <div><span className="text-gray-500 text-[9px]">Порядок оплаты</span><select className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.payment_terms} onChange={e=>setFormData({...formData, payment_terms: e.target.value})}><option>Постоплата 100%</option><option>Предоплата 100%</option><option>Предоплата 30% / 70%</option><option>Предоплата 50% / 50%</option></select></div>
                      <div className="grid grid-cols-2 gap-2"><div><span className="text-gray-500 text-[9px]">Место поставки</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.delivery_place} onChange={e=>setFormData({...formData, delivery_place: e.target.value})}/></div><div><span className="text-gray-500 text-[9px]">Самовывоз?</span><select className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.pickup} onChange={e=>setFormData({...formData, pickup: e.target.value})}><option>Нет (Доставка)</option><option>Да (Самовывоз)</option></select></div></div>
                      <div className="grid grid-cols-2 gap-2"><div><span className="text-gray-500 text-[9px]">Срок поставки (Дата)</span><input type="date" className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.delivery_date} onChange={e=>setFormData({...formData, delivery_date: e.target.value})}/></div><div><span className="text-gray-500 text-[9px]">Гарантия</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.warranty} onChange={e=>setFormData({...formData, warranty: e.target.value})}/></div></div>
@@ -717,7 +755,7 @@ export default function SED() {
              )}
              {role === 'FINANCE' && req.step_accountant_req === 1 && (
                  <div className="bg-purple-900/30 p-2 rounded border border-purple-600">
-                     <div className="text-white text-xs mb-1">Запрос на оплату: <b className="text-blue-400 text-sm">{formatMoney(req.payment_sum)} ₸</b> ({req.payment_date})</div>
+                     <div className="text-white text-xs mb-1">Запрос на оплату: <b className="text-blue-400 text-sm">{formatMoney(req.payment_sum)} {getCurrencySymbol(req.legal_info?.currency)}</b> ({req.payment_date})</div>
                      <div className="flex gap-2">
                          <button onClick={()=>handleAction(req, 'PAY_OK')} className="flex-[2] bg-green-600 py-2 rounded text-xs font-bold text-white">ОДОБРИТЬ (1)</button>
                          <button onClick={()=>handleAction(req, 'PAY_FIX')} className="flex-1 bg-orange-600 py-2 rounded text-xs font-bold text-white">ПРАВКИ</button>
@@ -842,10 +880,12 @@ export default function SED() {
                               <div className="text-2xl font-bold text-green-400">{requests.filter(r => r.step_accountant_done === 1).length}</div>
                           </div>
                           <div className="bg-green-900/20 border border-green-800 p-4 rounded-lg">
-                              <div className="text-green-400 text-[10px] font-bold uppercase mb-1">Общая сумма оплат</div>
+                              <div className="text-green-400 text-[10px] font-bold uppercase mb-1">Сумма оплат (KZT)</div>
                               <div className="text-xl font-bold text-white">
                                   {new Intl.NumberFormat('ru-RU').format(
-                                      requests.filter(r => r.step_accountant_done === 1).reduce((sum, req) => sum + (parseFloat(req.payment_sum) || 0), 0)
+                                      requests
+                                      .filter(r => r.step_accountant_done === 1 && (!r.legal_info?.currency || r.legal_info?.currency === 'KZT'))
+                                      .reduce((sum, req) => sum + (parseFloat(req.payment_sum) || 0), 0)
                                   )} ₸
                               </div>
                           </div>
