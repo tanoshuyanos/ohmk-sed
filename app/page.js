@@ -9,7 +9,7 @@ import {
   Monitor
 } from 'lucide-react';
 
-const APP_VERSION = "v12.07 (Valyuta)";
+const APP_VERSION = "v12.08 (Valyuta+Komdir)";
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
@@ -471,6 +471,13 @@ export default function SED() {
     const [paySum, setPaySum] = useState(req.payment_sum || '');
     const [payDate, setPayDate] = useState(req.payment_date || '');
     const [isUploading, setIsUploading] = useState(false); 
+    // === ЛОГИКА ДЛЯ РУЧНОГО ВВОДА ОПЛАТЫ ===
+    const standardPaymentTerms = ['Постоплата 100%', 'Предоплата 100%', 'Предоплата 30% / 70%', 'Предоплата 50% / 50%'];
+    const [isCustomPayment, setIsCustomPayment] = useState(() => {
+        const initialTerm = req.legal_info?.payment_terms || 'Постоплата 100%';
+        return !standardPaymentTerms.includes(initialTerm); // Если загружено что-то нестандартное, сразу показываем поле ввода
+    });
+    // =======================================
 
     useEffect(() => {
         if(formData.qty && formData.price_unit) {
@@ -699,7 +706,47 @@ export default function SED() {
                          <div><span className="text-gray-500 text-[9px]">Валюта</span><select className="w-full bg-gray-900 border border-gray-600 p-1 rounded text-white text-xs" value={formData.currency || 'KZT'} onChange={e=>setFormData({...formData, currency: e.target.value})}><option value="KZT">Тенге (KZT)</option><option value="RUB">Рубли (RUB)</option><option value="USD">Доллары (USD)</option><option value="EUR">Евро (EUR)</option><option value="CNY">Юани (CNY)</option></select></div>
                          <div><span className="text-gray-500 text-[9px]">НДС</span><select className="w-full bg-gray-900 border border-gray-600 p-1 rounded text-white text-xs" value={formData.vat} onChange={e=>setFormData({...formData, vat: e.target.value})}><option>с НДС</option><option>без НДС</option></select></div>
                      </div>
-                     <div><span className="text-gray-500 text-[9px]">Порядок оплаты</span><select className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.payment_terms} onChange={e=>setFormData({...formData, payment_terms: e.target.value})}><option>Постоплата 100%</option><option>Предоплата 100%</option><option>Предоплата 30% / 70%</option><option>Предоплата 50% / 50%</option></select></div>
+                     {/* === УМНЫЙ БЛОК ОПЛАТЫ === */}
+                     <div>
+                         <span className="text-gray-500 text-[9px]">Порядок оплаты</span>
+                         {isCustomPayment ? (
+                             <div className="flex gap-1">
+                                 <input 
+                                     type="text" 
+                                     className="w-full bg-gray-900 border border-blue-600 p-1.5 rounded text-white text-xs" 
+                                     placeholder="Например: 20% аванс, 80% по факту" 
+                                     value={formData.payment_terms} 
+                                     onChange={e => setFormData({...formData, payment_terms: e.target.value})}
+                                     autoFocus
+                                 />
+                                 <button 
+                                     onClick={() => { setIsCustomPayment(false); setFormData({...formData, payment_terms: 'Постоплата 100%'}); }} 
+                                     className="bg-gray-700 hover:bg-red-600 px-2 rounded text-white transition"
+                                     title="Вернуться к списку"
+                                 >✕</button>
+                             </div>
+                         ) : (
+                             <select 
+                                 className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" 
+                                 value={formData.payment_terms} 
+                                 onChange={e => {
+                                     if (e.target.value === 'custom') {
+                                         setIsCustomPayment(true);
+                                         setFormData({...formData, payment_terms: ''});
+                                     } else {
+                                         setFormData({...formData, payment_terms: e.target.value});
+                                     }
+                                 }}
+                             >
+                                 <option value="Постоплата 100%">Постоплата 100%</option>
+                                 <option value="Предоплата 100%">Предоплата 100%</option>
+                                 <option value="Предоплата 30% / 70%">Предоплата 30% / 70%</option>
+                                 <option value="Предоплата 50% / 50%">Предоплата 50% / 50%</option>
+                                 <option value="custom">✍️ Другое (ввести вручную)...</option>
+                             </select>
+                         )}
+                     </div>
+                     {/* ========================= */}
                      <div className="grid grid-cols-2 gap-2"><div><span className="text-gray-500 text-[9px]">Место поставки</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.delivery_place} onChange={e=>setFormData({...formData, delivery_place: e.target.value})}/></div><div><span className="text-gray-500 text-[9px]">Самовывоз?</span><select className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.pickup} onChange={e=>setFormData({...formData, pickup: e.target.value})}><option>Нет (Доставка)</option><option>Да (Самовывоз)</option></select></div></div>
                      <div className="grid grid-cols-2 gap-2"><div><span className="text-gray-500 text-[9px]">Срок поставки (Дата)</span><input type="date" className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.delivery_date} onChange={e=>setFormData({...formData, delivery_date: e.target.value})}/></div><div><span className="text-gray-500 text-[9px]">Гарантия</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.warranty} onChange={e=>setFormData({...formData, warranty: e.target.value})}/></div></div>
                      <div><span className="text-gray-500 text-[9px]">Качество товара</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.quality} onChange={e=>setFormData({...formData, quality: e.target.value})}/></div>
