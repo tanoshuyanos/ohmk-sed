@@ -1,15 +1,15 @@
 "use client";
-import { useState, useEffect, useRef } from 'react'; 
+import { useState, useEffect, useRef, useMemo } from 'react'; 
 import { createClient } from '@supabase/supabase-js';
 import { 
   RefreshCw, Archive, Zap, Search, FileText, CheckCircle, UploadCloud, X, Loader2, 
   ExternalLink, AlertTriangle, Table, Truck, Wrench, Info, DollarSign, Calendar, 
   MapPin, Eye, Clock, BarChart3, Phone, User, Factory, AlertCircle, Briefcase, FileSignature, 
   Package, Scale, ShieldCheck, Keyboard, History, GitMerge, Settings, ChevronRight, MessageCircle, Paperclip, Hash, CreditCard, Layers,
-  Monitor
+  Monitor, PieChart, ShoppingCart, TrendingUp
 } from 'lucide-react';
 
-const APP_VERSION = "v12.11 (Final TG)";
+const APP_VERSION = "v12.12 (Pro Analytics Dashboard)";
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
@@ -47,6 +47,7 @@ const formatMoney = (val) => {
     if (isNaN(num)) return val;
     return new Intl.NumberFormat('ru-RU').format(num);
 };
+
 // === ФУНКЦИЯ ДЛЯ ВАЛЮТЫ ===
 const getCurrencySymbol = (currencyCode) => {
     switch (currencyCode) {
@@ -57,18 +58,19 @@ const getCurrencySymbol = (currencyCode) => {
         default: return '₸'; // По умолчанию всегда тенге
     }
 };
-// ==========================
+
 // === НАСТРОЙКИ ТЕЛЕГРАМ БОТА ===
 const TELEGRAM_TOKEN = "8524066186:AAEmwX2NCf1P9hV1CMrOodRdvSwvDQ1VECc";
 const CHAT_ID = "-5169644099";
+
 // === ЛИЧНЫЕ ID СОТРУДНИКОВ ===
 const STAFF_IDS = {
   "DIRECTOR": ["6901541090", "618738455"], 
   "KOMER": "6322560743", 
   "FIN_DIR": "678077575",
-  "LAWYER": "6901541090",
+  "LAWYER": "ID_ТУТ",
   "FINANCE": "709540290",
-  "ACCOUNTANT": "6901541090"
+  "ACCOUNTANT": "ID_ТУТ"
 };
 
 const sendTelegramNotification = async (text, targetId = null) => {
@@ -83,7 +85,6 @@ const sendTelegramNotification = async (text, targetId = null) => {
         });
     } catch (e) { console.error("Ошибка Telegram:", e); }
 };
-// ===============================
 
 export default function SED() {
   const [role, setRole] = useState(null);
@@ -216,6 +217,49 @@ export default function SED() {
     const dateStr = req.payment_date ? req.payment_date.replace(/-/g, '') : '';
     window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&dates=${dateStr}/${dateStr}`, '_blank');
   };
+
+  // === ВЫЧИСЛЕНИЕ АНАЛИТИКИ (УМНЫЙ ДАШБОРД) ===
+  const analyticsData = useMemo(() => {
+      let sellers = {};
+      let items = {};
+      let categories = {};
+
+      requests.forEach(req => {
+          const seller = req.legal_info?.seller?.trim();
+          const isPaid = req.step_accountant_done === 1;
+          const isKZT = !req.legal_info?.currency || req.legal_info?.currency === 'KZT';
+          const paySum = parseFloat(req.payment_sum) || 0;
+
+          // Подсчет контрагентов
+          if (seller && seller !== "") {
+              if (!sellers[seller]) sellers[seller] = { count: 0, sumKzt: 0 };
+              sellers[seller].count += 1;
+              if (isPaid && isKZT) sellers[seller].sumKzt += paySum;
+          }
+
+          // Подсчет популярных товаров
+          const item = req.request_type === 'service' ? (req.service_name || req.item_name) : req.item_name;
+          if (item) {
+              const cleanItem = item.length > 35 ? item.substring(0, 35) + '...' : item;
+              if (!items[cleanItem]) items[cleanItem] = { count: 0 };
+              items[cleanItem].count += 1;
+          }
+
+          // Подсчет по категориям
+          const cat = req.cost_category || 'Без категории';
+          if (!categories[cat]) categories[cat] = { count: 0, sumKzt: 0 };
+          categories[cat].count += 1;
+          if (isPaid && isKZT) categories[cat].sumKzt += paySum;
+      });
+
+      // Сортировка (Топ 5)
+      return {
+          topSellers: Object.entries(sellers).map(([n, d]) => ({name: n, ...d})).sort((a, b) => b.sumKzt - a.sumKzt).slice(0, 5),
+          topItems: Object.entries(items).map(([n, d]) => ({name: n, ...d})).sort((a, b) => b.count - a.count).slice(0, 5),
+          topCategories: Object.entries(categories).map(([n, d]) => ({name: n, ...d})).sort((a, b) => b.sumKzt - a.sumKzt).slice(0, 5)
+      };
+  }, [requests]);
+  // ===========================================
 
   const handleAction = async (req, actionType, payload = {}) => {
       // ПРОВЕРКИ
@@ -444,15 +488,12 @@ export default function SED() {
                   const personalMsg = `🔔 <b>ВАМ ЗАДАНИЕ:</b>\n` + tgMessage;
                   
                   if (Array.isArray(target)) {
-                      // Если это список (массив), бот напишет каждому из списка
                       target.forEach(id => {
-                          // Чистая проверка на настоящий ID (больше 5 символов и не заглушка)
                           if (id && id.length > 5 && !id.includes("ID_")) {
                               sendTelegramNotification(personalMsg, id);
                           }
                       });
                   } else {
-                      // Если это один человек (строка)
                       if (target && target.length > 5 && !target.includes("ID_")) {
                           sendTelegramNotification(personalMsg, target);
                       }
@@ -511,24 +552,23 @@ export default function SED() {
         subject: isService ? (req.service_name || req.item_name) : req.item_name,
         qty: req.quantity || '1', price_unit: '', total: '', payment_terms: 'Постоплата 100%', 
         delivery_place: 'Склад Покупателя', pickup: 'Нет', delivery_date: '', quality: 'Новое', warranty: '12 месяцев',
-        initiator: req.initiator, vat: 'с НДС', currency: 'KZT' // <--- ДОБАВИЛИ ВАЛЮТУ
+        initiator: req.initiator, vat: 'с НДС', currency: 'KZT' 
     });
 
     const [contractSum, setContractSum] = useState(req.contract_sum || '');
     const [paySum, setPaySum] = useState(req.payment_sum || '');
     const [payDate, setPayDate] = useState(req.payment_date || '');
     const [isUploading, setIsUploading] = useState(false); 
-    // === ЛОГИКА ДЛЯ РУЧНОГО ВВОДА ОПЛАТЫ ===
+    
     const standardPaymentTerms = ['Постоплата 100%', 'Предоплата 100%', 'Предоплата 30% / 70%', 'Предоплата 50% / 50%'];
     const [isCustomPayment, setIsCustomPayment] = useState(() => {
         const initialTerm = req.legal_info?.payment_terms || 'Постоплата 100%';
-        return !standardPaymentTerms.includes(initialTerm); // Если загружено что-то нестандартное, сразу показываем поле ввода
+        return !standardPaymentTerms.includes(initialTerm); 
     });
-    // =======================================
 
     useEffect(() => {
         if(formData.qty && formData.price_unit) {
-            const qtyNum = parseFloat(String(formData.qty).replace(/[^0-9.]/g, '')) || 1;
+            const qtyNum = parseFloat(String(formData.qty).replace(/[^0-9.]/g, '')) || 0;
             const priceNum = parseFloat(formData.price_unit) || 0;
             const sum = (qtyNum * priceNum).toFixed(2);
             setFormData(prev => ({...prev, total: sum}));
@@ -984,6 +1024,63 @@ export default function SED() {
                               </div>
                           </div>
                       </div>
+
+                      {/* НОВЫЙ БЛОК: ТАБЛИЦЫ АНАЛИТИКИ */}
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
+                          
+                          {/* Топ Поставщики */}
+                          <div className="bg-[#0d1117] border border-gray-800 rounded-lg p-4">
+                              <h3 className="text-gray-400 font-bold text-xs uppercase mb-3 flex items-center gap-2">
+                                  <Briefcase size={14}/> Топ-5 Контрагентов (KZT)
+                              </h3>
+                              <div className="space-y-2">
+                                  {analyticsData.topSellers.map((s, i) => (
+                                      <div key={i} className="flex justify-between items-center text-xs border-b border-gray-800 pb-1 last:border-0">
+                                          <span className="text-white truncate pr-2 w-1/2" title={s.name}>{s.name}</span>
+                                          <div className="flex flex-col items-end w-1/2">
+                                              <span className="text-green-400 font-bold">{formatMoney(s.sumKzt)} ₸</span>
+                                              <span className="text-[9px] text-gray-500">{s.count} заявок</span>
+                                          </div>
+                                      </div>
+                                  ))}
+                              </div>
+                          </div>
+
+                          {/* Топ Категории */}
+                          <div className="bg-[#0d1117] border border-gray-800 rounded-lg p-4">
+                              <h3 className="text-gray-400 font-bold text-xs uppercase mb-3 flex items-center gap-2">
+                                  <PieChart size={14}/> Затраты по категориям
+                              </h3>
+                              <div className="space-y-2">
+                                  {analyticsData.topCategories.map((c, i) => (
+                                      <div key={i} className="flex justify-between items-center text-xs border-b border-gray-800 pb-1 last:border-0">
+                                          <span className="text-white truncate pr-2 w-1/2" title={c.name}>{c.name}</span>
+                                          <div className="flex flex-col items-end w-1/2">
+                                              <span className="text-blue-400 font-bold">{formatMoney(c.sumKzt)} ₸</span>
+                                              <span className="text-[9px] text-gray-500">{c.count} заявок</span>
+                                          </div>
+                                      </div>
+                                  ))}
+                              </div>
+                          </div>
+
+                          {/* Самые частые товары */}
+                          <div className="bg-[#0d1117] border border-gray-800 rounded-lg p-4">
+                              <h3 className="text-gray-400 font-bold text-xs uppercase mb-3 flex items-center gap-2">
+                                  <ShoppingCart size={14}/> Частые покупки
+                              </h3>
+                              <div className="space-y-2">
+                                  {analyticsData.topItems.map((item, i) => (
+                                      <div key={i} className="flex justify-between items-center text-xs border-b border-gray-800 pb-1 last:border-0">
+                                          <span className="text-white truncate pr-2 w-3/4" title={item.name}>{item.name}</span>
+                                          <span className="bg-gray-800 text-gray-300 px-2 py-0.5 rounded font-bold">{item.count} шт.</span>
+                                      </div>
+                                  ))}
+                              </div>
+                          </div>
+
+                      </div>
+                      {/* КОНЕЦ НОВОГО БЛОКА */}
                   </div>
               )}
               {/* ======================= */}
