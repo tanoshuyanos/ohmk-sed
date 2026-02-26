@@ -9,7 +9,7 @@ import {
   Monitor
 } from 'lucide-react';
 
-const APP_VERSION = "v12.04 (Telegram Cards)";
+const APP_VERSION = "v12.05 (Telegram Cards)";
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
