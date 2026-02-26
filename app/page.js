@@ -9,7 +9,7 @@ import {
   Monitor
 } from 'lucide-react';
 
-const APP_VERSION = "v12.02 (Telegram PRO)";
+const APP_VERSION = "v12.03 (Telegram PRO)";
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
@@ -339,24 +339,46 @@ export default function SED() {
       } else {
           fetchRequests(role, viewMode);
 
-          // === ОТПРАВКА УВЕДОМЛЕНИЯ В ТЕЛЕГРАМ ===
-          let tgMessage = "";
+          // === ОТПРАВКА УВЕДОМЛЕНИЯ В ТЕЛЕГРАМ (ПРО-КАРТОЧКА) ===
           const reqTitle = req.request_type === 'service' ? (req.service_name || req.item_name) : req.item_name;
           const itemNameSafe = reqTitle || "Без названия";
+          const initiatorSafe = req.initiator || "Не указан";
+          const sumSafe = req.temp_pay_sum || req.payment_sum || req.temp_contract_sum || req.contract_sum;
 
-          if (actionType === 'TOGGLE_URGENCY' && !payload.isUrgent) tgMessage = `⚡️ <b>СРОЧНО!</b>\nЗаявке #${req.req_number} (${itemNameSafe}) присвоен статус СРОЧНО!`;
-          else if (role === 'DIRECTOR' && actionType === 'APPROVE') tgMessage = `✅ <b>Директор одобрил</b> заявку #${req.req_number} (${itemNameSafe}).\n👉 Очередь Ком. Директора / Склада.`;
-          else if (role === 'KOMER' && actionType === 'SEND') tgMessage = `📝 <b>Ком. Директор обработал</b> заявку #${req.req_number}.\n👉 Ожидает Фин. Директора / Юриста.`;
-          else if (role === 'FIN_DIR' && actionType === 'APPROVE') tgMessage = `✅ <b>Фин. Директор утвердил</b> заявку #${req.req_number}.\n👉 Очередь Юриста.`;
-          else if (role === 'LAWYER' && actionType === 'SEND_DRAFT') tgMessage = `📄 <b>Юрист загрузил проект</b> договора по #${req.req_number}.\n👉 Финансист, проверьте условия!`;
-          else if (role === 'LAWYER' && actionType === 'SIGN') tgMessage = `✍️ <b>Договор подписан</b> (Заявка #${req.req_number}).\n👉 Передано Финансисту/Бухгалтеру.`;
-          else if (role === 'FINANCE' && actionType === 'REVIEW_OK') tgMessage = `🤝 <b>Финансист согласовал договор</b> по #${req.req_number}.\n👉 Ждем подписания Юристом.`;
-          else if (role === 'ACCOUNTANT' && actionType === 'REQ_PAY') tgMessage = `⏳ <b>Запрос на оплату</b> по #${req.req_number}.\nСумма: <b>${formatMoney(req.temp_pay_sum || req.payment_sum)} ₸</b>\n👉 Финансист, ждем апрув!`;
-          else if (role === 'FINANCE' && actionType === 'PAY_OK') tgMessage = `💰 <b>ОПЛАТА ОДОБРЕНА!</b>\nЗаявка #${req.req_number}.\n👉 Бухгалтер, можно проводить оплату!`;
-          else if (role === 'ACCOUNTANT' && actionType === 'DONE') tgMessage = `🏁 <b>ОПЛАЧЕНО И ЗАКРЫТО!</b>\nЗаявка #${req.req_number} (${itemNameSafe}) успешно проведена Бухгалтерией.`;
+          // Собираем тело карточки (с вертикальной линией сбоку)
+          let cardDetails = `<blockquote>`;
+          cardDetails += `🔹 <b>Заявка:</b> #${req.req_number}\n`;
+          cardDetails += `📦 <b>Предмет:</b> ${itemNameSafe}\n`;
+          cardDetails += `👤 <b>Инициатор:</b> ${initiatorSafe}`;
+          if (sumSafe) cardDetails += `\n💰 <b>Сумма:</b> ${formatMoney(sumSafe)} ₸`;
+          cardDetails += `</blockquote>\n`;
+
+          let tgMessage = "";
+
+          if (actionType === 'TOGGLE_URGENCY' && !payload.isUrgent) {
+              tgMessage = `⚡️ <b>СТАТУС ОБНОВЛЕН: СРОЧНО!</b>\n${cardDetails}👉 <i>Просьба ускорить обработку по цепочке.</i>`;
+          } else if (role === 'DIRECTOR' && actionType === 'APPROVE') {
+              tgMessage = `✅ <b>ОДОБРЕНО: Директор</b>\n${cardDetails}👉 <b>Очередь:</b> Ком. Директор / Склад`;
+          } else if (role === 'KOMER' && actionType === 'SEND') {
+              tgMessage = `📝 <b>ДАННЫЕ ЗАПОЛНЕНЫ: Ком. Директор</b>\n${cardDetails}👉 <b>Очередь:</b> Фин. Директор / Юрист`;
+          } else if (role === 'FIN_DIR' && actionType === 'APPROVE') {
+              tgMessage = `✅ <b>УТВЕРЖДЕНО: Фин. Директор</b>\n${cardDetails}👉 <b>Очередь:</b> Юрист (загрузка проекта)`;
+          } else if (role === 'LAWYER' && actionType === 'SEND_DRAFT') {
+              tgMessage = `📄 <b>ПРОЕКТ ЗАГРУЖЕН: Юрист</b>\n${cardDetails}👉 <b>Очередь:</b> Финансист (согласование условий)`;
+          } else if (role === 'LAWYER' && actionType === 'SIGN') {
+              tgMessage = `✍️ <b>ДОГОВОР ПОДПИСАН: Юрист</b>\n${cardDetails}👉 <b>Очередь:</b> Бухгалтер (запрос на оплату)`;
+          } else if (role === 'FINANCE' && actionType === 'REVIEW_OK') {
+              tgMessage = `🤝 <b>ДОГОВОР СОГЛАСОВАН: Финансист</b>\n${cardDetails}👉 <b>Очередь:</b> Юрист (подписание скана)`;
+          } else if (role === 'ACCOUNTANT' && actionType === 'REQ_PAY') {
+              tgMessage = `⏳ <b>ЗАПРОС ОПЛАТЫ: Бухгалтер</b>\n${cardDetails}👉 <b>Очередь:</b> Финансист (апрув оплаты)`;
+          } else if (role === 'FINANCE' && actionType === 'PAY_OK') {
+              tgMessage = `💰 <b>ОПЛАТА ОДОБРЕНА: Финансист</b>\n${cardDetails}👉 <b>Очередь:</b> Бухгалтер (провести платеж)`;
+          } else if (role === 'ACCOUNTANT' && actionType === 'DONE') {
+              tgMessage = `🏁 <b>УСПЕШНО ОПЛАЧЕНО И ЗАКРЫТО</b>\n${cardDetails}🎉 Процесс по заявке полностью завершен.`;
+          }
 
           if (tgMessage !== "") sendTelegramNotification(tgMessage);
-          // ========================================
+          // =========================================================
       }
   };
 
