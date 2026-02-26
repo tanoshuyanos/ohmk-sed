@@ -9,7 +9,7 @@ import {
   Monitor
 } from 'lucide-react';
 
-const APP_VERSION = "v11.07 (Analytik)";
+const APP_VERSION = "v11.08 (Analytik+Summ)";
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
@@ -40,6 +40,15 @@ const safeDate = (dateString) => {
         return '';
     }
 };
+
+// === ДОБАВЛЯЕМ ВОТ ЭТУ ФУНКЦИЮ ===
+const formatMoney = (val) => {
+    if (!val) return '';
+    const num = parseFloat(String(val).replace(/[^0-9.]/g, ''));
+    if (isNaN(num)) return val;
+    return new Intl.NumberFormat('ru-RU').format(num);
+};
+// =================================
 
 export default function SED() {
   const [role, setRole] = useState(null);
@@ -493,9 +502,9 @@ export default function SED() {
                          <div><span className="text-gray-500 block">Продавец</span><span className="text-white font-medium">{req.legal_info.seller}</span></div>
                          <div><span className="text-gray-500 block">Покупатель</span><span className="text-white">{req.legal_info.buyer}</span></div>
                          <div className="col-span-2"><span className="text-gray-500 block">Предмет</span><span className="text-white italic">{req.legal_info.subject}</span></div>
-                         <div><span className="text-gray-500 block">Цена/ед</span><span className="text-white">{req.legal_info.price_unit}</span></div>
+                         <div><span className="text-gray-500 block">Цена/ед</span><span className="text-white">{formatMoney(req.legal_info.price_unit)} ₸</span></div>
                          <div><span className="text-gray-500 block">Кол-во</span><span className="text-white">{req.legal_info.qty}</span></div>
-                         <div><span className="text-gray-500 block">ИТОГО</span><span className="text-green-400 font-bold text-sm">{req.legal_info.total}</span></div>
+                         <div><span className="text-gray-500 block">ИТОГО</span><span className="text-green-400 font-bold text-sm">{formatMoney(req.legal_info.total)} ₸</span></div>
                          <div><span className="text-gray-500 block">НДС</span><span className="text-white">{req.legal_info.vat}</span></div>
                          <div className="col-span-2"><span className="text-gray-500 block">Условия оплаты</span><span className="text-white">{req.legal_info.payment_terms}</span></div>
                          <div><span className="text-gray-500 block">Поставка до</span><span className="text-white">{req.legal_info.delivery_date}</span></div>
@@ -593,7 +602,7 @@ export default function SED() {
                      <div className="text-blue-400 font-bold uppercase border-b border-gray-700 pb-1">ДАННЫЕ ДЛЯ ДОГОВОРА:</div>
                      <div className="grid grid-cols-2 gap-2"><div><span className="text-gray-500 text-[9px]">Продавец</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.seller} onChange={e=>setFormData({...formData, seller: e.target.value})}/></div><div><span className="text-gray-500 text-[9px]">Покупатель</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.buyer} onChange={e=>setFormData({...formData, buyer: e.target.value})}/></div></div>
                      <div><span className="text-gray-500 text-[9px]">Предмет договора</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white mb-2" value={formData.subject} onChange={e=>setFormData({...formData, subject: e.target.value})}/><div className="grid grid-cols-2 gap-2"><div><span className="text-gray-500 text-[9px]">Кол-во</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.qty} onChange={e=>setFormData({...formData, qty: e.target.value})}/></div><div><span className="text-gray-500 text-[9px]">Цена за ед.</span><input type="number" className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.price_unit} onChange={e=>setFormData({...formData, price_unit: e.target.value})}/></div></div></div>
-                     <div className="grid grid-cols-2 gap-2 bg-gray-800/50 p-2 rounded"><div><span className="text-gray-500 text-[9px]">ОБЩАЯ СТОИМОСТЬ</span><div className="text-green-400 font-bold">{formData.total}</div></div><div><span className="text-gray-500 text-[9px]">НДС</span><select className="w-full bg-gray-800 border border-gray-600 p-1 rounded text-white" value={formData.vat} onChange={e=>setFormData({...formData, vat: e.target.value})}><option>с НДС</option><option>без НДС</option></select></div></div>
+                     <div className="grid grid-cols-2 gap-2 bg-gray-800/50 p-2 rounded"><div><span className="text-gray-500 text-[9px]">ОБЩАЯ СТОИМОСТЬ</span><div className="text-green-400 font-bold">{formatMoney(formData.total)} ₸</div></div><div><span className="text-gray-500 text-[9px]">НДС</span><select className="w-full bg-gray-800 border border-gray-600 p-1 rounded text-white" value={formData.vat} onChange={e=>setFormData({...formData, vat: e.target.value})}><option>с НДС</option><option>без НДС</option></select></div></div>
                      <div><span className="text-gray-500 text-[9px]">Порядок оплаты</span><select className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.payment_terms} onChange={e=>setFormData({...formData, payment_terms: e.target.value})}><option>Постоплата 100%</option><option>Предоплата 100%</option><option>Предоплата 30% / 70%</option><option>Предоплата 50% / 50%</option></select></div>
                      <div className="grid grid-cols-2 gap-2"><div><span className="text-gray-500 text-[9px]">Место поставки</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.delivery_place} onChange={e=>setFormData({...formData, delivery_place: e.target.value})}/></div><div><span className="text-gray-500 text-[9px]">Самовывоз?</span><select className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.pickup} onChange={e=>setFormData({...formData, pickup: e.target.value})}><option>Нет (Доставка)</option><option>Да (Самовывоз)</option></select></div></div>
                      <div className="grid grid-cols-2 gap-2"><div><span className="text-gray-500 text-[9px]">Срок поставки (Дата)</span><input type="date" className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.delivery_date} onChange={e=>setFormData({...formData, delivery_date: e.target.value})}/></div><div><span className="text-gray-500 text-[9px]">Гарантия</span><input className="w-full bg-gray-800 border border-gray-600 p-1.5 rounded text-white" value={formData.warranty} onChange={e=>setFormData({...formData, warranty: e.target.value})}/></div></div>
@@ -650,7 +659,7 @@ export default function SED() {
              )}
              {role === 'FINANCE' && req.step_accountant_req === 1 && (
                  <div className="bg-purple-900/30 p-2 rounded border border-purple-600">
-                     <div className="text-white text-xs mb-1">Запрос на оплату: <b>{req.payment_sum}</b> ({req.payment_date})</div>
+                     <div className="text-white text-xs mb-1">Запрос на оплату: <b className="text-blue-400 text-sm">{formatMoney(req.payment_sum)} ₸</b> ({req.payment_date})</div>
                      <div className="flex gap-2">
                          <button onClick={()=>handleAction(req, 'PAY_OK')} className="flex-[2] bg-green-600 py-2 rounded text-xs font-bold text-white">ОДОБРИТЬ (1)</button>
                          <button onClick={()=>handleAction(req, 'PAY_FIX')} className="flex-1 bg-orange-600 py-2 rounded text-xs font-bold text-white">ПРАВКИ</button>
