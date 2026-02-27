@@ -44,7 +44,7 @@ export default function StandPage() {
         .from('requests')
         .select('*')
         .order('req_number', { ascending: false })
-        .limit(100); // Показываем 100 последних для скорости
+        .limit(1000); // Показываем 100 последних для скорости
 
     if (!error && data) {
         setRequests(data);
@@ -153,3 +153,4 @@ export default function StandPage() {
     </div>
   );
 }
+
