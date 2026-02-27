@@ -9,7 +9,7 @@ import {
   Monitor, PieChart, ShoppingCart, TrendingUp
 } from 'lucide-react';
 
-const APP_VERSION = "v12.12 (FIN_DIR Dashboard)";
+const APP_VERSION = "v12.13 (Audit Log)";
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
@@ -97,6 +97,7 @@ export default function SED() {
    
   const [modal, setModal] = useState({ open: false, req: null, type: '' }); 
   const [historyModal, setHistoryModal] = useState({ open: false, req: null });
+  const [logModal, setLogModal] = useState({ open: false, logs: [], loading: false });
    
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState('');
@@ -218,6 +219,23 @@ export default function SED() {
   };
 
   const switchMode = (mode) => { setViewMode(mode); fetchRequests(role, mode); };
+
+  // === ЗАГРУЗКА ЛИЧНОГО ЖУРНАЛА ===
+  const fetchMyLogs = async () => {
+      setLogModal({ open: true, logs: [], loading: true });
+      const { data, error } = await supabase
+          .from('audit_logs')
+          .select('*')
+          .eq('role', role)
+          .order('created_at', { ascending: false })
+          .limit(100);
+      
+      if (!error && data) {
+          setLogModal({ open: true, logs: data, loading: false });
+      } else {
+          setLogModal({ open: true, logs: [], loading: false });
+      }
+  };
 
   const openGoogleCalendar = (req) => {
     const title = encodeURIComponent(`Оплата: ${req.item_name} (${req.payment_sum} ₸)`);
@@ -400,6 +418,16 @@ export default function SED() {
           alert("Ошибка: " + error.message);
       } else {
           fetchRequests(role, viewMode);
+
+          // === ПИШЕМ СЛЕД В БАЗУ ЛОГОВ ===
+          const auditReason = updates.fix_comment || comments || "";
+          supabase.from('audit_logs').insert([{
+              role: role,
+              req_number: req.req_number || "Б/Н",
+              action: actionText,
+              comment: auditReason
+          }]).then(); // Тихо пишем в фоне
+          // ================================
 
           const reqTitle = req.request_type === 'service' ? (req.service_name || req.item_name) : req.item_name;
           const itemNameSafe = reqTitle || "Без названия";
@@ -892,12 +920,43 @@ export default function SED() {
            </div>
         </div>
       )}
+      {/* === МОДАЛКА: ЖЕЛЕЗОБЕТОННЫЙ ЛОГ ПРОФИЛЯ === */}
+      {logModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+           <div className="bg-black border border-gray-700 rounded-lg w-full max-w-2xl p-4 shadow-2xl relative flex flex-col max-h-[90vh]">
+              <div className="flex justify-between items-center mb-2 border-b border-gray-800 pb-2">
+                  <h3 className="text-sm font-mono text-green-500 flex items-center gap-2">~/{role}/audit_log.txt</h3>
+                  <button onClick={()=>setLogModal({open:false, logs:[], loading: false})}><X className="text-gray-500 hover:text-white"/></button>
+              </div>
+              <div className="overflow-y-auto bg-[#0a0a0a] p-3 rounded border border-gray-800 font-mono text-[10px] md:text-xs text-gray-300 space-y-2 flex-grow">
+                  {logModal.loading ? ( <div className="text-center text-gray-500 animate-pulse">Fetching logs...</div> ) : (
+                      logModal.logs.length === 0 ? <div className="text-gray-600">Лог пуст.</div> : 
+                      logModal.logs.map((log, idx) => (
+                          <div key={idx} className="border-b border-gray-900 pb-1">
+                              <span className="text-blue-400">[{new Date(log.created_at).toLocaleString("ru-RU")}]</span> 
+                              <span className="text-purple-400 ml-2">{log.req_number}</span> 
+                              <span className="text-gray-400"> :: </span> 
+                              <span className={`font-bold ${log.action.includes('ОТК') || log.action.includes('ВОЗВРАТ') ? 'text-red-400' : 'text-green-400'}`}>{log.action}</span>
+                              {log.comment && <span className="text-orange-400 ml-2">({log.comment})</span>}
+                          </div>
+                      ))
+                  )}
+              </div>
+           </div>
+        </div>
+      )}
       <div className="sticky top-0 z-20 bg-[#0d1117]/90 backdrop-blur border-b border-gray-800">
           <div className="max-w-7xl mx-auto p-3">
              <div className="flex justify-between items-center mb-3">
                  <div className="flex items-center gap-3"><div className="flex flex-col"><span className="text-xs text-gray-500 font-bold">РОЛЬ</span><div className="flex items-center gap-2"><b className="text-blue-400 text-lg">{role}</b>{loading && <Loader2 className="animate-spin text-gray-500" size={14}/>}</div></div></div>
                  <div className="flex gap-2">
                      <a href={SHEET_URL} target="_blank" className="flex items-center gap-1 bg-gray-800 hover:bg-gray-700 border border-gray-600 text-gray-300 px-3 py-2 rounded-lg text-xs font-bold transition"><Table size={14}/> <span className="hidden sm:inline">ТАБЛИЦА</span></a>
+                     
+                     {/* КНОПКА МОЙ ЛОГ */}
+                     <button onClick={fetchMyLogs} className="flex items-center gap-1 bg-blue-900/30 text-blue-400 border border-blue-800 hover:bg-blue-900/50 px-3 py-2 rounded-lg text-xs font-bold transition">
+                         <FileText size={14}/> <span className="hidden sm:inline">МОЙ ЛОГ</span>
+                     </button>
+
                      <button onClick={() => setRole(null)} className="text-[10px] text-red-400 border border-red-900/30 px-3 py-2 rounded-lg bg-red-900/10 hover:bg-red-900/20">ВЫХОД</button>
                  </div>
              </div>
