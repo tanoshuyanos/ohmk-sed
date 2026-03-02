@@ -9,7 +9,7 @@ import {
   Monitor, PieChart, ShoppingCart, TrendingUp
 } from 'lucide-react';
 
-const APP_VERSION = "v12.13 (Audit Log)";
+const APP_VERSION = "v12.14 (Audit Log)";
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
@@ -640,14 +640,27 @@ export default function SED() {
     return (
       <div className={`bg-[#161b22] border ${borderColor} rounded-xl p-5 shadow-xl flex flex-col`}>
          <div className="flex justify-between items-start mb-2 border-b border-gray-800 pb-2">
-            <div><h3 className="text-xl font-bold text-white">#{req.req_number}</h3><div className="text-xs text-gray-500">{safeDate(req.created_at)}</div></div>
-            <div className="flex items-center gap-2">
-                {isUrgent && <div className="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded animate-pulse font-bold">СРОЧНО</div>}
-                <button onClick={() => setHistoryModal({open: true, req: req})} className="text-gray-400 hover:text-blue-400 bg-gray-800 hover:bg-gray-700 p-1.5 rounded border border-gray-700 hover:border-blue-500 transition shadow-sm" title="История статусов">
-                    <History size={16} />
-                </button>
-            </div>
-         </div>
+    <div><h3 className="text-xl font-bold text-white">#{req.req_number}</h3><div className="text-xs text-gray-500">{safeDate(req.created_at)}</div></div>
+    <div className="flex flex-wrap justify-end items-center gap-2">
+        {isUrgent && <div className="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded animate-pulse font-bold">СРОЧНО</div>}
+        
+        {/* --- НОВЫЙ БЛОК: СТАТУС БЮДЖЕТА --- */}
+        {req.economist_status === 'ПО ПЛАНУ' && (
+            <div className="bg-green-900/40 border border-green-600 text-green-400 text-[10px] px-2 py-0.5 rounded font-bold">В ПЛАНЕ</div>
+        )}
+        {req.economist_status === 'ВНЕ ПЛАНА' && (
+            <div className="bg-orange-900/40 border border-orange-600 text-orange-400 text-[10px] px-2 py-0.5 rounded font-bold">ВНЕ ПЛАНА</div>
+        )}
+        {(!req.economist_status && !req.step_economist) && (
+            <div className="bg-gray-800 border border-gray-600 text-gray-400 text-[10px] px-2 py-0.5 rounded font-bold">ЖДЕТ ЭКОНОМИСТА</div>
+        )}
+        {/* --------------------------------- */}
+
+        <button onClick={() => setHistoryModal({open: true, req: req})} className="text-gray-400 hover:text-blue-400 bg-gray-800 hover:bg-gray-700 p-1.5 rounded border border-gray-700 hover:border-blue-500 transition shadow-sm" title="История статусов">
+            <History size={16} />
+        </button>
+    </div>
+</div>
 
          {req.fix_comment && <div className="bg-orange-900/30 border border-orange-600 p-2 rounded mb-3 text-xs text-orange-200"><b className="block mb-1">⚠️ ТРЕБУЮТСЯ ПРАВКИ:</b>{req.fix_comment}</div>}
 
