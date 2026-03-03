@@ -107,7 +107,7 @@ const getCurrentStatus = (req) => {
     if (req.request_type !== 'service') {
         if (req.step_sklad === 1) return { text: '✅ ВЫДАНО СО СКЛАДА', color: 'text-green-500 border-green-500/30 bg-green-500/10' }; 
         if (req.step_sklad == null && req.step_komer == null) {
-            const wName = WAREHOUSE_NAMES[req.target_warehouse_code] || 'Склад';
+            const wName = WAREHOUSE_NAMES[req.target_warehouse_code] || 'Склад (Не назначен)';
             return { text: `📦 ${wName}`, color: 'text-orange-400 border-orange-500/30 bg-orange-500/10' };
         }
     }
@@ -173,7 +173,7 @@ export default function StandPage() {
   useEffect(() => {
     fetchStandData();
     const channel = supabase.channel('stand-updates').on('postgres_changes', { event: '*', schema: 'public', table: 'requests' }, fetchStandData).subscribe();
-    const interval = setInterval(fetchStandData, 300000); // авто-обновление каждые 5 мин
+    const interval = setInterval(fetchStandData, 300000);
     return () => { supabase.removeChannel(channel); clearInterval(interval); };
   }, []);
 
@@ -188,13 +188,14 @@ export default function StandPage() {
       const stats = { director: 0, komer: 0, findir: 0, lawyer: 0, finance: 0, accountant: 0, warehouses: {} };
 
       requests.forEach(req => {
-          if (isRequestRejected(req)) return; // Пропускаем отмененные
-          if (req.step_accountant_done === 1 || req.status?.toUpperCase() === 'ОПЛАЧЕНО') return; // Пропускаем завершенные
+          if (isRequestRejected(req)) return; 
+          if (req.step_accountant_done === 1 || req.status?.toUpperCase() === 'ОПЛАЧЕНО') return; 
 
           if (req.step_director !== 1) { stats.director++; return; }
           
           if (req.request_type !== 'service' && req.step_sklad == null && req.step_komer == null) {
-              const wCode = req.target_warehouse_code || 'Неизвестно';
+              // Вот тут идет жесткое разделение по складам!
+              const wCode = req.target_warehouse_code || 'UNASSIGNED';
               stats.warehouses[wCode] = (stats.warehouses[wCode] || 0) + 1;
               return;
           }
@@ -209,7 +210,7 @@ export default function StandPage() {
           if (req.step_accountant_req !== 1) { stats.accountant++; return; }
           if (req.step_finance_pay !== 1) { stats.finance++; return; }
           
-          stats.accountant++; // Ждет факта оплаты
+          stats.accountant++; 
       });
       return stats;
   }, [requests]);
@@ -237,7 +238,6 @@ export default function StandPage() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-gray-200 font-sans p-2 md:p-8 pb-20">
       
-      {/* === ШАПКА === */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b border-gray-800 pb-4 gap-4">
           <div>
               <h1 className="text-2xl md:text-4xl font-black text-blue-500 tracking-widest flex items-center gap-3">
@@ -250,7 +250,6 @@ export default function StandPage() {
           </div>
           
           <div className="flex flex-col md:flex-row w-full md:w-auto gap-3 items-center">
-              {/* Поиск */}
               <div className="flex items-center bg-[#161b22] border border-gray-800 p-2 rounded-xl w-full md:w-64">
                   <Search size={18} className="text-gray-500 ml-2"/>
                   <input 
@@ -265,7 +264,6 @@ export default function StandPage() {
                   )}
               </div>
 
-              {/* Отдел */}
               <div className="flex items-center bg-[#161b22] border border-gray-800 p-2 rounded-xl w-full md:w-auto">
                   <Filter size={18} className="text-gray-500 ml-2"/>
                   <select 
@@ -278,7 +276,6 @@ export default function StandPage() {
                   </select>
               </div>
 
-              {/* КНОПКА ОБНОВЛЕНИЯ */}
               <button 
                   onClick={fetchStandData} 
                   className="bg-blue-600 hover:bg-blue-500 text-white p-3 rounded-xl transition shadow-lg w-full md:w-auto flex justify-center items-center gap-2"
@@ -290,7 +287,7 @@ export default function StandPage() {
           </div>
       </div>
 
-      {/* === БЛОК СТАТИСТИКИ === */}
+      {/* === БЛОК СТАТИСТИКИ (УЗКИЕ ГОРЛЫШКИ) === */}
       {!loading && requests.length > 0 && (
           <div className="mb-6 bg-[#161b22] border border-gray-800 rounded-xl p-4">
               <h3 className="text-gray-400 text-xs font-bold uppercase mb-3 flex items-center gap-2">
@@ -299,9 +296,15 @@ export default function StandPage() {
               <div className="flex flex-wrap gap-2">
                   {bottleneckStats.director > 0 && <span className="bg-blue-900/20 border border-blue-800 text-blue-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">👔 Директор <b className="bg-blue-600 text-white px-1.5 py-0.5 rounded">{bottleneckStats.director}</b></span>}
                   
-                  {Object.entries(bottleneckStats.warehouses).map(([code, count]) => (
-                      <span key={code} className="bg-orange-900/20 border border-orange-800 text-orange-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">📦 {WAREHOUSE_NAMES[code] || 'Склад'} <b className="bg-orange-600 text-white px-1.5 py-0.5 rounded">{count}</b></span>
-                  ))}
+                  {/* Рендерим склады строго по отдельности */}
+                  {Object.entries(bottleneckStats.warehouses).map(([code, count]) => {
+                      const wName = WAREHOUSE_NAMES[code] || 'Склад (Старые)'; // Если склад не привязан
+                      return (
+                          <span key={code} className="bg-orange-900/20 border border-orange-800 text-orange-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">
+                              📦 {wName} <b className="bg-orange-600 text-white px-1.5 py-0.5 rounded">{count}</b>
+                          </span>
+                      )
+                  })}
                   
                   {bottleneckStats.komer > 0 && <span className="bg-purple-900/20 border border-purple-800 text-purple-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">📝 Ком. Дир <b className="bg-purple-600 text-white px-1.5 py-0.5 rounded">{bottleneckStats.komer}</b></span>}
                   {bottleneckStats.findir > 0 && <span className="bg-yellow-900/20 border border-yellow-800 text-yellow-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">🏦 Фин. Дир <b className="bg-yellow-600 text-white px-1.5 py-0.5 rounded">{bottleneckStats.findir}</b></span>}
@@ -309,7 +312,6 @@ export default function StandPage() {
                   {bottleneckStats.finance > 0 && <span className="bg-yellow-900/20 border border-yellow-800 text-yellow-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">💰 Финансисты <b className="bg-yellow-600 text-white px-1.5 py-0.5 rounded">{bottleneckStats.finance}</b></span>}
                   {bottleneckStats.accountant > 0 && <span className="bg-cyan-900/20 border border-cyan-800 text-cyan-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">🧮 Бухгалтерия <b className="bg-cyan-600 text-white px-1.5 py-0.5 rounded">{bottleneckStats.accountant}</b></span>}
                   
-                  {/* Если ни у кого нет долгов */}
                   {Object.values(bottleneckStats).every(v => typeof v === 'number' ? v === 0 : Object.keys(v).length === 0) && (
                       <span className="text-green-500 text-xs italic">Все заявки обработаны или отменены 🎉</span>
                   )}
@@ -434,4 +436,3 @@ export default function StandPage() {
     </div>
   );
 }
-
