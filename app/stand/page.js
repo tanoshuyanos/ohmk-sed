@@ -123,7 +123,7 @@ const getCurrentStatus = (req) => {
     return { text: '💸 Бухгалтер (Ждет оплаты)', color: 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10' };
 };
 
-// === 3. КОМПОНЕНТЫ ===
+// === 3. КОМПОНЕНТЫ ОТОБРАЖЕНИЯ ===
 const StepIndicator = ({ status, label }) => {
   let icon, color, bg;
   switch (status) {
@@ -156,6 +156,22 @@ const WorkflowTrack = ({ steps }) => (
   </div>
 );
 
+// === КОМПОНЕНТ ПЛАШКИ СТАТИСТИКИ (УМНАЯ ПОДСВЕТКА) ===
+const StatBadge = ({ icon, label, count, activeWrap, activeNum }) => {
+    const isZero = count === 0;
+    // Если 0 - делаем серым и приглушенным, если больше 0 - зажигаем ярким цветом
+    const wrapClass = isZero ? "bg-gray-900/30 border border-gray-800 text-gray-500" : activeWrap;
+    const numClass = isZero ? "bg-gray-800 text-gray-500" : activeNum;
+    
+    return (
+        <span className={`${wrapClass} text-[11px] md:text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors`}>
+            <span className={isZero ? "opacity-50" : ""}>{icon}</span> 
+            {label} 
+            <b className={`${numClass} px-1.5 py-0.5 rounded`}>{count}</b>
+        </span>
+    );
+};
+
 export default function StandPage() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -186,6 +202,10 @@ export default function StandPage() {
   // === ВЫЧИСЛЕНИЕ СТАТИСТИКИ ===
   const actionStats = useMemo(() => {
       const stats = { director: 0, komer: 0, findir: 0, lawyer: 0, finance: 0, accountant: 0, warehouses: {} };
+      
+      // Инициализируем нулями все склады из константы
+      Object.keys(WAREHOUSE_NAMES).forEach(code => { stats.warehouses[code] = 0; });
+      stats.warehouses['UNASSIGNED'] = 0;
 
       requests.forEach(req => {
           if (isRequestRejected(req)) return; 
@@ -293,26 +313,27 @@ export default function StandPage() {
                   <BarChart2 size={16} className="text-orange-500"/> 🔥 Ожидают действия
               </h3>
               <div className="flex flex-wrap gap-2">
-                  {actionStats.director > 0 && <span className="bg-blue-900/20 border border-blue-800 text-blue-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">👔 Директор <b className="bg-blue-600 text-white px-1.5 py-0.5 rounded">{actionStats.director}</b></span>}
                   
-                  {Object.entries(actionStats.warehouses).map(([code, count]) => {
-                      const wName = code === 'UNASSIGNED' ? 'Склад (Не назначен)' : (WAREHOUSE_NAMES[code] || 'Склад');
-                      return (
-                          <span key={code} className="bg-orange-900/20 border border-orange-800 text-orange-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">
-                              📦 {wName} <b className="bg-orange-600 text-white px-1.5 py-0.5 rounded">{count}</b>
-                          </span>
-                      )
-                  })}
+                  {/* ДИРЕКТОР */}
+                  <StatBadge icon="👔" label="Директор" count={actionStats.director} activeWrap="bg-blue-900/20 border-blue-800 text-blue-300" activeNum="bg-blue-600 text-white" />
                   
-                  {actionStats.komer > 0 && <span className="bg-purple-900/20 border border-purple-800 text-purple-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">📝 Ком. Дир <b className="bg-purple-600 text-white px-1.5 py-0.5 rounded">{actionStats.komer}</b></span>}
-                  {actionStats.findir > 0 && <span className="bg-yellow-900/20 border border-yellow-800 text-yellow-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">🏦 Фин. Дир <b className="bg-yellow-600 text-white px-1.5 py-0.5 rounded">{actionStats.findir}</b></span>}
-                  {actionStats.lawyer > 0 && <span className="bg-indigo-900/20 border border-indigo-800 text-indigo-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">⚖️ Юристы <b className="bg-indigo-600 text-white px-1.5 py-0.5 rounded">{actionStats.lawyer}</b></span>}
-                  {actionStats.finance > 0 && <span className="bg-yellow-900/20 border border-yellow-800 text-yellow-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">💰 Финансисты <b className="bg-yellow-600 text-white px-1.5 py-0.5 rounded">{actionStats.finance}</b></span>}
-                  {actionStats.accountant > 0 && <span className="bg-cyan-900/20 border border-cyan-800 text-cyan-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">🧮 Бухгалтерия <b className="bg-cyan-600 text-white px-1.5 py-0.5 rounded">{actionStats.accountant}</b></span>}
-                  
-                  {Object.values(actionStats).every(v => typeof v === 'number' ? v === 0 : Object.keys(v).length === 0) && (
-                      <span className="text-green-500 text-xs italic">Все заявки обработаны или отменены 🎉</span>
+                  {/* ВСЕ СКЛАДЫ (Выводятся всегда) */}
+                  {Object.entries(WAREHOUSE_NAMES).map(([code, name]) => (
+                      <StatBadge key={code} icon="📦" label={name} count={actionStats.warehouses[code]} activeWrap="bg-orange-900/20 border-orange-800 text-orange-300" activeNum="bg-orange-600 text-white" />
+                  ))}
+
+                  {/* СТАРЫЕ ЗАЯВКИ (Скрываем, если их 0) */}
+                  {actionStats.warehouses['UNASSIGNED'] > 0 && (
+                      <StatBadge icon="📦" label="Склад (Старые)" count={actionStats.warehouses['UNASSIGNED']} activeWrap="bg-orange-900/20 border-orange-800 text-orange-300" activeNum="bg-orange-600 text-white" />
                   )}
+                  
+                  {/* ОСТАЛЬНЫЕ РОЛИ */}
+                  <StatBadge icon="📝" label="Ком. Дир" count={actionStats.komer} activeWrap="bg-purple-900/20 border-purple-800 text-purple-300" activeNum="bg-purple-600 text-white" />
+                  <StatBadge icon="🏦" label="Фин. Дир" count={actionStats.findir} activeWrap="bg-yellow-900/20 border-yellow-800 text-yellow-300" activeNum="bg-yellow-600 text-white" />
+                  <StatBadge icon="⚖️" label="Юристы" count={actionStats.lawyer} activeWrap="bg-indigo-900/20 border-indigo-800 text-indigo-300" activeNum="bg-indigo-600 text-white" />
+                  <StatBadge icon="💰" label="Финансисты" count={actionStats.finance} activeWrap="bg-yellow-900/20 border-yellow-800 text-yellow-300" activeNum="bg-yellow-600 text-white" />
+                  <StatBadge icon="🧮" label="Бухгалтерия" count={actionStats.accountant} activeWrap="bg-cyan-900/20 border-cyan-800 text-cyan-300" activeNum="bg-cyan-600 text-white" />
+                  
               </div>
           </div>
       )}
