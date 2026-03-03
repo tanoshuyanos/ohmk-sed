@@ -290,7 +290,7 @@ export default function StandPage() {
           </div>
       </div>
 
-      {/* === БЛОК СТАТИСТИКИ (УЗКИЕ ГОРЛЫШКИ) === */}
+      {/* === БЛОК СТАТИСТИКИ === */}
       {!loading && requests.length > 0 && (
           <div className="mb-6 bg-[#161b22] border border-gray-800 rounded-xl p-4">
               <h3 className="text-gray-400 text-xs font-bold uppercase mb-3 flex items-center gap-2">
@@ -434,3 +434,4 @@ export default function StandPage() {
     </div>
   );
 }
+
