@@ -26,13 +26,13 @@ const generateSteps = (r) => {
   if (r.request_type === 'service') {
     s.skl = 'skip';
   } else {
-    if (r.step_sklad === 1) s.skl = 'done'; // Выдано
+    if (r.step_sklad === 1) s.skl = 'done'; 
     else if (r.step_sklad === 0) s.skl = 'reject';
-    else if (r.step_sklad === 2) s.skl = 'buy'; // Покупаем
+    else if (r.step_sklad === 2) s.skl = 'buy'; 
     else { s.skl = 'pending'; return s; }
   }
 
-  // Если выдали со склада - конец маршрута (всё остальное пропускаем)
+  // Если выдали со склада - конец маршрута
   if (s.skl === 'done') {
      s.com = 'skip'; s.fdir = 'skip'; 
      s.law1 = 'skip'; s.fin1 = 'skip'; s.law2 = 'skip'; 
@@ -84,10 +84,31 @@ const generateSteps = (r) => {
 };
 
 // === 2. КОМПОНЕНТ ОТРИСОВКИ ШАГОВ ===
-// (StepIndicator оставляем без изменений, меняем только сам Track)
+const StepIndicator = ({ status, label }) => {
+  let icon, color, bg;
+  
+  switch (status) {
+    case 'done': case 'buy':
+      icon = <CheckCircle2 size={16} />; color = 'text-green-500'; bg = 'bg-green-500/10 border-green-500/20'; break;
+    case 'pending':
+      icon = <Clock size={16} className="animate-pulse" />; color = 'text-blue-400'; bg = 'bg-blue-500/10 border-blue-500/30'; break;
+    case 'reject':
+      icon = <XCircle size={16} />; color = 'text-red-500'; bg = 'bg-red-500/10 border-red-500/20'; break;
+    case 'skip':
+      icon = <MinusCircle size={16} />; color = 'text-gray-600'; bg = 'bg-transparent border-transparent'; break;
+    default: 
+      icon = <CircleDashed size={16} />; color = 'text-gray-700'; bg = 'bg-transparent border-transparent'; break;
+  }
+
+  return (
+    <div className={`flex flex-col items-center justify-center p-1.5 rounded border ${bg} ${color} min-w-[3rem] md:w-16`} title={label}>
+      {icon}
+      <span className="text-[9px] font-black uppercase mt-1 hidden md:block tracking-tighter">{label}</span>
+    </div>
+  );
+};
 
 const WorkflowTrack = ({ steps }) => (
-  // Добавили overflow-x-auto и скрыли скроллбар для идеального вида на телефонах
   <div className="flex items-center gap-1 md:gap-1.5 w-full overflow-x-auto pb-2 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
     <StepIndicator status={steps.dir} label="Дир" /> <ChevronRight size={14} className="text-gray-700 flex-shrink-0"/>
     <StepIndicator status={steps.skl} label="Склад" /> <ChevronRight size={14} className="text-gray-700 flex-shrink-0"/>
@@ -103,42 +124,6 @@ const WorkflowTrack = ({ steps }) => (
     <StepIndicator status={steps.acc2} label="Оплата" />
   </div>
 );
-// === 2. КОМПОНЕНТ ОТРИСОВКИ ШАГОВ ===
-const StepIndicator = ({ status, label }) => {
-  let icon, color, bg;
-  
-  switch (status) {
-    case 'done': case 'buy':
-      icon = <CheckCircle2 size={16} />; color = 'text-green-500'; bg = 'bg-green-500/10 border-green-500/20'; break;
-    case 'pending':
-      icon = <Clock size={16} className="animate-pulse" />; color = 'text-blue-400'; bg = 'bg-blue-500/10 border-blue-500/30'; break;
-    case 'reject':
-      icon = <XCircle size={16} />; color = 'text-red-500'; bg = 'bg-red-500/10 border-red-500/20'; break;
-    case 'skip':
-      icon = <MinusCircle size={16} />; color = 'text-gray-600'; bg = 'bg-transparent border-transparent'; break;
-    default: // wait
-      icon = <CircleDashed size={16} />; color = 'text-gray-700'; bg = 'bg-transparent border-transparent'; break;
-  }
-
-  return (
-    <div className={`flex flex-col items-center justify-center p-1.5 rounded border ${bg} ${color} w-12 md:w-16`} title={label}>
-      {icon}
-      <span className="text-[9px] font-black uppercase mt-1 hidden md:block tracking-tighter">{label}</span>
-    </div>
-  );
-};
-
-const WorkflowTrack = ({ steps }) => (
-  <div className="flex items-center justify-between md:justify-start gap-1 md:gap-2 w-full">
-    <StepIndicator status={steps.dir} label="Дир" /> <ChevronRight size={14} className="text-gray-700 hidden md:block"/>
-    <StepIndicator status={steps.skl} label="Склад" /> <ChevronRight size={14} className="text-gray-700 hidden md:block"/>
-    <StepIndicator status={steps.com} label="Ком" /> <ChevronRight size={14} className="text-gray-700 hidden md:block"/>
-    <StepIndicator status={steps.fdir} label="Фин.Д" /> <ChevronRight size={14} className="text-gray-700 hidden md:block"/>
-    <StepIndicator status={steps.law} label="Юрист" /> <ChevronRight size={14} className="text-gray-700 hidden md:block"/>
-    <StepIndicator status={steps.fin} label="Фин" /> <ChevronRight size={14} className="text-gray-700 hidden md:block"/>
-    <StepIndicator status={steps.acc} label="Бух" />
-  </div>
-);
 
 
 export default function StandPage() {
@@ -147,11 +132,12 @@ export default function StandPage() {
   const [selectedDept, setSelectedDept] = useState("ВСЕ");
 
   const fetchStandData = async () => {
+    // УВЕЛИЧИЛИ ЛИМИТ до 1000, чтобы загрузилась вся история
     const { data, error } = await supabase
         .from('requests')
         .select('*')
         .order('req_number', { ascending: false })
-        .limit(200); // Берем запас для фильтрации
+        .limit(1000); 
 
     if (!error && data) {
         setRequests(data);
@@ -175,10 +161,12 @@ export default function StandPage() {
     return [...new Set([...fixedList, ...dbDepts])].sort();
   }, [requests]);
 
-  // Фильтрация и очистка активных
-  const activeRequests = useMemo(() => {
-    let filtered = requests.filter(r => r.step_accountant_done !== 1 && !r.status?.toUpperCase().includes('ОТК'));
+  // === ИСПРАВЛЕНИЕ: ПОКАЗЫВАЕМ ВСЕ ЗАЯВКИ (БЕЗ ФИЛЬТРА ПО СТАТУСУ) ===
+  const displayedRequests = useMemo(() => {
+    let filtered = requests; // Берем ВСЕ заявки (и закрытые, и открытые)
+    
     if (selectedDept !== "ВСЕ") {
+        // Применяем фильтр только если выбран конкретный отдел
         filtered = filtered.filter(r => (r.target_department === selectedDept || r.target_dept_service === selectedDept));
     }
     return filtered;
@@ -195,11 +183,10 @@ export default function StandPage() {
                   ТАБЛО СЭД
               </h1>
               <p className="text-gray-500 mt-1 text-xs md:text-sm flex items-center gap-2">
-                  <Zap size={14} className="text-yellow-500"/> Прямое подключение
+                  <Zap size={14} className="text-yellow-500"/> Все документы (Архив + В работе)
               </p>
           </div>
           
-          {/* Фильтр подразделений */}
           <div className="w-full md:w-auto flex items-center gap-2 bg-[#161b22] border border-gray-800 p-2 rounded-xl">
               <Filter size={18} className="text-gray-500 ml-2"/>
               <select 
@@ -218,14 +205,14 @@ export default function StandPage() {
       ) : (
           <div className="space-y-6">
               <h2 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
-                  <Clock className="text-orange-500"/> В РАБОТЕ ({activeRequests.length})
+                  <Clock className="text-orange-500"/> ВСЕ ЗАЯВКИ ({displayedRequests.length})
               </h2>
 
-              {activeRequests.length === 0 ? (
-                  <div className="text-center py-12 text-gray-500 bg-[#161b22] rounded-xl border border-gray-800">Нет активных заявок</div>
+              {displayedRequests.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500 bg-[#161b22] rounded-xl border border-gray-800">Нет заявок</div>
               ) : (
                   <>
-                      {/* === ДЕСКТОП (Таблица) === */}
+                      {/* === ДЕСКТОП === */}
                       <div className="hidden md:block overflow-x-auto rounded-xl border border-gray-800 shadow-2xl">
                           <table className="w-full text-left text-sm whitespace-nowrap">
                               <thead className="bg-[#161b22] text-gray-400 text-xs uppercase font-bold">
@@ -237,14 +224,18 @@ export default function StandPage() {
                                   </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-800/50 bg-[#0d1117]">
-                                  {activeRequests.map(req => {
+                                  {displayedRequests.map(req => {
                                       const title = req.request_type === 'service' ? (req.service_name || req.item_name) : req.item_name;
                                       const isUrgent = (req.urgency || "").toLowerCase().trim() === "срочно";
                                       const dept = req.target_department || req.target_dept_service || "—";
                                       const steps = generateSteps(req);
+                                      // Определяем цвет фона: если отказ - красноватый, если оплачено - зеленоватый
+                                      let rowBg = "hover:bg-gray-800/30";
+                                      if (req.status?.toUpperCase().includes('ОТК')) rowBg = "bg-red-900/10 hover:bg-red-900/20";
+                                      if (req.step_accountant_done === 1) rowBg = "bg-green-900/5 hover:bg-green-900/10";
 
                                       return (
-                                          <tr key={req.id} className="hover:bg-gray-800/30 transition">
+                                          <tr key={req.id} className={`${rowBg} transition`}>
                                               <td className="px-4 py-4 font-bold text-white">
                                                   <div className="flex items-center gap-2">
                                                       <span>#{req.req_number}</span>
@@ -262,7 +253,6 @@ export default function StandPage() {
                                                   <User size={14} className="opacity-50"/> {req.initiator || '-'}
                                               </td>
                                               <td className="px-4 py-4">
-                                                  {/* РЕНДЕР ЦЕПОЧКИ ШАГОВ */}
                                                   <WorkflowTrack steps={steps} />
                                               </td>
                                           </tr>
@@ -272,16 +262,20 @@ export default function StandPage() {
                           </table>
                       </div>
 
-                      {/* === МОБИЛКА (Карточки) === */}
+                      {/* === МОБИЛКА === */}
                       <div className="grid grid-cols-1 gap-4 md:hidden">
-                          {activeRequests.map(req => {
+                          {displayedRequests.map(req => {
                               const title = req.request_type === 'service' ? (req.service_name || req.item_name) : req.item_name;
                               const isUrgent = (req.urgency || "").toLowerCase().trim() === "срочно";
                               const dept = req.target_department || req.target_dept_service || "—";
                               const steps = generateSteps(req);
+                              
+                              let cardBorder = "border-gray-800";
+                              if (req.status?.toUpperCase().includes('ОТК')) cardBorder = "border-red-900/50";
+                              if (req.step_accountant_done === 1) cardBorder = "border-green-900/30";
 
                               return (
-                                  <div key={req.id} className="bg-[#161b22] border border-gray-800 rounded-xl p-4 shadow-lg flex flex-col gap-3 relative overflow-hidden">
+                                  <div key={req.id} className={`bg-[#161b22] border ${cardBorder} rounded-xl p-4 shadow-lg flex flex-col gap-3 relative overflow-hidden`}>
                                       {isUrgent && <div className="absolute top-0 right-0 bg-red-600 text-white text-[9px] font-black px-3 py-1 rounded-bl-xl uppercase tracking-wider">Срочно</div>}
                                       
                                       <div className="flex justify-between items-start">
@@ -297,7 +291,6 @@ export default function StandPage() {
                                           <User size={14} className="opacity-50"/> {req.initiator || '-'}
                                       </div>
                                       
-                                      {/* РЕНДЕР ЦЕПОЧКИ ШАГОВ НА МОБИЛКЕ */}
                                       <div className="pt-3 border-t border-gray-800/50 mt-1">
                                           <WorkflowTrack steps={steps} />
                                       </div>
@@ -312,4 +305,3 @@ export default function StandPage() {
     </div>
   );
 }
-
