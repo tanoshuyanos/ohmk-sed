@@ -9,10 +9,10 @@ import {
   Monitor, PieChart, ShoppingCart, TrendingUp
 } from 'lucide-react';
 
-const APP_VERSION = "v12.16 (NEW STAND)";
-// Вставь свои ссылки:
-const STAND_SCRIPT_URL = "https://ohmk-sed.vercel.app/stand"; // ССЫЛКА НА ТАБЛО
-const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
+const APP_VERSION = "v12.16 (TABS FINANCE/ACC)";
+// Ссылки:
+const STAND_SCRIPT_URL = "https://ohmk-sed.vercel.app/stand"; 
+const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; // ПРОШУ ВЕРНУТЬ СЮДА СВОЮ ССЫЛКУ ОТ GOOGLE APPS SCRIPT ЕСЛИ ОНА ДРУГАЯ!
 const SHEET_URL = "https://ohmk-sed.vercel.app/stand"; 
 
 const supabase = createClient(
@@ -55,7 +55,7 @@ const getCurrencySymbol = (currencyCode) => {
         case 'USD': return '$';
         case 'EUR': return '€';
         case 'CNY': return '¥';
-        default: return '₸'; // По умолчанию всегда тенге
+        default: return '₸'; 
     }
 };
 
@@ -75,7 +75,7 @@ const STAFF_IDS = {
 
 const sendTelegramNotification = async (text, targetId = null) => {
     if (!text) return;
-    const destination = targetId || CHAT_ID; // Если личный ID не передан, шлем в группу
+    const destination = targetId || CHAT_ID; 
     const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
     try {
         await fetch(url, {
@@ -91,9 +91,12 @@ export default function SED() {
   const [pin, setPin] = useState('');
   const [loading, setLoading] = useState(false);
   const [requests, setRequests] = useState([]);
-  const [allRequests, setAllRequests] = useState([]); // Стейт для полной базы Дашборда
+  const [allRequests, setAllRequests] = useState([]); 
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState('active'); 
+
+  // === НОВОЕ: Вкладки внутри ролей (Финансист и Бухгалтерия) ===
+  const [subTab, setSubTab] = useState('stage1'); 
    
   const [modal, setModal] = useState({ open: false, req: null, type: '' }); 
   const [historyModal, setHistoryModal] = useState({ open: false, req: null });
@@ -160,6 +163,7 @@ export default function SED() {
     if (ROLES[pin]) {
       setRole(ROLES[pin]);
       setViewMode('active');
+      setSubTab('stage1'); // Сбрасываем вкладку при входе
       fetchRequests(ROLES[pin], 'active');
     } else { alert("НЕВЕРНЫЙ ПИН"); setPin(''); }
   };
@@ -167,7 +171,6 @@ export default function SED() {
   const fetchRequests = async (userRole, mode) => {
     setLoading(true);
 
-    // === ГРУЗИМ ВСЮ БАЗУ ДЛЯ ДАШБОРДА (Аналитик и Фин.дир) ===
     if (['ANALYST', 'FIN_DIR'].includes(userRole)) {
         const { data: fullDB } = await supabase.from('requests').select('*').order('req_number', { ascending: false });
         setAllRequests(fullDB || []);
@@ -180,7 +183,7 @@ export default function SED() {
     } 
     else {
         if (userRole === "ANALYST") {
-            // Аналитик грузит всё, никаких фильтров для дашборда
+            // Аналитик грузит всё
         }
         else if (userRole === "DIRECTOR") query = query.is('step_director', null);
         else if (userRole === "FIN_DIR") query = query.eq('step_komer', 1).is('step_findir', null);
@@ -218,23 +221,17 @@ export default function SED() {
     setLoading(false);
   };
 
-  const switchMode = (mode) => { setViewMode(mode); fetchRequests(role, mode); };
+  const switchMode = (mode) => { 
+      setViewMode(mode); 
+      setSubTab('stage1'); // Сброс суб-вкладки при смене режима
+      fetchRequests(role, mode); 
+  };
 
-  // === ЗАГРУЗКА ЛИЧНОГО ЖУРНАЛА ===
   const fetchMyLogs = async () => {
       setLogModal({ open: true, logs: [], loading: true });
-      const { data, error } = await supabase
-          .from('audit_logs')
-          .select('*')
-          .eq('role', role)
-          .order('created_at', { ascending: false })
-          .limit(100);
-      
-      if (!error && data) {
-          setLogModal({ open: true, logs: data, loading: false });
-      } else {
-          setLogModal({ open: true, logs: [], loading: false });
-      }
+      const { data, error } = await supabase.from('audit_logs').select('*').eq('role', role).order('created_at', { ascending: false }).limit(100);
+      if (!error && data) { setLogModal({ open: true, logs: data, loading: false }); } 
+      else { setLogModal({ open: true, logs: [], loading: false }); }
   };
 
   const openGoogleCalendar = (req) => {
@@ -244,13 +241,8 @@ export default function SED() {
     window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&dates=${dateStr}/${dateStr}`, '_blank');
   };
 
-  // === ВЫЧИСЛЕНИЕ АНАЛИТИКИ НА ОСНОВЕ ALL_REQUESTS ===
   const analyticsData = useMemo(() => {
-      let sellers = {};
-      let items = {};
-      let categories = {};
-
-      // Берем все заявки, чтобы у ФинДира была полная картина
+      let sellers = {}; let items = {}; let categories = {};
       const sourceData = allRequests.length > 0 ? allRequests : requests;
 
       sourceData.forEach(req => {
@@ -285,6 +277,24 @@ export default function SED() {
       };
   }, [allRequests, requests]);
 
+  // === ПОДСЧЕТ ЗАЯВОК ПО СУБ-ВКЛАДКАМ ===
+  const getTabCounts = () => {
+      if (viewMode !== 'active') return { stage1: 0, stage2: 0 };
+      let s1 = 0, s2 = 0;
+      requests.forEach(req => {
+          if (role === 'FINANCE') {
+              if (req.step_lawyer_draft === 1 && req.step_finance_review == null) s1++;
+              if (req.step_accountant_req === 1 && req.step_finance_pay == null) s2++;
+          }
+          if (role === 'ACCOUNTANT') {
+              if (req.step_lawyer_final === 1 && req.step_accountant_req == null) s1++;
+              if (req.step_finance_pay === 1 && req.step_accountant_done == null) s2++;
+          }
+      });
+      return { stage1: s1, stage2: s2 };
+  };
+  const tabCounts = useMemo(getTabCounts, [requests, role, viewMode]);
+
   const handleAction = async (req, actionType, payload = {}) => {
       if (payload.require_draft && !req.draft_url) return alert("Загрузите проект!");
       if (payload.require_scan && !req.contract_url) return alert("Загрузите скан!");
@@ -296,9 +306,7 @@ export default function SED() {
       let updates = { last_role: role };
       let comments = payload.comment || null;
 
-      if (actionType === 'TOGGLE_URGENCY') {
-          updates.urgency = payload.isUrgent ? null : 'срочно';
-      }
+      if (actionType === 'TOGGLE_URGENCY') { updates.urgency = payload.isUrgent ? null : 'срочно'; }
       else if (role === 'DIRECTOR') {
           if (actionType === 'APPROVE') updates.step_director = 1;
           if (actionType === 'REJECT') updates.step_director = 0;
@@ -344,9 +352,7 @@ export default function SED() {
           if (actionType === 'FIX_TO_KOMER') {
               const c = prompt("Укажите причину возврата Ком. Директору:");
               if (!c) return;
-              updates.step_komer = null; 
-              updates.step_findir = null; 
-              updates.fix_comment = "Юрист: " + c;
+              updates.step_komer = null; updates.step_findir = null; updates.fix_comment = "Юрист: " + c;
           }
       }
       else if (role === 'FINANCE') {
@@ -419,15 +425,8 @@ export default function SED() {
       } else {
           fetchRequests(role, viewMode);
 
-          // === ПИШЕМ СЛЕД В БАЗУ ЛОГОВ ===
           const auditReason = updates.fix_comment || comments || "";
-          supabase.from('audit_logs').insert([{
-              role: role,
-              req_number: req.req_number || "Б/Н",
-              action: actionText,
-              comment: auditReason
-          }]).then(); // Тихо пишем в фоне
-          // ================================
+          supabase.from('audit_logs').insert([{ role: role, req_number: req.req_number || "Б/Н", action: actionText, comment: auditReason }]).then();
 
           const reqTitle = req.request_type === 'service' ? (req.service_name || req.item_name) : req.item_name;
           const itemNameSafe = reqTitle || "Без названия";
@@ -487,7 +486,6 @@ export default function SED() {
           if (tgMessage !== "") {
               sendTelegramNotification(tgMessage);
               let nextRole = "";
-              
               if (role === 'DIRECTOR' && actionType === 'APPROVE') nextRole = "KOMER";
               else if (role === 'KOMER' && actionType === 'SEND') nextRole = "FIN_DIR";
               else if (role === 'FIN_DIR' && actionType === 'APPROVE') nextRole = "LAWYER";
@@ -496,7 +494,6 @@ export default function SED() {
               else if (role === 'LAWYER' && actionType === 'SIGN') nextRole = "ACCOUNTANT";
               else if (role === 'ACCOUNTANT' && actionType === 'REQ_PAY') nextRole = "FINANCE";
               else if (role === 'FINANCE' && actionType === 'PAY_OK') nextRole = "ACCOUNTANT";
-              
               else if (actionType === 'FIX' || actionType === 'FIX_TO_KOMER') nextRole = "KOMER";
               else if (actionType === 'REVIEW_FIX') nextRole = "LAWYER";
               else if (actionType === 'PAY_FIX') nextRole = "ACCOUNTANT";
@@ -506,14 +503,10 @@ export default function SED() {
                   const personalMsg = `🔔 <b>ВАМ ЗАДАНИЕ:</b>\n` + tgMessage;
                   if (Array.isArray(target)) {
                       target.forEach(id => {
-                          if (id && id.length > 5 && !id.includes("ID_")) {
-                              sendTelegramNotification(personalMsg, id);
-                          }
+                          if (id && id.length > 5 && !id.includes("ID_")) sendTelegramNotification(personalMsg, id);
                       });
                   } else {
-                      if (target && target.length > 5 && !target.includes("ID_")) {
-                          sendTelegramNotification(personalMsg, target);
-                      }
+                      if (target && target.length > 5 && !target.includes("ID_")) sendTelegramNotification(personalMsg, target);
                   }
               }
           }
@@ -644,7 +637,6 @@ export default function SED() {
     <div className="flex flex-wrap justify-end items-center gap-2">
         {isUrgent && <div className="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded animate-pulse font-bold">СРОЧНО</div>}
         
-        {/* --- НОВЫЙ БЛОК: СТАТУС БЮДЖЕТА --- */}
         {req.economist_status === 'ПО ПЛАНУ' && (
             <div className="bg-green-900/40 border border-green-600 text-green-400 text-[10px] px-2 py-0.5 rounded font-bold">В ПЛАНЕ</div>
         )}
@@ -654,7 +646,6 @@ export default function SED() {
         {(!req.economist_status && !req.step_economist) && (
             <div className="bg-gray-800 border border-gray-600 text-gray-400 text-[10px] px-2 py-0.5 rounded font-bold">ЖДЕТ ЭКОНОМИСТА</div>
         )}
-        {/* --------------------------------- */}
 
         <button onClick={() => setHistoryModal({open: true, req: req})} className="text-gray-400 hover:text-blue-400 bg-gray-800 hover:bg-gray-700 p-1.5 rounded border border-gray-700 hover:border-blue-500 transition shadow-sm" title="История статусов">
             <History size={16} />
@@ -933,7 +924,6 @@ export default function SED() {
            </div>
         </div>
       )}
-      {/* === МОДАЛКА: ЖЕЛЕЗОБЕТОННЫЙ ЛОГ ПРОФИЛЯ === */}
       {logModal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
            <div className="bg-black border border-gray-700 rounded-lg w-full max-w-2xl p-4 shadow-2xl relative flex flex-col max-h-[90vh]">
@@ -964,12 +954,9 @@ export default function SED() {
                  <div className="flex items-center gap-3"><div className="flex flex-col"><span className="text-xs text-gray-500 font-bold">РОЛЬ</span><div className="flex items-center gap-2"><b className="text-blue-400 text-lg">{role}</b>{loading && <Loader2 className="animate-spin text-gray-500" size={14}/>}</div></div></div>
                  <div className="flex gap-2">
                      <a href={SHEET_URL} target="_blank" className="flex items-center gap-1 bg-gray-800 hover:bg-gray-700 border border-gray-600 text-gray-300 px-3 py-2 rounded-lg text-xs font-bold transition"><Table size={14}/> <span className="hidden sm:inline">ТАБЛИЦА</span></a>
-                     
-                     {/* КНОПКА МОЙ ЛОГ */}
                      <button onClick={fetchMyLogs} className="flex items-center gap-1 bg-blue-900/30 text-blue-400 border border-blue-800 hover:bg-blue-900/50 px-3 py-2 rounded-lg text-xs font-bold transition">
                          <FileText size={14}/> <span className="hidden sm:inline">МОЙ ЛОГ</span>
                      </button>
-
                      <button onClick={() => setRole(null)} className="text-[10px] text-red-400 border border-red-900/30 px-3 py-2 rounded-lg bg-red-900/10 hover:bg-red-900/20">ВЫХОД</button>
                  </div>
              </div>
@@ -1019,7 +1006,6 @@ export default function SED() {
 
                       {/* ТАБЛИЦЫ АНАЛИТИКИ */}
                       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
-                          {/* Топ Поставщики */}
                           <div className="bg-[#0d1117] border border-gray-800 rounded-lg p-4">
                               <h3 className="text-gray-400 font-bold text-xs uppercase mb-3 flex items-center gap-2"><Briefcase size={14}/> Топ-5 Контрагентов (KZT)</h3>
                               <div className="space-y-2">
@@ -1034,7 +1020,6 @@ export default function SED() {
                                   ))}
                               </div>
                           </div>
-                          {/* Топ Категории */}
                           <div className="bg-[#0d1117] border border-gray-800 rounded-lg p-4">
                               <h3 className="text-gray-400 font-bold text-xs uppercase mb-3 flex items-center gap-2"><PieChart size={14}/> Затраты по категориям</h3>
                               <div className="space-y-2">
@@ -1049,7 +1034,6 @@ export default function SED() {
                                   ))}
                               </div>
                           </div>
-                          {/* Самые частые товары */}
                           <div className="bg-[#0d1117] border border-gray-800 rounded-lg p-4">
                               <h3 className="text-gray-400 font-bold text-xs uppercase mb-3 flex items-center gap-2"><ShoppingCart size={14}/> Частые покупки</h3>
                               <div className="space-y-2">
@@ -1066,10 +1050,55 @@ export default function SED() {
               )}
               {/* ======================= */}
 
+              {/* === НОВЫЙ БЛОК: ВКЛАДКИ ДЛЯ ФИНАНСОВ И БУХГАЛТЕРИИ === */}
+              {viewMode === 'active' && (role === 'FINANCE' || role === 'ACCOUNTANT') && (
+                  <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
+                      {role === 'FINANCE' && (
+                          <>
+                              <button onClick={() => setSubTab('stage1')} className={`px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap flex items-center gap-2 border ${subTab === 'stage1' ? 'bg-yellow-600 text-white border-yellow-500 shadow-lg shadow-yellow-900/20' : 'bg-[#161b22] border-gray-800 text-gray-400 hover:text-white'}`}>
+                                  📝 1. СОГЛАСОВАНИЕ ДОГОВОРОВ
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] ${subTab === 'stage1' ? 'bg-white text-yellow-600' : 'bg-gray-800 text-gray-300'}`}>{tabCounts.stage1}</span>
+                              </button>
+                              <button onClick={() => setSubTab('stage2')} className={`px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap flex items-center gap-2 border ${subTab === 'stage2' ? 'bg-yellow-600 text-white border-yellow-500 shadow-lg shadow-yellow-900/20' : 'bg-[#161b22] border-gray-800 text-gray-400 hover:text-white'}`}>
+                                  💰 2. АПРУВ НА ОПЛАТУ
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] ${subTab === 'stage2' ? 'bg-white text-yellow-600' : 'bg-gray-800 text-gray-300'}`}>{tabCounts.stage2}</span>
+                              </button>
+                          </>
+                      )}
+                      {role === 'ACCOUNTANT' && (
+                          <>
+                              <button onClick={() => setSubTab('stage1')} className={`px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap flex items-center gap-2 border ${subTab === 'stage1' ? 'bg-cyan-600 text-white border-cyan-500 shadow-lg shadow-cyan-900/20' : 'bg-[#161b22] border-gray-800 text-gray-400 hover:text-white'}`}>
+                                  🧮 1. ЗАПРОСЫ СЧЕТОВ (В 1С)
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] ${subTab === 'stage1' ? 'bg-white text-cyan-600' : 'bg-gray-800 text-gray-300'}`}>{tabCounts.stage1}</span>
+                              </button>
+                              <button onClick={() => setSubTab('stage2')} className={`px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap flex items-center gap-2 border ${subTab === 'stage2' ? 'bg-cyan-600 text-white border-cyan-500 shadow-lg shadow-cyan-900/20' : 'bg-[#161b22] border-gray-800 text-gray-400 hover:text-white'}`}>
+                                  💸 2. ПРОВЕСТИ ОПЛАТУ
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] ${subTab === 'stage2' ? 'bg-white text-cyan-600' : 'bg-gray-800 text-gray-300'}`}>{tabCounts.stage2}</span>
+                              </button>
+                          </>
+                      )}
+                  </div>
+              )}
+              {/* ======================= */}
+
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">
                 {requests.filter(req => {
-                    if (!searchQuery) return true;
-                    return JSON.stringify(req).toLowerCase().includes(searchQuery.toLowerCase());
+                    // Глобальный поиск
+                    if (searchQuery && !JSON.stringify(req).toLowerCase().includes(searchQuery.toLowerCase())) return false;
+
+                    // Умная фильтрация по вкладкам (только в режиме "В работе")
+                    if (viewMode === 'active') {
+                        if (role === 'FINANCE') {
+                            if (subTab === 'stage1' && !(req.step_lawyer_draft === 1 && req.step_finance_review == null)) return false;
+                            if (subTab === 'stage2' && !(req.step_accountant_req === 1 && req.step_finance_pay == null)) return false;
+                        }
+                        if (role === 'ACCOUNTANT') {
+                            if (subTab === 'stage1' && !(req.step_lawyer_final === 1 && req.step_accountant_req == null)) return false;
+                            if (subTab === 'stage2' && !(req.step_finance_pay === 1 && req.step_accountant_done == null)) return false;
+                        }
+                    }
+
+                    return true;
                 }).map(req => (<RequestCard key={req.id} req={req} />))}
               </div>
 
