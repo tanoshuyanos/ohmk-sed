@@ -9,7 +9,7 @@ import {
   Monitor, PieChart, ShoppingCart, TrendingUp
 } from 'lucide-react';
 
-const APP_VERSION = "v12.15 (NEW STAND)";
+const APP_VERSION = "v12.16 (NEW STAND)";
 // Вставь свои ссылки:
 const STAND_SCRIPT_URL = "https://ohmk-sed.vercel.app/stand"; // ССЫЛКА НА ТАБЛО
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
