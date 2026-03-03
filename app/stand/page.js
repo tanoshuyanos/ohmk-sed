@@ -159,7 +159,6 @@ const WorkflowTrack = ({ steps }) => (
 // === КОМПОНЕНТ ПЛАШКИ СТАТИСТИКИ (УМНАЯ ПОДСВЕТКА) ===
 const StatBadge = ({ icon, label, count, activeWrap, activeNum }) => {
     const isZero = count === 0;
-    // Если 0 - делаем серым и приглушенным, если больше 0 - зажигаем ярким цветом
     const wrapClass = isZero ? "bg-gray-900/30 border border-gray-800 text-gray-500" : activeWrap;
     const numClass = isZero ? "bg-gray-800 text-gray-500" : activeNum;
     
@@ -177,7 +176,10 @@ export default function StandPage() {
   const [loading, setLoading] = useState(true);
   
   const [selectedDept, setSelectedDept] = useState("ВСЕ");
-  const [searchQuery, setSearchQuery] = useState("");
+  
+  // === ДВА СОСТОЯНИЯ ДЛЯ ПОИСКА ===
+  const [searchInput, setSearchInput] = useState(""); // То, что печатается в поле
+  const [searchQuery, setSearchQuery] = useState(""); // То, по чему реально идет фильтрация
 
   const fetchStandData = async () => {
     setLoading(true);
@@ -199,11 +201,9 @@ export default function StandPage() {
     return [...new Set([...fixedList, ...dbDepts])].sort();
   }, [requests]);
 
-  // === ВЫЧИСЛЕНИЕ СТАТИСТИКИ ===
   const actionStats = useMemo(() => {
       const stats = { director: 0, komer: 0, findir: 0, lawyer: 0, finance: 0, accountant: 0, warehouses: {} };
       
-      // Инициализируем нулями все склады из константы
       Object.keys(WAREHOUSE_NAMES).forEach(code => { stats.warehouses[code] = 0; });
       stats.warehouses['UNASSIGNED'] = 0;
 
@@ -239,6 +239,7 @@ export default function StandPage() {
     if (selectedDept !== "ВСЕ") {
         filtered = filtered.filter(r => (r.target_department === selectedDept || r.target_dept_service === selectedDept));
     }
+    // ФИЛЬТРАЦИЯ ИДЕТ ПО searchQuery (после нажатия Enter/Кнопки)
     if (searchQuery.trim() !== "") {
         const q = searchQuery.toLowerCase().trim();
         filtered = filtered.filter(r => {
@@ -269,18 +270,34 @@ export default function StandPage() {
           </div>
           
           <div className="flex flex-col md:flex-row w-full md:w-auto gap-3 items-center">
-              <div className="flex items-center bg-[#161b22] border border-gray-800 p-2 rounded-xl w-full md:w-64">
-                  <Search size={18} className="text-gray-500 ml-2"/>
+              
+              {/* === ОБНОВЛЕННЫЙ ПОИСК === */}
+              <div className="flex items-center bg-[#161b22] border border-gray-800 p-1.5 rounded-xl w-full md:w-80 gap-2 focus-within:border-blue-500 transition-colors">
                   <input 
                       type="text"
                       placeholder="Поиск (№, Название, ФИО)..."
-                      className="bg-transparent text-white font-bold text-sm outline-none w-full ml-2"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="bg-transparent text-white font-bold text-sm outline-none w-full pl-3"
+                      value={searchInput}
+                      onChange={(e) => setSearchInput(e.target.value)}
+                      onKeyDown={(e) => {
+                          if (e.key === 'Enter') setSearchQuery(searchInput);
+                      }}
                   />
-                  {searchQuery && (
-                      <button onClick={() => setSearchQuery("")} className="text-gray-500 hover:text-white mr-2"><XCircle size={16}/></button>
+                  {searchInput && (
+                      <button 
+                          onClick={() => { setSearchInput(""); setSearchQuery(""); }} 
+                          className="text-gray-500 hover:text-red-400 transition-colors px-1"
+                      >
+                          <XCircle size={16}/>
+                      </button>
                   )}
+                  <button 
+                      onClick={() => setSearchQuery(searchInput)}
+                      className="bg-blue-600 hover:bg-blue-500 p-2 rounded-lg text-white transition flex items-center justify-center"
+                      title="Найти"
+                  >
+                      <Search size={16}/>
+                  </button>
               </div>
 
               <div className="flex items-center bg-[#161b22] border border-gray-800 p-2 rounded-xl w-full md:w-auto">
@@ -306,7 +323,6 @@ export default function StandPage() {
           </div>
       </div>
 
-      {/* === БЛОК СТАТИСТИКИ (ОЖИДАЮТ ДЕЙСТВИЯ) === */}
       {!loading && requests.length > 0 && (
           <div className="mb-6 bg-[#161b22] border border-gray-800 rounded-xl p-4">
               <h3 className="text-gray-400 text-xs font-bold uppercase mb-3 flex items-center gap-2">
@@ -314,20 +330,16 @@ export default function StandPage() {
               </h3>
               <div className="flex flex-wrap gap-2">
                   
-                  {/* ДИРЕКТОР */}
                   <StatBadge icon="👔" label="Директор" count={actionStats.director} activeWrap="bg-blue-900/20 border-blue-800 text-blue-300" activeNum="bg-blue-600 text-white" />
                   
-                  {/* ВСЕ СКЛАДЫ (Выводятся всегда) */}
                   {Object.entries(WAREHOUSE_NAMES).map(([code, name]) => (
                       <StatBadge key={code} icon="📦" label={name} count={actionStats.warehouses[code]} activeWrap="bg-orange-900/20 border-orange-800 text-orange-300" activeNum="bg-orange-600 text-white" />
                   ))}
 
-                  {/* СТАРЫЕ ЗАЯВКИ (Скрываем, если их 0) */}
                   {actionStats.warehouses['UNASSIGNED'] > 0 && (
                       <StatBadge icon="📦" label="Склад (Старые)" count={actionStats.warehouses['UNASSIGNED']} activeWrap="bg-orange-900/20 border-orange-800 text-orange-300" activeNum="bg-orange-600 text-white" />
                   )}
                   
-                  {/* ОСТАЛЬНЫЕ РОЛИ */}
                   <StatBadge icon="📝" label="Ком. Дир" count={actionStats.komer} activeWrap="bg-purple-900/20 border-purple-800 text-purple-300" activeNum="bg-purple-600 text-white" />
                   <StatBadge icon="🏦" label="Фин. Дир" count={actionStats.findir} activeWrap="bg-yellow-900/20 border-yellow-800 text-yellow-300" activeNum="bg-yellow-600 text-white" />
                   <StatBadge icon="⚖️" label="Юристы" count={actionStats.lawyer} activeWrap="bg-indigo-900/20 border-indigo-800 text-indigo-300" activeNum="bg-indigo-600 text-white" />
