@@ -9,7 +9,7 @@ const supabase = createClient(
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlrbXZsdWdoZWtqbnFnZHlkZG1wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1NzQ3OTAsImV4cCI6MjA4NTE1MDc5MH0.ZaPeruXSJ6EQJ21nk4VPdvzQFMxoLUSxewQVK4EOE8Y"
 );
 
-// === 1. ГЕНЕРАТОР ЦЕПОЧКИ (С ФИКСОМ ДЛЯ СТАРЫХ ЗАЯВОК) ===
+// === 1. ГЕНЕРАТОР ЦЕПОЧКИ (ОСТАНАВЛИВАЕТСЯ ПРИ ОТКАЗЕ) ===
 const generateSteps = (r) => {
   let s = { 
     dir: 'wait', skl: 'wait', com: 'wait', fdir: 'wait', 
@@ -17,79 +17,98 @@ const generateSteps = (r) => {
     acc1: 'wait', fin2: 'wait', acc2: 'wait' 
   };
 
+  // 1. Директор
   if (r.step_director === 1) s.dir = 'done';
-  else if (r.step_director === 0) s.dir = 'reject';
+  else if (r.step_director === 0) { s.dir = 'reject'; return s; } // <-- ЕСЛИ 0, СРАЗУ ОСТАНАВЛИВАЕМ ЦЕПОЧКУ
   else { s.dir = 'pending'; return s; }
 
-  // --- ФИКС СКЛАДА ---
+  // 2. Склад
   if (r.request_type === 'service') {
     s.skl = 'skip';
   } else {
-    if (r.step_sklad === 1) s.skl = 'done'; 
-    else if (r.step_sklad === 0) s.skl = 'reject';
-    else if (r.step_sklad === 2) s.skl = 'buy'; 
-    else if (r.step_komer != null) s.skl = 'skip'; // <-- ЕСЛИ КОМ.ДИР УЖЕ В РАБОТЕ, ПРОПУСКАЕМ СКЛАД (ДЛЯ СТАРЫХ ЗАЯВОК)
+    if (r.step_sklad === 1) { 
+        s.skl = 'done'; 
+        return { ...s, com:'skip', fdir:'skip', law1:'skip', fin1:'skip', law2:'skip', acc1:'skip', fin2:'skip', acc2:'skip' }; 
+    }
+    else if (r.step_sklad === 0) { s.skl = 'reject'; return s; }
+    else if (r.step_sklad === 2) { s.skl = 'buy'; }
+    else if (r.step_komer != null) { s.skl = 'skip'; } 
     else { s.skl = 'pending'; return s; }
   }
 
-  if (s.skl === 'done') {
-     s.com = 'skip'; s.fdir = 'skip'; s.law1 = 'skip'; s.fin1 = 'skip'; s.law2 = 'skip'; s.acc1 = 'skip'; s.fin2 = 'skip'; s.acc2 = 'skip';
-     return s; 
-  }
-
+  // 3. Ком. Директор
   if (r.step_komer === 1) s.com = 'done';
-  else if (r.step_komer === 0) s.com = 'reject';
+  else if (r.step_komer === 0) { s.com = 'reject'; return s; }
   else { s.com = 'pending'; return s; }
 
+  // 4. Фин. Директор
   if (r.step_findir === 1) s.fdir = 'done';
-  else if (r.step_findir === 0) s.fdir = 'reject';
+  else if (r.step_findir === 0) { s.fdir = 'reject'; return s; }
   else { s.fdir = 'pending'; return s; }
 
+  // 5. Юрист (Проект)
   if (r.step_lawyer_draft === 1) s.law1 = 'done';
-  else if (r.step_lawyer_draft === 0) s.law1 = 'reject';
+  else if (r.step_lawyer_draft === 0) { s.law1 = 'reject'; return s; }
   else { s.law1 = 'pending'; return s; }
 
+  // 6. Финансист (Согласование)
   if (r.step_finance_review === 1) s.fin1 = 'done';
-  else if (r.step_finance_review === 0) s.fin1 = 'reject';
+  else if (r.step_finance_review === 0) { s.fin1 = 'reject'; return s; }
   else { s.fin1 = 'pending'; return s; }
 
+  // 7. Юрист (Скан)
   if (r.step_lawyer_final === 1) s.law2 = 'done';
-  else if (r.step_lawyer_final === 0) s.law2 = 'reject';
+  else if (r.step_lawyer_final === 0) { s.law2 = 'reject'; return s; }
   else { s.law2 = 'pending'; return s; }
 
+  // 8. Бухгалтер (1С)
   if (r.step_accountant_req === 1) s.acc1 = 'done';
-  else if (r.step_accountant_req === 0) s.acc1 = 'reject';
+  else if (r.step_accountant_req === 0) { s.acc1 = 'reject'; return s; }
   else { s.acc1 = 'pending'; return s; }
 
+  // 9. Финансист (Оплата)
   if (r.step_finance_pay === 1) s.fin2 = 'done';
-  else if (r.step_finance_pay === 0) s.fin2 = 'reject';
+  else if (r.step_finance_pay === 0) { s.fin2 = 'reject'; return s; }
   else { s.fin2 = 'pending'; return s; }
 
+  // 10. Бухгалтер (Факт)
   if (r.step_accountant_done === 1) s.acc2 = 'done';
-  else if (r.step_accountant_done === 0) s.acc2 = 'reject';
+  else if (r.step_accountant_done === 0) { s.acc2 = 'reject'; return s; }
   else { s.acc2 = 'pending'; return s; }
 
   return s;
 };
 
-// === 2. ТЕКСТОВЫЙ СТАТУС (С ФИКСОМ ДЛЯ СТАРЫХ ЗАЯВОК) ===
+// === 2. ТЕКСТОВЫЙ СТАТУС (КТО ИМЕННО ОТКАЗАЛ?) ===
 const getCurrentStatus = (req) => {
-    if (req.status?.toUpperCase().includes('ОТК')) return { text: '❌ ОТКАЗ / ОТМЕНА', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
+    // Проверка глобальной отмены
+    if (req.status?.toUpperCase().includes('ОТМЕН')) return { text: '🚫 ОТМЕНЕНО ИНИЦИАТОРОМ', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
+
+    // Точечная проверка: кто нажал "Отказать" (0)
+    if (req.step_director === 0) return { text: '❌ ОТКАЗ (Директор)', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
+    if (req.step_sklad === 0) return { text: '❌ ОТКАЗ (Склад)', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
+    if (req.step_komer === 0) return { text: '❌ ОТКАЗ (Ком. Директор)', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
+    if (req.step_findir === 0) return { text: '❌ ОТКАЗ (Фин. Директор)', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
+    if (req.step_lawyer_draft === 0) return { text: '❌ ОТКАЗ (Юрист - Проект)', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
+    if (req.step_finance_review === 0) return { text: '❌ ОТКАЗ (Финансист)', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
+    if (req.step_lawyer_final === 0) return { text: '❌ ОТКАЗ (Юрист - Скан)', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
+    if (req.step_accountant_req === 0) return { text: '❌ ОТКАЗ (Бухгалтер)', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
+    if (req.step_finance_pay === 0) return { text: '❌ ОТКАЗ (Финансист - Оплата)', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
+
+    // Легаси статусы
+    if (req.status?.toUpperCase().includes('ОТК')) return { text: '❌ ОТКАЗ', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
     if (req.step_accountant_done === 1 || req.status?.toUpperCase() === 'ОПЛАЧЕНО') return { text: '✅ ОПЛАЧЕНО', color: 'text-green-500 border-green-500/30 bg-green-500/10' };
     
+    // Водопад "В процессе"
     if (req.step_director !== 1) return { text: '👔 Директор', color: 'text-blue-400 border-blue-500/30 bg-blue-500/10' };
     
-    // --- ФИКС СКЛАДА ---
     if (req.request_type !== 'service') {
         if (req.step_sklad === 1) return { text: '✅ ВЫДАНО СО СКЛАДА', color: 'text-green-500 border-green-500/30 bg-green-500/10' }; 
-        // Если склад не 2 (покупаем) И ком.дир еще пустой -> ждем склад
         if (req.step_sklad !== 2 && req.step_komer == null) return { text: '📦 Склад', color: 'text-orange-400 border-orange-500/30 bg-orange-500/10' };
     }
-    // -------------------
     
     if (req.step_komer !== 1) return { text: '📝 Ком. Директор', color: 'text-purple-400 border-purple-500/30 bg-purple-500/10' };
     if (req.step_findir !== 1) return { text: '🏦 Фин. Директор', color: 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10' };
-    
     if (req.step_lawyer_draft !== 1) return { text: '⚖️ Юрист (Проект)', color: 'text-indigo-400 border-indigo-500/30 bg-indigo-500/10' };
     if (req.step_finance_review !== 1) return { text: '💰 Финансист (Согласование)', color: 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10' };
     if (req.step_lawyer_final !== 1) return { text: '✍️ Юрист (Скан)', color: 'text-indigo-400 border-indigo-500/30 bg-indigo-500/10' };
@@ -97,6 +116,13 @@ const getCurrentStatus = (req) => {
     if (req.step_finance_pay !== 1) return { text: '💎 Финансист (Апрув оплаты)', color: 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10' };
     
     return { text: '💸 Бухгалтер (Ждет оплаты)', color: 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10' };
+};
+
+// Вспомогательная функция для проверки, убита ли заявка
+const isRequestRejected = (req) => {
+    return req.status?.toUpperCase().includes('ОТК') || 
+           req.status?.toUpperCase().includes('ОТМЕН') || 
+           [req.step_director, req.step_sklad, req.step_komer, req.step_findir, req.step_lawyer_draft, req.step_finance_review, req.step_lawyer_final, req.step_accountant_req, req.step_finance_pay, req.step_accountant_done].includes(0);
 };
 
 // === 3. КОМПОНЕНТЫ ===
@@ -256,8 +282,8 @@ export default function StandPage() {
                                       const currentStat = getCurrentStatus(req); 
 
                                       let rowBg = "hover:bg-gray-800/30";
-                                      if (req.status?.toUpperCase().includes('ОТК')) rowBg = "bg-red-900/10 hover:bg-red-900/20";
-                                      if (req.step_accountant_done === 1 || req.status?.toUpperCase() === 'ОПЛАЧЕНО') rowBg = "bg-green-900/5 hover:bg-green-900/10";
+                                      if (isRequestRejected(req)) rowBg = "bg-red-900/10 hover:bg-red-900/20";
+                                      else if (req.step_accountant_done === 1 || req.status?.toUpperCase() === 'ОПЛАЧЕНО') rowBg = "bg-green-900/5 hover:bg-green-900/10";
 
                                       return (
                                           <tr key={req.id} className={`${rowBg} transition`}>
@@ -303,8 +329,8 @@ export default function StandPage() {
                               const currentStat = getCurrentStatus(req); 
                               
                               let cardBorder = "border-gray-800";
-                              if (req.status?.toUpperCase().includes('ОТК')) cardBorder = "border-red-900/50";
-                              if (req.step_accountant_done === 1 || req.status?.toUpperCase() === 'ОПЛАЧЕНО') cardBorder = "border-green-900/30";
+                              if (isRequestRejected(req)) cardBorder = "border-red-900/50";
+                              else if (req.step_accountant_done === 1 || req.status?.toUpperCase() === 'ОПЛАЧЕНО') cardBorder = "border-green-900/30";
 
                               return (
                                   <div key={req.id} className={`bg-[#161b22] border ${cardBorder} rounded-xl p-4 shadow-lg flex flex-col gap-2 relative overflow-hidden`}>
