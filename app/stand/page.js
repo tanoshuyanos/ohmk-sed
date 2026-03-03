@@ -9,7 +9,7 @@ const supabase = createClient(
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlrbXZsdWdoZWtqbnFnZHlkZG1wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1NzQ3OTAsImV4cCI6MjA4NTE1MDc5MH0.ZaPeruXSJ6EQJ21nk4VPdvzQFMxoLUSxewQVK4EOE8Y"
 );
 
-// === 1. ГЕНЕРАТОР ЦЕПОЧКИ (ОСТАНАВЛИВАЕТСЯ ПРИ ОТКАЗЕ) ===
+// === 1. ГЕНЕРАТОР ЦЕПОЧКИ ===
 const generateSteps = (r) => {
   let s = { 
     dir: 'wait', skl: 'wait', com: 'wait', fdir: 'wait', 
@@ -19,20 +19,23 @@ const generateSteps = (r) => {
 
   // 1. Директор
   if (r.step_director === 1) s.dir = 'done';
-  else if (r.step_director === 0) { s.dir = 'reject'; return s; } // <-- ЕСЛИ 0, СРАЗУ ОСТАНАВЛИВАЕМ ЦЕПОЧКУ
+  else if (r.step_director === 0) { s.dir = 'reject'; return s; }
   else { s.dir = 'pending'; return s; }
 
-  // 2. Склад
+  // 2. Склад (БЕЗ ПРАВА ОТКАЗА)
   if (r.request_type === 'service') {
     s.skl = 'skip';
   } else {
+    // Если выдали - конец процесса
     if (r.step_sklad === 1) { 
         s.skl = 'done'; 
         return { ...s, com:'skip', fdir:'skip', law1:'skip', fin1:'skip', law2:'skip', acc1:'skip', fin2:'skip', acc2:'skip' }; 
     }
-    else if (r.step_sklad === 0) { s.skl = 'reject'; return s; }
-    else if (r.step_sklad === 2) { s.skl = 'buy'; }
+    // Если 0 или 2 - значит на складе НЕТ, нужно покупать. Идем дальше!
+    else if (r.step_sklad === 0 || r.step_sklad === 2) { s.skl = 'buy'; }
+    // Фикс для старых заявок, которые проскочили склад
     else if (r.step_komer != null) { s.skl = 'skip'; } 
+    // Ждем ответ склада
     else { s.skl = 'pending'; return s; }
   }
 
@@ -79,14 +82,20 @@ const generateSteps = (r) => {
   return s;
 };
 
-// === 2. ТЕКСТОВЫЙ СТАТУС (КТО ИМЕННО ОТКАЗАЛ?) ===
+// === Вспомогательная функция (Проверка на убитую заявку) ===
+const isRequestRejected = (req) => {
+    return req.status?.toUpperCase().includes('ОТК') || 
+           req.status?.toUpperCase().includes('ОТМЕН') || 
+           // Исключили Склад из списка убийц заявок!
+           [req.step_director, req.step_komer, req.step_findir, req.step_lawyer_draft, req.step_finance_review, req.step_lawyer_final, req.step_accountant_req, req.step_finance_pay, req.step_accountant_done].includes(0);
+};
+
+// === 2. ТЕКСТОВЫЙ СТАТУС ===
 const getCurrentStatus = (req) => {
-    // Проверка глобальной отмены
     if (req.status?.toUpperCase().includes('ОТМЕН')) return { text: '🚫 ОТМЕНЕНО ИНИЦИАТОРОМ', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
 
-    // Точечная проверка: кто нажал "Отказать" (0)
+    // Точечные отказы
     if (req.step_director === 0) return { text: '❌ ОТКАЗ (Директор)', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
-    if (req.step_sklad === 0) return { text: '❌ ОТКАЗ (Склад)', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
     if (req.step_komer === 0) return { text: '❌ ОТКАЗ (Ком. Директор)', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
     if (req.step_findir === 0) return { text: '❌ ОТКАЗ (Фин. Директор)', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
     if (req.step_lawyer_draft === 0) return { text: '❌ ОТКАЗ (Юрист - Проект)', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
@@ -95,7 +104,6 @@ const getCurrentStatus = (req) => {
     if (req.step_accountant_req === 0) return { text: '❌ ОТКАЗ (Бухгалтер)', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
     if (req.step_finance_pay === 0) return { text: '❌ ОТКАЗ (Финансист - Оплата)', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
 
-    // Легаси статусы
     if (req.status?.toUpperCase().includes('ОТК')) return { text: '❌ ОТКАЗ', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
     if (req.step_accountant_done === 1 || req.status?.toUpperCase() === 'ОПЛАЧЕНО') return { text: '✅ ОПЛАЧЕНО', color: 'text-green-500 border-green-500/30 bg-green-500/10' };
     
@@ -104,9 +112,11 @@ const getCurrentStatus = (req) => {
     
     if (req.request_type !== 'service') {
         if (req.step_sklad === 1) return { text: '✅ ВЫДАНО СО СКЛАДА', color: 'text-green-500 border-green-500/30 bg-green-500/10' }; 
-        if (req.step_sklad !== 2 && req.step_komer == null) return { text: '📦 Склад', color: 'text-orange-400 border-orange-500/30 bg-orange-500/10' };
+        // Если Склад пустой И Ком.дир пустой — значит ждем кладовщика
+        if (req.step_sklad == null && req.step_komer == null) return { text: '📦 Склад', color: 'text-orange-400 border-orange-500/30 bg-orange-500/10' };
     }
     
+    // Если Склад нажал "0" (Нет) или "2" (Купить), мы падаем сюда:
     if (req.step_komer !== 1) return { text: '📝 Ком. Директор', color: 'text-purple-400 border-purple-500/30 bg-purple-500/10' };
     if (req.step_findir !== 1) return { text: '🏦 Фин. Директор', color: 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10' };
     if (req.step_lawyer_draft !== 1) return { text: '⚖️ Юрист (Проект)', color: 'text-indigo-400 border-indigo-500/30 bg-indigo-500/10' };
@@ -116,13 +126,6 @@ const getCurrentStatus = (req) => {
     if (req.step_finance_pay !== 1) return { text: '💎 Финансист (Апрув оплаты)', color: 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10' };
     
     return { text: '💸 Бухгалтер (Ждет оплаты)', color: 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10' };
-};
-
-// Вспомогательная функция для проверки, убита ли заявка
-const isRequestRejected = (req) => {
-    return req.status?.toUpperCase().includes('ОТК') || 
-           req.status?.toUpperCase().includes('ОТМЕН') || 
-           [req.step_director, req.step_sklad, req.step_komer, req.step_findir, req.step_lawyer_draft, req.step_finance_review, req.step_lawyer_final, req.step_accountant_req, req.step_finance_pay, req.step_accountant_done].includes(0);
 };
 
 // === 3. КОМПОНЕНТЫ ===
