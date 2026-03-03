@@ -9,7 +9,7 @@ const supabase = createClient(
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlrbXZsdWdoZWtqbnFnZHlkZG1wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1NzQ3OTAsImV4cCI6MjA4NTE1MDc5MH0.ZaPeruXSJ6EQJ21nk4VPdvzQFMxoLUSxewQVK4EOE8Y"
 );
 
-// === 1. ГЕНЕРАТОР ЦЕПОЧКИ ===
+// === 1. ГЕНЕРАТОР ЦЕПОЧКИ (С ФИКСОМ ДЛЯ СТАРЫХ ЗАЯВОК) ===
 const generateSteps = (r) => {
   let s = { 
     dir: 'wait', skl: 'wait', com: 'wait', fdir: 'wait', 
@@ -21,12 +21,14 @@ const generateSteps = (r) => {
   else if (r.step_director === 0) s.dir = 'reject';
   else { s.dir = 'pending'; return s; }
 
+  // --- ФИКС СКЛАДА ---
   if (r.request_type === 'service') {
     s.skl = 'skip';
   } else {
     if (r.step_sklad === 1) s.skl = 'done'; 
     else if (r.step_sklad === 0) s.skl = 'reject';
     else if (r.step_sklad === 2) s.skl = 'buy'; 
+    else if (r.step_komer != null) s.skl = 'skip'; // <-- ЕСЛИ КОМ.ДИР УЖЕ В РАБОТЕ, ПРОПУСКАЕМ СКЛАД (ДЛЯ СТАРЫХ ЗАЯВОК)
     else { s.skl = 'pending'; return s; }
   }
 
@@ -70,15 +72,20 @@ const generateSteps = (r) => {
   return s;
 };
 
-// === 2. ТЕКСТОВЫЙ СТАТУС (У КОГО СЕЙЧАС) ===
+// === 2. ТЕКСТОВЫЙ СТАТУС (С ФИКСОМ ДЛЯ СТАРЫХ ЗАЯВОК) ===
 const getCurrentStatus = (req) => {
     if (req.status?.toUpperCase().includes('ОТК')) return { text: '❌ ОТКАЗ / ОТМЕНА', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
     if (req.step_accountant_done === 1 || req.status?.toUpperCase() === 'ОПЛАЧЕНО') return { text: '✅ ОПЛАЧЕНО', color: 'text-green-500 border-green-500/30 bg-green-500/10' };
     
     if (req.step_director !== 1) return { text: '👔 Директор', color: 'text-blue-400 border-blue-500/30 bg-blue-500/10' };
     
-    if (req.request_type !== 'service' && req.step_sklad !== 1 && req.step_sklad !== 2) return { text: '📦 Склад', color: 'text-orange-400 border-orange-500/30 bg-orange-500/10' };
-    if (req.request_type !== 'service' && req.step_sklad === 1) return { text: '✅ ВЫДАНО СО СКЛАДА', color: 'text-green-500 border-green-500/30 bg-green-500/10' }; 
+    // --- ФИКС СКЛАДА ---
+    if (req.request_type !== 'service') {
+        if (req.step_sklad === 1) return { text: '✅ ВЫДАНО СО СКЛАДА', color: 'text-green-500 border-green-500/30 bg-green-500/10' }; 
+        // Если склад не 2 (покупаем) И ком.дир еще пустой -> ждем склад
+        if (req.step_sklad !== 2 && req.step_komer == null) return { text: '📦 Склад', color: 'text-orange-400 border-orange-500/30 bg-orange-500/10' };
+    }
+    // -------------------
     
     if (req.step_komer !== 1) return { text: '📝 Ком. Директор', color: 'text-purple-400 border-purple-500/30 bg-purple-500/10' };
     if (req.step_findir !== 1) return { text: '🏦 Фин. Директор', color: 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10' };
@@ -129,7 +136,6 @@ export default function StandPage() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // Состояния фильтров
   const [selectedDept, setSelectedDept] = useState("ВСЕ");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -152,16 +158,13 @@ export default function StandPage() {
     return [...new Set([...fixedList, ...dbDepts])].sort();
   }, [requests]);
 
-  // === 4. УМНАЯ ФИЛЬТРАЦИЯ (ОТДЕЛ + ПОИСК) ===
   const displayedRequests = useMemo(() => {
     let filtered = requests;
     
-    // Фильтр по отделу
     if (selectedDept !== "ВСЕ") {
         filtered = filtered.filter(r => (r.target_department === selectedDept || r.target_dept_service === selectedDept));
     }
 
-    // Фильтр по строке поиска
     if (searchQuery.trim() !== "") {
         const q = searchQuery.toLowerCase().trim();
         filtered = filtered.filter(r => {
@@ -180,7 +183,6 @@ export default function StandPage() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-gray-200 font-sans p-2 md:p-8 pb-20">
       
-      {/* === ШАПКА === */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 md:mb-8 border-b border-gray-800 pb-4 gap-4">
           <div>
               <h1 className="text-2xl md:text-4xl font-black text-blue-500 tracking-widest flex items-center gap-3">
@@ -192,9 +194,7 @@ export default function StandPage() {
               </p>
           </div>
           
-          {/* ФИЛЬТРЫ: ПОИСК И ОТДЕЛЫ */}
           <div className="flex flex-col md:flex-row w-full md:w-auto gap-3">
-              {/* Поиск */}
               <div className="flex items-center bg-[#161b22] border border-gray-800 p-2 rounded-xl flex-grow md:w-64">
                   <Search size={18} className="text-gray-500 ml-2"/>
                   <input 
@@ -209,7 +209,6 @@ export default function StandPage() {
                   )}
               </div>
 
-              {/* Отдел */}
               <div className="flex items-center bg-[#161b22] border border-gray-800 p-2 rounded-xl w-full md:w-auto">
                   <Filter size={18} className="text-gray-500 ml-2"/>
                   <select 
@@ -236,7 +235,7 @@ export default function StandPage() {
                   <div className="text-center py-12 text-gray-500 bg-[#161b22] rounded-xl border border-gray-800">Нет совпадений</div>
               ) : (
                   <>
-                      {/* === ДЕСКТОП === */}
+                      {/* ДЕСКТОП */}
                       <div className="hidden md:block overflow-x-auto rounded-xl border border-gray-800 shadow-2xl">
                           <table className="w-full text-left text-sm whitespace-nowrap">
                               <thead className="bg-[#161b22] text-gray-400 text-xs uppercase font-bold">
@@ -254,7 +253,7 @@ export default function StandPage() {
                                       const dept = req.target_department || req.target_dept_service || "—";
                                       
                                       const steps = generateSteps(req);
-                                      const currentStat = getCurrentStatus(req); // Получаем текст статуса
+                                      const currentStat = getCurrentStatus(req); 
 
                                       let rowBg = "hover:bg-gray-800/30";
                                       if (req.status?.toUpperCase().includes('ОТК')) rowBg = "bg-red-900/10 hover:bg-red-900/20";
@@ -279,13 +278,11 @@ export default function StandPage() {
                                                   <User size={14} className="opacity-50"/> {req.initiator || '-'}
                                               </td>
                                               <td className="px-4 py-4">
-                                                  {/* ТЕКСТОВЫЙ СТАТУС */}
                                                   <div className="mb-2">
                                                       <span className={`px-2 py-1 text-[10px] uppercase font-black rounded border ${currentStat.color}`}>
                                                           {currentStat.text}
                                                       </span>
                                                   </div>
-                                                  {/* ПОЛОСА ПРОГРЕССА */}
                                                   <WorkflowTrack steps={steps} />
                                               </td>
                                           </tr>
@@ -295,7 +292,7 @@ export default function StandPage() {
                           </table>
                       </div>
 
-                      {/* === МОБИЛКА === */}
+                      {/* МОБИЛКА */}
                       <div className="grid grid-cols-1 gap-4 md:hidden">
                           {displayedRequests.map(req => {
                               const title = req.request_type === 'service' ? (req.service_name || req.item_name) : req.item_name;
@@ -303,7 +300,7 @@ export default function StandPage() {
                               const dept = req.target_department || req.target_dept_service || "—";
                               
                               const steps = generateSteps(req);
-                              const currentStat = getCurrentStatus(req); // Текст статуса
+                              const currentStat = getCurrentStatus(req); 
                               
                               let cardBorder = "border-gray-800";
                               if (req.status?.toUpperCase().includes('ОТК')) cardBorder = "border-red-900/50";
@@ -327,11 +324,9 @@ export default function StandPage() {
                                       </div>
                                       
                                       <div className="pt-3 border-t border-gray-800/50">
-                                          {/* ТЕКСТОВЫЙ СТАТУС (В центре, крупно) */}
                                           <div className={`px-2 py-1.5 text-[10px] text-center uppercase font-black rounded border ${currentStat.color} mb-3`}>
                                               {currentStat.text}
                                           </div>
-                                          {/* ПОЛОСА ПРОГРЕССА */}
                                           <WorkflowTrack steps={steps} />
                                       </div>
                                   </div>
