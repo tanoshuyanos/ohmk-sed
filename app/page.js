@@ -9,11 +9,11 @@ import {
   Monitor, PieChart, ShoppingCart, TrendingUp
 } from 'lucide-react';
 
-const APP_VERSION = "v12.14 (Audit Log)";
+const APP_VERSION = "v12.15 (NEW STAND)";
 // Вставь свои ссылки:
-const STAND_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; // ССЫЛКА НА ТАБЛО
-const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
-const SHEET_URL = "https://script.google.com/macros/s/AKfycbwKPGj8wyddHpkZmbZl5PSAmAklqUoL5lcT26c7_iGOnFEVY97fhO_RmFP8vxxE3QMp/exec"; 
+const STAND_SCRIPT_URL = "https://ohmk-sed.vercel.app/stand"; // ССЫЛКА НА ТАБЛО
+const STAND_URL = "https://ohmk-sed.vercel.app/stand"; 
+const SHEET_URL = "https://ohmk-sed.vercel.app/stand"; 
 
 const supabase = createClient(
   "https://ykmvlughekjnqgdyddmp.supabase.co",
