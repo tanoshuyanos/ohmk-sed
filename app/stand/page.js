@@ -9,62 +9,100 @@ const supabase = createClient(
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlrbXZsdWdoZWtqbnFnZHlkZG1wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1NzQ3OTAsImV4cCI6MjA4NTE1MDc5MH0.ZaPeruXSJ6EQJ21nk4VPdvzQFMxoLUSxewQVK4EOE8Y"
 );
 
-// === 1. ГЕНЕРАТОР ЦЕПОЧКИ (Точный порт твоего алгоритма из Code.gs) ===
+// === 1. ГЕНЕРАТОР ЦЕПОЧКИ (ПОЛНЫЕ 10 ШАГОВ) ===
 const generateSteps = (r) => {
-  let s = { dir: 'wait', skl: 'wait', com: 'wait', fdir: 'wait', law: 'wait', fin: 'wait', acc: 'wait' };
+  let s = { 
+    dir: 'wait', skl: 'wait', com: 'wait', fdir: 'wait', 
+    law1: 'wait', fin1: 'wait', law2: 'wait', 
+    acc1: 'wait', fin2: 'wait', acc2: 'wait' 
+  };
 
-  // Директор
+  // 1. Директор
   if (r.step_director === 1) s.dir = 'done';
   else if (r.step_director === 0) s.dir = 'reject';
   else { s.dir = 'pending'; return s; }
 
-  // Склад
+  // 2. Склад
   if (r.request_type === 'service') {
     s.skl = 'skip';
   } else {
-    if (r.step_sklad === 1) s.skl = 'done'; // Есть на складе (выдано)
+    if (r.step_sklad === 1) s.skl = 'done'; // Выдано
     else if (r.step_sklad === 0) s.skl = 'reject';
-    else if (r.step_sklad === 2) s.skl = 'buy'; // Нет на складе, покупаем (идем дальше)
+    else if (r.step_sklad === 2) s.skl = 'buy'; // Покупаем
     else { s.skl = 'pending'; return s; }
   }
 
-  // Если выдали со склада - конец маршрута
+  // Если выдали со склада - конец маршрута (всё остальное пропускаем)
   if (s.skl === 'done') {
-     s.com = 'skip'; s.fdir = 'skip'; s.law = 'skip'; s.fin = 'skip'; s.acc = 'skip';
+     s.com = 'skip'; s.fdir = 'skip'; 
+     s.law1 = 'skip'; s.fin1 = 'skip'; s.law2 = 'skip'; 
+     s.acc1 = 'skip'; s.fin2 = 'skip'; s.acc2 = 'skip';
      return s; 
   }
 
-  // Ком. Директор
+  // 3. Ком. Директор
   if (r.step_komer === 1) s.com = 'done';
   else if (r.step_komer === 0) s.com = 'reject';
   else { s.com = 'pending'; return s; }
 
-  // Фин. Директор
+  // 4. Фин. Директор
   if (r.step_findir === 1) s.fdir = 'done';
   else if (r.step_findir === 0) s.fdir = 'reject';
   else { s.fdir = 'pending'; return s; }
 
-  // Юрист
-  if (r.step_lawyer_final === 1) s.law = 'done';
-  else if (r.step_lawyer_draft === 1) { s.law = 'pending'; return s; }
-  else if (r.step_lawyer_draft === 0 || r.step_lawyer_final === 0) { s.law = 'reject'; return s; }
-  else { s.law = 'pending'; return s; }
+  // 5. Юрист (Проект)
+  if (r.step_lawyer_draft === 1) s.law1 = 'done';
+  else if (r.step_lawyer_draft === 0) s.law1 = 'reject';
+  else { s.law1 = 'pending'; return s; }
 
-  // Финансист
-  if (r.step_finance_pay === 1) s.fin = 'done';
-  else if (r.step_finance_review === 1) { s.fin = 'pending'; return s; }
-  else if (r.step_finance_review === 0 || r.step_finance_pay === 0) { s.fin = 'reject'; return s; }
-  else { s.fin = 'pending'; return s; }
+  // 6. Финансист (Согласование / Проверка)
+  if (r.step_finance_review === 1) s.fin1 = 'done';
+  else if (r.step_finance_review === 0) s.fin1 = 'reject';
+  else { s.fin1 = 'pending'; return s; }
 
-  // Бухгалтерия
-  if (r.step_accountant_done === 1) s.acc = 'done';
-  else if (r.step_accountant_req === 1) { s.acc = 'pending'; return s; }
-  else if (r.step_accountant_req === 0 || r.step_accountant_done === 0) { s.acc = 'reject'; return s; }
-  else { s.acc = 'pending'; return s; }
+  // 7. Юрист (Скан)
+  if (r.step_lawyer_final === 1) s.law2 = 'done';
+  else if (r.step_lawyer_final === 0) s.law2 = 'reject';
+  else { s.law2 = 'pending'; return s; }
+
+  // 8. Бухгалтер (Запрос / Счет 1С)
+  if (r.step_accountant_req === 1) s.acc1 = 'done';
+  else if (r.step_accountant_req === 0) s.acc1 = 'reject';
+  else { s.acc1 = 'pending'; return s; }
+
+  // 9. Финансист (Апрув оплаты)
+  if (r.step_finance_pay === 1) s.fin2 = 'done';
+  else if (r.step_finance_pay === 0) s.fin2 = 'reject';
+  else { s.fin2 = 'pending'; return s; }
+
+  // 10. Бухгалтер (Факт оплаты)
+  if (r.step_accountant_done === 1) s.acc2 = 'done';
+  else if (r.step_accountant_done === 0) s.acc2 = 'reject';
+  else { s.acc2 = 'pending'; return s; }
 
   return s;
 };
 
+// === 2. КОМПОНЕНТ ОТРИСОВКИ ШАГОВ ===
+// (StepIndicator оставляем без изменений, меняем только сам Track)
+
+const WorkflowTrack = ({ steps }) => (
+  // Добавили overflow-x-auto и скрыли скроллбар для идеального вида на телефонах
+  <div className="flex items-center gap-1 md:gap-1.5 w-full overflow-x-auto pb-2 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+    <StepIndicator status={steps.dir} label="Дир" /> <ChevronRight size={14} className="text-gray-700 flex-shrink-0"/>
+    <StepIndicator status={steps.skl} label="Склад" /> <ChevronRight size={14} className="text-gray-700 flex-shrink-0"/>
+    <StepIndicator status={steps.com} label="Ком" /> <ChevronRight size={14} className="text-gray-700 flex-shrink-0"/>
+    <StepIndicator status={steps.fdir} label="Фин.Д" /> <ChevronRight size={14} className="text-gray-700 flex-shrink-0"/>
+    
+    <StepIndicator status={steps.law1} label="Юр(Пр)" /> <ChevronRight size={14} className="text-gray-700 flex-shrink-0"/>
+    <StepIndicator status={steps.fin1} label="Фин(Сг)" /> <ChevronRight size={14} className="text-gray-700 flex-shrink-0"/>
+    <StepIndicator status={steps.law2} label="Юр(Ск)" /> <ChevronRight size={14} className="text-gray-700 flex-shrink-0"/>
+    
+    <StepIndicator status={steps.acc1} label="Бух(1С)" /> <ChevronRight size={14} className="text-gray-700 flex-shrink-0"/>
+    <StepIndicator status={steps.fin2} label="Фин(Оп)" /> <ChevronRight size={14} className="text-gray-700 flex-shrink-0"/>
+    <StepIndicator status={steps.acc2} label="Оплата" />
+  </div>
+);
 // === 2. КОМПОНЕНТ ОТРИСОВКИ ШАГОВ ===
 const StepIndicator = ({ status, label }) => {
   let icon, color, bg;
@@ -274,3 +312,4 @@ export default function StandPage() {
     </div>
   );
 }
+
