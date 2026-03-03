@@ -183,8 +183,8 @@ export default function StandPage() {
     return [...new Set([...fixedList, ...dbDepts])].sort();
   }, [requests]);
 
-  // === ВЫЧИСЛЕНИЕ "УЗКИХ ГОРЛЫШЕК" ===
-  const bottleneckStats = useMemo(() => {
+  // === ВЫЧИСЛЕНИЕ СТАТИСТИКИ ===
+  const actionStats = useMemo(() => {
       const stats = { director: 0, komer: 0, findir: 0, lawyer: 0, finance: 0, accountant: 0, warehouses: {} };
 
       requests.forEach(req => {
@@ -194,7 +194,6 @@ export default function StandPage() {
           if (req.step_director !== 1) { stats.director++; return; }
           
           if (req.request_type !== 'service' && req.step_sklad == null && req.step_komer == null) {
-              // Вот тут идет жесткое разделение по складам!
               const wCode = req.target_warehouse_code || 'UNASSIGNED';
               stats.warehouses[wCode] = (stats.warehouses[wCode] || 0) + 1;
               return;
@@ -287,18 +286,17 @@ export default function StandPage() {
           </div>
       </div>
 
-      {/* === БЛОК СТАТИСТИКИ (УЗКИЕ ГОРЛЫШКИ) === */}
+      {/* === БЛОК СТАТИСТИКИ (ОЖИДАЮТ ДЕЙСТВИЯ) === */}
       {!loading && requests.length > 0 && (
           <div className="mb-6 bg-[#161b22] border border-gray-800 rounded-xl p-4">
               <h3 className="text-gray-400 text-xs font-bold uppercase mb-3 flex items-center gap-2">
-                  <BarChart2 size={16} className="text-orange-500"/> 🔥 Ожидают действия (Узкие горлышки)
+                  <BarChart2 size={16} className="text-orange-500"/> 🔥 Ожидают действия
               </h3>
               <div className="flex flex-wrap gap-2">
-                  {bottleneckStats.director > 0 && <span className="bg-blue-900/20 border border-blue-800 text-blue-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">👔 Директор <b className="bg-blue-600 text-white px-1.5 py-0.5 rounded">{bottleneckStats.director}</b></span>}
+                  {actionStats.director > 0 && <span className="bg-blue-900/20 border border-blue-800 text-blue-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">👔 Директор <b className="bg-blue-600 text-white px-1.5 py-0.5 rounded">{actionStats.director}</b></span>}
                   
-                  {/* Рендерим склады строго по отдельности */}
-                  {Object.entries(bottleneckStats.warehouses).map(([code, count]) => {
-                      const wName = WAREHOUSE_NAMES[code] || 'Склад (Старые)'; // Если склад не привязан
+                  {Object.entries(actionStats.warehouses).map(([code, count]) => {
+                      const wName = code === 'UNASSIGNED' ? 'Склад (Не назначен)' : (WAREHOUSE_NAMES[code] || 'Склад');
                       return (
                           <span key={code} className="bg-orange-900/20 border border-orange-800 text-orange-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">
                               📦 {wName} <b className="bg-orange-600 text-white px-1.5 py-0.5 rounded">{count}</b>
@@ -306,13 +304,13 @@ export default function StandPage() {
                       )
                   })}
                   
-                  {bottleneckStats.komer > 0 && <span className="bg-purple-900/20 border border-purple-800 text-purple-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">📝 Ком. Дир <b className="bg-purple-600 text-white px-1.5 py-0.5 rounded">{bottleneckStats.komer}</b></span>}
-                  {bottleneckStats.findir > 0 && <span className="bg-yellow-900/20 border border-yellow-800 text-yellow-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">🏦 Фин. Дир <b className="bg-yellow-600 text-white px-1.5 py-0.5 rounded">{bottleneckStats.findir}</b></span>}
-                  {bottleneckStats.lawyer > 0 && <span className="bg-indigo-900/20 border border-indigo-800 text-indigo-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">⚖️ Юристы <b className="bg-indigo-600 text-white px-1.5 py-0.5 rounded">{bottleneckStats.lawyer}</b></span>}
-                  {bottleneckStats.finance > 0 && <span className="bg-yellow-900/20 border border-yellow-800 text-yellow-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">💰 Финансисты <b className="bg-yellow-600 text-white px-1.5 py-0.5 rounded">{bottleneckStats.finance}</b></span>}
-                  {bottleneckStats.accountant > 0 && <span className="bg-cyan-900/20 border border-cyan-800 text-cyan-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">🧮 Бухгалтерия <b className="bg-cyan-600 text-white px-1.5 py-0.5 rounded">{bottleneckStats.accountant}</b></span>}
+                  {actionStats.komer > 0 && <span className="bg-purple-900/20 border border-purple-800 text-purple-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">📝 Ком. Дир <b className="bg-purple-600 text-white px-1.5 py-0.5 rounded">{actionStats.komer}</b></span>}
+                  {actionStats.findir > 0 && <span className="bg-yellow-900/20 border border-yellow-800 text-yellow-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">🏦 Фин. Дир <b className="bg-yellow-600 text-white px-1.5 py-0.5 rounded">{actionStats.findir}</b></span>}
+                  {actionStats.lawyer > 0 && <span className="bg-indigo-900/20 border border-indigo-800 text-indigo-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">⚖️ Юристы <b className="bg-indigo-600 text-white px-1.5 py-0.5 rounded">{actionStats.lawyer}</b></span>}
+                  {actionStats.finance > 0 && <span className="bg-yellow-900/20 border border-yellow-800 text-yellow-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">💰 Финансисты <b className="bg-yellow-600 text-white px-1.5 py-0.5 rounded">{actionStats.finance}</b></span>}
+                  {actionStats.accountant > 0 && <span className="bg-cyan-900/20 border border-cyan-800 text-cyan-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">🧮 Бухгалтерия <b className="bg-cyan-600 text-white px-1.5 py-0.5 rounded">{actionStats.accountant}</b></span>}
                   
-                  {Object.values(bottleneckStats).every(v => typeof v === 'number' ? v === 0 : Object.keys(v).length === 0) && (
+                  {Object.values(actionStats).every(v => typeof v === 'number' ? v === 0 : Object.keys(v).length === 0) && (
                       <span className="text-green-500 text-xs italic">Все заявки обработаны или отменены 🎉</span>
                   )}
               </div>
