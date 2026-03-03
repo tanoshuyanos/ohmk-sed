@@ -1,13 +1,26 @@
 "use client";
 import { useState, useEffect, useMemo } from 'react'; 
 import { createClient } from '@supabase/supabase-js';
-import { Clock, Monitor, Zap, User, CheckCircle2, XCircle, CircleDashed, ChevronRight, Filter, MinusCircle, Search } from 'lucide-react';
+import { 
+  Clock, Monitor, Zap, User, CheckCircle2, XCircle, CircleDashed, 
+  ChevronRight, Filter, MinusCircle, Search, RefreshCw, BarChart2 
+} from 'lucide-react';
 
 // Подключаемся к базе
 const supabase = createClient(
   "https://ykmvlughekjnqgdyddmp.supabase.co",
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlrbXZsdWdoZWtqbnFnZHlkZG1wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1NzQ3OTAsImV4cCI6MjA4NTE1MDc5MH0.ZaPeruXSJ6EQJ21nk4VPdvzQFMxoLUSxewQVK4EOE8Y"
 );
+
+const WAREHOUSE_NAMES = {
+  "SKLAD_CENTRAL": "Центральный склад",
+  "SKLAD_ZAP": "Запчасти",
+  "SKLAD_GSM": "ГСМ / Семена",
+  "SKLAD_STOL": "Столовая",
+  "SKLAD_MTF": "МТФ",
+  "SKLAD_ZNKI": "ЗНКИ",
+  "SKLAD_MEHTOK": "Мехток"
+};
 
 // === 1. ГЕНЕРАТОР ЦЕПОЧКИ ===
 const generateSteps = (r) => {
@@ -74,9 +87,8 @@ const isRequestRejected = (req) => {
            [req.step_director, req.step_komer, req.step_findir, req.step_lawyer_draft, req.step_finance_review, req.step_lawyer_final, req.step_accountant_req, req.step_finance_pay, req.step_accountant_done].includes(0);
 };
 
-// === 2. ТЕКСТОВЫЙ СТАТУС (ИСПРАВЛЕН ПРИОРИТЕТ ОТКАЗОВ) ===
+// === 2. ТЕКСТОВЫЙ СТАТУС ===
 const getCurrentStatus = (req) => {
-    // 1. СНАЧАЛА проверяем ТОЧЕЧНЫЕ отказы (кто конкретно поставил 0)
     if (req.step_director === 0) return { text: '❌ ОТКАЗ (Директор)', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
     if (req.step_komer === 0) return { text: '❌ ОТКАЗ (Ком. Директор)', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
     if (req.step_findir === 0) return { text: '❌ ОТКАЗ (Фин. Директор)', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
@@ -86,19 +98,18 @@ const getCurrentStatus = (req) => {
     if (req.step_accountant_req === 0) return { text: '❌ ОТКАЗ (Бухгалтер)', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
     if (req.step_finance_pay === 0) return { text: '❌ ОТКАЗ (Финансист - Оплата)', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
 
-    // 2. Только ПОТОМ проверяем общие текстовые статусы легаси-системы
     if (req.status?.toUpperCase().includes('ОТМЕН')) return { text: '🚫 ОТМЕНЕНО ИНИЦИАТОРОМ', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
     if (req.status?.toUpperCase().includes('ОТК')) return { text: '❌ ОТКАЗ', color: 'text-red-500 border-red-500/30 bg-red-500/10' };
-
-    // 3. Успешный финал
     if (req.step_accountant_done === 1 || req.status?.toUpperCase() === 'ОПЛАЧЕНО') return { text: '✅ ОПЛАЧЕНО', color: 'text-green-500 border-green-500/30 bg-green-500/10' };
     
-    // 4. Водопад "В процессе"
     if (req.step_director !== 1) return { text: '👔 Директор', color: 'text-blue-400 border-blue-500/30 bg-blue-500/10' };
     
     if (req.request_type !== 'service') {
         if (req.step_sklad === 1) return { text: '✅ ВЫДАНО СО СКЛАДА', color: 'text-green-500 border-green-500/30 bg-green-500/10' }; 
-        if (req.step_sklad == null && req.step_komer == null) return { text: '📦 Склад', color: 'text-orange-400 border-orange-500/30 bg-orange-500/10' };
+        if (req.step_sklad == null && req.step_komer == null) {
+            const wName = WAREHOUSE_NAMES[req.target_warehouse_code] || 'Склад';
+            return { text: `📦 ${wName}`, color: 'text-orange-400 border-orange-500/30 bg-orange-500/10' };
+        }
     }
     
     if (req.step_komer !== 1) return { text: '📝 Ком. Директор', color: 'text-purple-400 border-purple-500/30 bg-purple-500/10' };
@@ -153,6 +164,7 @@ export default function StandPage() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const fetchStandData = async () => {
+    setLoading(true);
     const { data, error } = await supabase.from('requests').select('*').order('req_number', { ascending: false }).limit(1000); 
     if (!error && data) setRequests(data);
     setLoading(false);
@@ -161,7 +173,7 @@ export default function StandPage() {
   useEffect(() => {
     fetchStandData();
     const channel = supabase.channel('stand-updates').on('postgres_changes', { event: '*', schema: 'public', table: 'requests' }, fetchStandData).subscribe();
-    const interval = setInterval(fetchStandData, 300000);
+    const interval = setInterval(fetchStandData, 300000); // авто-обновление каждые 5 мин
     return () => { supabase.removeChannel(channel); clearInterval(interval); };
   }, []);
 
@@ -171,13 +183,42 @@ export default function StandPage() {
     return [...new Set([...fixedList, ...dbDepts])].sort();
   }, [requests]);
 
+  // === ВЫЧИСЛЕНИЕ "УЗКИХ ГОРЛЫШЕК" ===
+  const bottleneckStats = useMemo(() => {
+      const stats = { director: 0, komer: 0, findir: 0, lawyer: 0, finance: 0, accountant: 0, warehouses: {} };
+
+      requests.forEach(req => {
+          if (isRequestRejected(req)) return; // Пропускаем отмененные
+          if (req.step_accountant_done === 1 || req.status?.toUpperCase() === 'ОПЛАЧЕНО') return; // Пропускаем завершенные
+
+          if (req.step_director !== 1) { stats.director++; return; }
+          
+          if (req.request_type !== 'service' && req.step_sklad == null && req.step_komer == null) {
+              const wCode = req.target_warehouse_code || 'Неизвестно';
+              stats.warehouses[wCode] = (stats.warehouses[wCode] || 0) + 1;
+              return;
+          }
+
+          if (req.step_komer !== 1) { stats.komer++; return; }
+          if (req.step_findir !== 1) { stats.findir++; return; }
+          
+          if (req.step_lawyer_draft !== 1) { stats.lawyer++; return; }
+          if (req.step_finance_review !== 1) { stats.finance++; return; }
+          if (req.step_lawyer_final !== 1) { stats.lawyer++; return; }
+          
+          if (req.step_accountant_req !== 1) { stats.accountant++; return; }
+          if (req.step_finance_pay !== 1) { stats.finance++; return; }
+          
+          stats.accountant++; // Ждет факта оплаты
+      });
+      return stats;
+  }, [requests]);
+
   const displayedRequests = useMemo(() => {
     let filtered = requests;
-    
     if (selectedDept !== "ВСЕ") {
         filtered = filtered.filter(r => (r.target_department === selectedDept || r.target_dept_service === selectedDept));
     }
-
     if (searchQuery.trim() !== "") {
         const q = searchQuery.toLowerCase().trim();
         filtered = filtered.filter(r => {
@@ -196,7 +237,8 @@ export default function StandPage() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-gray-200 font-sans p-2 md:p-8 pb-20">
       
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 md:mb-8 border-b border-gray-800 pb-4 gap-4">
+      {/* === ШАПКА === */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b border-gray-800 pb-4 gap-4">
           <div>
               <h1 className="text-2xl md:text-4xl font-black text-blue-500 tracking-widest flex items-center gap-3">
                   <Monitor className="text-blue-500 hidden md:block" size={36}/> 
@@ -207,8 +249,9 @@ export default function StandPage() {
               </p>
           </div>
           
-          <div className="flex flex-col md:flex-row w-full md:w-auto gap-3">
-              <div className="flex items-center bg-[#161b22] border border-gray-800 p-2 rounded-xl flex-grow md:w-64">
+          <div className="flex flex-col md:flex-row w-full md:w-auto gap-3 items-center">
+              {/* Поиск */}
+              <div className="flex items-center bg-[#161b22] border border-gray-800 p-2 rounded-xl w-full md:w-64">
                   <Search size={18} className="text-gray-500 ml-2"/>
                   <input 
                       type="text"
@@ -222,6 +265,7 @@ export default function StandPage() {
                   )}
               </div>
 
+              {/* Отдел */}
               <div className="flex items-center bg-[#161b22] border border-gray-800 p-2 rounded-xl w-full md:w-auto">
                   <Filter size={18} className="text-gray-500 ml-2"/>
                   <select 
@@ -233,8 +277,45 @@ export default function StandPage() {
                       {departments.map(d => <option key={d} value={d}>{d}</option>)}
                   </select>
               </div>
+
+              {/* КНОПКА ОБНОВЛЕНИЯ */}
+              <button 
+                  onClick={fetchStandData} 
+                  className="bg-blue-600 hover:bg-blue-500 text-white p-3 rounded-xl transition shadow-lg w-full md:w-auto flex justify-center items-center gap-2"
+                  title="Обновить данные"
+              >
+                  <RefreshCw size={18} className={loading ? 'animate-spin' : ''}/>
+                  <span className="md:hidden font-bold text-sm">ОБНОВИТЬ</span>
+              </button>
           </div>
       </div>
+
+      {/* === БЛОК СТАТИСТИКИ (УЗКИЕ ГОРЛЫШКИ) === */}
+      {!loading && requests.length > 0 && (
+          <div className="mb-6 bg-[#161b22] border border-gray-800 rounded-xl p-4">
+              <h3 className="text-gray-400 text-xs font-bold uppercase mb-3 flex items-center gap-2">
+                  <BarChart2 size={16} className="text-orange-500"/> 🔥 Ожидают действия (Узкие горлышки)
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                  {bottleneckStats.director > 0 && <span className="bg-blue-900/20 border border-blue-800 text-blue-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">👔 Директор <b className="bg-blue-600 text-white px-1.5 py-0.5 rounded">{bottleneckStats.director}</b></span>}
+                  
+                  {Object.entries(bottleneckStats.warehouses).map(([code, count]) => (
+                      <span key={code} className="bg-orange-900/20 border border-orange-800 text-orange-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">📦 {WAREHOUSE_NAMES[code] || 'Склад'} <b className="bg-orange-600 text-white px-1.5 py-0.5 rounded">{count}</b></span>
+                  ))}
+                  
+                  {bottleneckStats.komer > 0 && <span className="bg-purple-900/20 border border-purple-800 text-purple-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">📝 Ком. Дир <b className="bg-purple-600 text-white px-1.5 py-0.5 rounded">{bottleneckStats.komer}</b></span>}
+                  {bottleneckStats.findir > 0 && <span className="bg-yellow-900/20 border border-yellow-800 text-yellow-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">🏦 Фин. Дир <b className="bg-yellow-600 text-white px-1.5 py-0.5 rounded">{bottleneckStats.findir}</b></span>}
+                  {bottleneckStats.lawyer > 0 && <span className="bg-indigo-900/20 border border-indigo-800 text-indigo-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">⚖️ Юристы <b className="bg-indigo-600 text-white px-1.5 py-0.5 rounded">{bottleneckStats.lawyer}</b></span>}
+                  {bottleneckStats.finance > 0 && <span className="bg-yellow-900/20 border border-yellow-800 text-yellow-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">💰 Финансисты <b className="bg-yellow-600 text-white px-1.5 py-0.5 rounded">{bottleneckStats.finance}</b></span>}
+                  {bottleneckStats.accountant > 0 && <span className="bg-cyan-900/20 border border-cyan-800 text-cyan-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">🧮 Бухгалтерия <b className="bg-cyan-600 text-white px-1.5 py-0.5 rounded">{bottleneckStats.accountant}</b></span>}
+                  
+                  {/* Если ни у кого нет долгов */}
+                  {Object.values(bottleneckStats).every(v => typeof v === 'number' ? v === 0 : Object.keys(v).length === 0) && (
+                      <span className="text-green-500 text-xs italic">Все заявки обработаны или отменены 🎉</span>
+                  )}
+              </div>
+          </div>
+      )}
 
       {loading ? (
           <div className="flex justify-center items-center py-20 animate-pulse text-blue-500 text-xl font-bold">Загрузка данных...</div>
