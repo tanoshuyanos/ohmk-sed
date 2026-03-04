@@ -177,9 +177,8 @@ export default function StandPage() {
   
   const [selectedDept, setSelectedDept] = useState("ВСЕ");
   
-  // === ДВА СОСТОЯНИЯ ДЛЯ ПОИСКА ===
-  const [searchInput, setSearchInput] = useState(""); // То, что печатается в поле
-  const [searchQuery, setSearchQuery] = useState(""); // То, по чему реально идет фильтрация
+  const [searchInput, setSearchInput] = useState(""); 
+  const [searchQuery, setSearchQuery] = useState(""); 
 
   const fetchStandData = async () => {
     setLoading(true);
@@ -239,7 +238,6 @@ export default function StandPage() {
     if (selectedDept !== "ВСЕ") {
         filtered = filtered.filter(r => (r.target_department === selectedDept || r.target_dept_service === selectedDept));
     }
-    // ФИЛЬТРАЦИЯ ИДЕТ ПО searchQuery (после нажатия Enter/Кнопки)
     if (searchQuery.trim() !== "") {
         const q = searchQuery.toLowerCase().trim();
         filtered = filtered.filter(r => {
@@ -270,8 +268,6 @@ export default function StandPage() {
           </div>
           
           <div className="flex flex-col md:flex-row w-full md:w-auto gap-3 items-center">
-              
-              {/* === ОБНОВЛЕННЫЙ ПОИСК === */}
               <div className="flex items-center bg-[#161b22] border border-gray-800 p-1.5 rounded-xl w-full md:w-80 gap-2 focus-within:border-blue-500 transition-colors">
                   <input 
                       type="text"
@@ -381,9 +377,10 @@ export default function StandPage() {
                                       
                                       const steps = generateSteps(req);
                                       const currentStat = getCurrentStatus(req); 
+                                      const rejected = isRequestRejected(req);
 
                                       let rowBg = "hover:bg-gray-800/30";
-                                      if (isRequestRejected(req)) rowBg = "bg-red-900/10 hover:bg-red-900/20";
+                                      if (rejected) rowBg = "bg-red-900/10 hover:bg-red-900/20";
                                       else if (req.step_accountant_done === 1 || req.status?.toUpperCase() === 'ОПЛАЧЕНО') rowBg = "bg-green-900/5 hover:bg-green-900/10";
 
                                       return (
@@ -409,6 +406,16 @@ export default function StandPage() {
                                                       <span className={`px-2 py-1 text-[10px] uppercase font-black rounded border ${currentStat.color}`}>
                                                           {currentStat.text}
                                                       </span>
+                                                      
+                                                      {/* ВЫВОД ПРИЧИНЫ НА ДЕСКТОПЕ */}
+                                                      {req.fix_comment && (
+                                                          <div className={`mt-2 text-[10px] p-2 rounded border ${rejected ? 'bg-red-900/30 border-red-800/50 text-red-300 shadow-inner' : 'bg-orange-900/20 border-orange-800/50 text-orange-300'} max-w-[300px] whitespace-normal break-words leading-tight`}>
+                                                              <b className={`block mb-0.5 uppercase ${rejected ? 'text-red-400' : 'text-orange-400'}`}>
+                                                                  {rejected ? '❌ ПРИЧИНА ОТКАЗА:' : '⚠️ ПРИЧИНА ВОЗВРАТА:'}
+                                                              </b>
+                                                              {req.fix_comment}
+                                                          </div>
+                                                      )}
                                                   </div>
                                                   <WorkflowTrack steps={steps} />
                                               </td>
@@ -428,9 +435,10 @@ export default function StandPage() {
                               
                               const steps = generateSteps(req);
                               const currentStat = getCurrentStatus(req); 
+                              const rejected = isRequestRejected(req);
                               
                               let cardBorder = "border-gray-800";
-                              if (isRequestRejected(req)) cardBorder = "border-red-900/50";
+                              if (rejected) cardBorder = "border-red-900/50";
                               else if (req.step_accountant_done === 1 || req.status?.toUpperCase() === 'ОПЛАЧЕНО') cardBorder = "border-green-900/30";
 
                               return (
@@ -454,6 +462,17 @@ export default function StandPage() {
                                           <div className={`px-2 py-1.5 text-[10px] text-center uppercase font-black rounded border ${currentStat.color} mb-3`}>
                                               {currentStat.text}
                                           </div>
+
+                                          {/* ВЫВОД ПРИЧИНЫ НА МОБИЛКЕ */}
+                                          {req.fix_comment && (
+                                              <div className={`mb-3 p-2 text-[10px] rounded border ${rejected ? 'bg-red-900/30 border-red-800/50 text-red-300 shadow-inner' : 'bg-orange-900/20 border-orange-800/50 text-orange-300'} leading-tight`}>
+                                                  <b className={`block mb-0.5 uppercase ${rejected ? 'text-red-400' : 'text-orange-400'}`}>
+                                                      {rejected ? '❌ ПРИЧИНА ОТКАЗА:' : '⚠️ ПРИЧИНА ВОЗВРАТА:'}
+                                                  </b>
+                                                  {req.fix_comment}
+                                              </div>
+                                          )}
+
                                           <WorkflowTrack steps={steps} />
                                       </div>
                                   </div>
