@@ -9,10 +9,10 @@ import {
   Monitor, PieChart, ShoppingCart, TrendingUp
 } from 'lucide-react';
 
-const APP_VERSION = "v12.17 (TG REASONS)";
+const APP_VERSION = "v12.18 (SMART TG NOTIFY)";
 // Ссылки:
 const STAND_SCRIPT_URL = "https://ohmk-sed.vercel.app/stand"; 
-const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
+const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; // ПРОШУ ВЕРНУТЬ СЮДА СВОЮ ССЫЛКУ ОТ GOOGLE APPS SCRIPT ЕСЛИ ОНА ДРУГАЯ!
 const SHEET_URL = "https://ohmk-sed.vercel.app/stand"; 
 
 const supabase = createClient(
@@ -48,6 +48,7 @@ const formatMoney = (val) => {
     return new Intl.NumberFormat('ru-RU').format(num);
 };
 
+// === ФУНКЦИЯ ДЛЯ ВАЛЮТЫ ===
 const getCurrencySymbol = (currencyCode) => {
     switch (currencyCode) {
         case 'RUB': return '₽';
@@ -58,9 +59,11 @@ const getCurrencySymbol = (currencyCode) => {
     }
 };
 
+// === НАСТРОЙКИ ТЕЛЕГРАМ БОТА ===
 const TELEGRAM_TOKEN = "8524066186:AAEmwX2NCf1P9hV1CMrOodRdvSwvDQ1VECc";
 const CHAT_ID = "-5169644099";
 
+// === ЛИЧНЫЕ ID СОТРУДНИКОВ ===
 const STAFF_IDS = {
   "DIRECTOR": ["6901541090", "618738455"], 
   "KOMER": "6322560743", 
@@ -92,6 +95,7 @@ export default function SED() {
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState('active'); 
 
+  // === НОВОЕ: Вкладки внутри ролей (Финансист и Бухгалтерия) ===
   const [subTab, setSubTab] = useState('stage1'); 
    
   const [modal, setModal] = useState({ open: false, req: null, type: '' }); 
@@ -159,7 +163,7 @@ export default function SED() {
     if (ROLES[pin]) {
       setRole(ROLES[pin]);
       setViewMode('active');
-      setSubTab('stage1');
+      setSubTab('stage1'); 
       fetchRequests(ROLES[pin], 'active');
     } else { alert("НЕВЕРНЫЙ ПИН"); setPin(''); }
   };
@@ -440,7 +444,6 @@ export default function SED() {
           const initiatorSafe = req.initiator || "Не указан";
           const sumSafe = req.temp_pay_sum || req.payment_sum || req.temp_contract_sum || req.contract_sum;
           
-          // === ТЕЛЕГРАМ: ДОСТАЕМ ТОЧНУЮ ПРИЧИНУ ИЗ updates ===
           const fixReason = updates.fix_comment || comments || "Причина не указана";
 
           let cardDetails = `<blockquote>`;
@@ -453,10 +456,21 @@ export default function SED() {
 
           let tgMessage = "";
 
+          // === УМНАЯ ЛОГИКА УВЕДОМЛЕНИЙ (С ИСПРАВЛЕНИЕМ ДЛЯ СКЛАДА) ===
           if (actionType === 'TOGGLE_URGENCY' && !payload.isUrgent) {
               tgMessage = `⚡️ <b>СТАТУС ОБНОВЛЕН: СРОЧНО!</b>\n${cardDetails}👉 <i>Просьба ускорить обработку по цепочке.</i>`;
           } else if (role === 'DIRECTOR' && actionType === 'APPROVE') {
-              tgMessage = `✅ <b>ОДОБРЕНО: Директор</b>\n${cardDetails}👉 <b>Очередь:</b> Ком. Директор / Склад`;
+              if (req.request_type === 'service') {
+                  tgMessage = `✅ <b>ОДОБРЕНО: Директор</b>\n${cardDetails}👉 <b>Очередь:</b> Ком. Директор`;
+              } else {
+                  tgMessage = `✅ <b>ОДОБРЕНО: Директор</b>\n${cardDetails}👉 <b>Очередь:</b> Склад`;
+              }
+          } else if (role.includes('SKLAD')) {
+              if (actionType === 'YES') {
+                  tgMessage = `✅ <b>ВЫДАНО СО СКЛАДА</b>\n${cardDetails}🎉 Процесс завершен.`;
+              } else if (actionType === 'NO' || actionType === 'PARTIAL') {
+                  tgMessage = `📦 <b>ОТВЕТ СКЛАДА: ${actionType === 'NO' ? 'Нет в наличии' : 'Частично'}</b>\n${cardDetails}👉 <b>Очередь:</b> Ком. Директор (закупка)`;
+              }
           } else if (role === 'KOMER' && actionType === 'SEND') {
               tgMessage = `📝 <b>ДАННЫЕ ЗАПОЛНЕНЫ: Ком. Директор</b>\n${cardDetails}👉 <b>Очередь:</b> Фин. Директор / Юрист`;
           } else if (role === 'FIN_DIR' && actionType === 'APPROVE') {
@@ -475,7 +489,6 @@ export default function SED() {
               tgMessage = `🏁 <b>УСПЕШНО ОПЛАЧЕНО И ЗАКРЫТО</b>\n${cardDetails}🎉 Процесс по заявке полностью завершен.`;
           }
           
-          // === ТЕЛЕГРАМ: ОТКАЗЫ И ВОЗВРАТЫ С ПРИЧИНОЙ ===
           else if (role === 'DIRECTOR' && actionType === 'REJECT') {
               tgMessage = `❌ <b>ОТКАЗ: Директор</b>\n${cardDetails}💬 <b>Причина:</b> <i>${fixReason}</i>`;
           } else if (role === 'KOMER' && actionType === 'REJECT') {
@@ -495,9 +508,14 @@ export default function SED() {
           }
 
           if (tgMessage !== "") {
-              sendTelegramNotification(tgMessage);
+              sendTelegramNotification(tgMessage); // Отправка в общую группу
+              
               let nextRole = "";
-              if (role === 'DIRECTOR' && actionType === 'APPROVE') nextRole = "KOMER";
+              // Вычисляем, кому стукнуть в личку
+              if (role === 'DIRECTOR' && actionType === 'APPROVE') {
+                  nextRole = req.request_type === 'service' ? "KOMER" : ""; // Если не услуга, идет на склад, в личку не стучим
+              }
+              else if (role.includes('SKLAD') && (actionType === 'NO' || actionType === 'PARTIAL')) nextRole = "KOMER";
               else if (role === 'KOMER' && actionType === 'SEND') nextRole = "FIN_DIR";
               else if (role === 'FIN_DIR' && actionType === 'APPROVE') nextRole = "LAWYER";
               else if (role === 'LAWYER' && actionType === 'SEND_DRAFT') nextRole = "FINANCE";
@@ -509,15 +527,17 @@ export default function SED() {
               else if (actionType === 'REVIEW_FIX') nextRole = "LAWYER";
               else if (actionType === 'PAY_FIX') nextRole = "ACCOUNTANT";
 
-              const target = STAFF_IDS[nextRole];
-              if (target) {
-                  const personalMsg = `🔔 <b>ВАМ ЗАДАНИЕ:</b>\n` + tgMessage;
-                  if (Array.isArray(target)) {
-                      target.forEach(id => {
-                          if (id && id.length > 5 && !id.includes("ID_")) sendTelegramNotification(personalMsg, id);
-                      });
-                  } else {
-                      if (target && target.length > 5 && !target.includes("ID_")) sendTelegramNotification(personalMsg, target);
+              if (nextRole) {
+                  const target = STAFF_IDS[nextRole];
+                  if (target) {
+                      const personalMsg = `🔔 <b>ВАМ ЗАДАНИЕ:</b>\n` + tgMessage;
+                      if (Array.isArray(target)) {
+                          target.forEach(id => {
+                              if (id && id.length > 5 && !id.includes("ID_")) sendTelegramNotification(personalMsg, id);
+                          });
+                      } else {
+                          if (target && target.length > 5 && !target.includes("ID_")) sendTelegramNotification(personalMsg, target);
+                      }
                   }
               }
           }
