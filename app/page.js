@@ -9,10 +9,10 @@ import {
   Monitor, PieChart, ShoppingCart, TrendingUp
 } from 'lucide-react';
 
-const APP_VERSION = "v12.17 (Close Commentary)";
+const APP_VERSION = "v12.17 (TG REASONS)";
 // Ссылки:
 const STAND_SCRIPT_URL = "https://ohmk-sed.vercel.app/stand"; 
-const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; // ПРОШУ ВЕРНУТЬ СЮДА СВОЮ ССЫЛКУ ОТ GOOGLE APPS SCRIPT ЕСЛИ ОНА ДРУГАЯ!
+const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://ohmk-sed.vercel.app/stand"; 
 
 const supabase = createClient(
@@ -48,7 +48,6 @@ const formatMoney = (val) => {
     return new Intl.NumberFormat('ru-RU').format(num);
 };
 
-// === ФУНКЦИЯ ДЛЯ ВАЛЮТЫ ===
 const getCurrencySymbol = (currencyCode) => {
     switch (currencyCode) {
         case 'RUB': return '₽';
@@ -59,11 +58,9 @@ const getCurrencySymbol = (currencyCode) => {
     }
 };
 
-// === НАСТРОЙКИ ТЕЛЕГРАМ БОТА ===
 const TELEGRAM_TOKEN = "8524066186:AAEmwX2NCf1P9hV1CMrOodRdvSwvDQ1VECc";
 const CHAT_ID = "-5169644099";
 
-// === ЛИЧНЫЕ ID СОТРУДНИКОВ ===
 const STAFF_IDS = {
   "DIRECTOR": ["6901541090", "618738455"], 
   "KOMER": "6322560743", 
@@ -95,7 +92,6 @@ export default function SED() {
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState('active'); 
 
-  // === НОВОЕ: Вкладки внутри ролей (Финансист и Бухгалтерия) ===
   const [subTab, setSubTab] = useState('stage1'); 
    
   const [modal, setModal] = useState({ open: false, req: null, type: '' }); 
@@ -163,7 +159,7 @@ export default function SED() {
     if (ROLES[pin]) {
       setRole(ROLES[pin]);
       setViewMode('active');
-      setSubTab('stage1'); // Сбрасываем вкладку при входе
+      setSubTab('stage1');
       fetchRequests(ROLES[pin], 'active');
     } else { alert("НЕВЕРНЫЙ ПИН"); setPin(''); }
   };
@@ -223,7 +219,7 @@ export default function SED() {
 
   const switchMode = (mode) => { 
       setViewMode(mode); 
-      setSubTab('stage1'); // Сброс суб-вкладки при смене режима
+      setSubTab('stage1'); 
       fetchRequests(role, mode); 
   };
 
@@ -277,7 +273,6 @@ export default function SED() {
       };
   }, [allRequests, requests]);
 
-  // === ПОДСЧЕТ ЗАЯВОК ПО СУБ-ВКЛАДКАМ ===
   const getTabCounts = () => {
       if (viewMode !== 'active') return { stage1: 0, stage2: 0 };
       let s1 = 0, s2 = 0;
@@ -335,10 +330,10 @@ export default function SED() {
           if (actionType === 'REJECT') {
               const reason = prompt("Укажите причину отмены/отказа:");
               if (!reason) return; 
-              updates.step_komer = 0; updates.status = "ОТМЕНЕНО КОМЕРОМ"; comments = "Причина отказа: " + reason;
+              updates.step_komer = 0; updates.status = "ОТМЕНЕНО КОМЕРОМ"; updates.fix_comment = "Отказ Ком. Директора: " + reason; comments = reason;
           }
       }
-     else if (role === 'FIN_DIR') {
+      else if (role === 'FIN_DIR') {
           if (actionType === 'APPROVE') updates.step_findir = 1;
           if (actionType === 'FIX') {
               const c = prompt("Причина возврата:");
@@ -444,6 +439,8 @@ export default function SED() {
           const itemNameSafe = reqTitle || "Без названия";
           const initiatorSafe = req.initiator || "Не указан";
           const sumSafe = req.temp_pay_sum || req.payment_sum || req.temp_contract_sum || req.contract_sum;
+          
+          // === ТЕЛЕГРАМ: ДОСТАЕМ ТОЧНУЮ ПРИЧИНУ ИЗ updates ===
           const fixReason = updates.fix_comment || comments || "Причина не указана";
 
           let cardDetails = `<blockquote>`;
@@ -477,12 +474,14 @@ export default function SED() {
           } else if (role === 'ACCOUNTANT' && actionType === 'DONE') {
               tgMessage = `🏁 <b>УСПЕШНО ОПЛАЧЕНО И ЗАКРЫТО</b>\n${cardDetails}🎉 Процесс по заявке полностью завершен.`;
           }
+          
+          // === ТЕЛЕГРАМ: ОТКАЗЫ И ВОЗВРАТЫ С ПРИЧИНОЙ ===
           else if (role === 'DIRECTOR' && actionType === 'REJECT') {
-              tgMessage = `❌ <b>ОТКАЗ: Директор</b>\n${cardDetails}🚫 Заявка отклонена и заморожена.`;
+              tgMessage = `❌ <b>ОТКАЗ: Директор</b>\n${cardDetails}💬 <b>Причина:</b> <i>${fixReason}</i>`;
           } else if (role === 'KOMER' && actionType === 'REJECT') {
               tgMessage = `❌ <b>ОТМЕНЕНО: Ком. Директор</b>\n${cardDetails}💬 <b>Причина:</b> <i>${fixReason}</i>`;
           } else if (role === 'FIN_DIR' && actionType === 'REJECT') {
-              tgMessage = `❌ <b>ОТКАЗ: Фин. Директор</b>\n${cardDetails}🚫 Заявка отклонена и заморожена.`;
+              tgMessage = `❌ <b>ОТКАЗ: Фин. Директор</b>\n${cardDetails}💬 <b>Причина:</b> <i>${fixReason}</i>`;
           } else if (role === 'FIN_DIR' && actionType === 'FIX') {
               tgMessage = `⚠️ <b>ВОЗВРАТ НА ДОРАБОТКУ: Фин. Директор</b>\n${cardDetails}👉 <b>Вернулось к:</b> Ком. Директор\n💬 <b>Что исправить:</b> <i>${fixReason}</i>`;
           } else if (role === 'LAWYER' && actionType === 'FIX_TO_KOMER') {
@@ -492,7 +491,7 @@ export default function SED() {
           } else if (role === 'FINANCE' && actionType === 'PAY_FIX') {
               tgMessage = `⚠️ <b>ПРАВКИ ПО ОПЛАТЕ: Финансист</b>\n${cardDetails}👉 <b>Вернулось к:</b> Бухгалтер\n💬 <b>Что исправить:</b> <i>${fixReason}</i>`;
           } else if (role === 'FINANCE' && actionType === 'REJECT') {
-              tgMessage = `❌ <b>ОТКАЗ В СОГЛАСОВАНИИ: Финансист</b>\n${cardDetails}🚫 В договоре отказано.`;
+              tgMessage = `❌ <b>ОТКАЗ В СОГЛАСОВАНИИ: Финансист</b>\n${cardDetails}💬 <b>Причина:</b> <i>${fixReason}</i>`;
           }
 
           if (tgMessage !== "") {
