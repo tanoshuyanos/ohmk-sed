@@ -9,7 +9,7 @@ import {
   Monitor, PieChart, ShoppingCart, TrendingUp
 } from 'lucide-react';
 
-const APP_VERSION = "v12.16 (TABS FINANCE/ACC)";
+const APP_VERSION = "v12.17 (Close Commentary)";
 // Ссылки:
 const STAND_SCRIPT_URL = "https://ohmk-sed.vercel.app/stand"; 
 const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; // ПРОШУ ВЕРНУТЬ СЮДА СВОЮ ССЫЛКУ ОТ GOOGLE APPS SCRIPT ЕСЛИ ОНА ДРУГАЯ!
@@ -309,7 +309,11 @@ export default function SED() {
       if (actionType === 'TOGGLE_URGENCY') { updates.urgency = payload.isUrgent ? null : 'срочно'; }
       else if (role === 'DIRECTOR') {
           if (actionType === 'APPROVE') updates.step_director = 1;
-          if (actionType === 'REJECT') updates.step_director = 0;
+          if (actionType === 'REJECT') {
+              const reason = prompt("Укажите причину отказа:");
+              if (!reason) return;
+              updates.step_director = 0; updates.fix_comment = "Отказ Директора: " + reason; comments = reason;
+          }
       }
       else if (role.includes('SKLAD')) {
           if (actionType === 'YES') { updates.step_sklad = 1; updates.warehouse_status = 'ЕСТЬ'; }
@@ -334,14 +338,18 @@ export default function SED() {
               updates.step_komer = 0; updates.status = "ОТМЕНЕНО КОМЕРОМ"; comments = "Причина отказа: " + reason;
           }
       }
-      else if (role === 'FIN_DIR') {
+     else if (role === 'FIN_DIR') {
           if (actionType === 'APPROVE') updates.step_findir = 1;
           if (actionType === 'FIX') {
               const c = prompt("Причина возврата:");
               if (!c) return;
               updates.step_komer = null; updates.fix_comment = "Фин.Дир: " + c;
           }
-          if (actionType === 'REJECT') updates.step_findir = 0;
+          if (actionType === 'REJECT') {
+              const reason = prompt("Укажите причину отказа:");
+              if (!reason) return;
+              updates.step_findir = 0; updates.fix_comment = "Отказ Фин. Директора: " + reason; comments = reason;
+          }
       }
       else if (role === 'LAWYER') {
           if (actionType === 'SEND_DRAFT') updates.step_lawyer_draft = 1;
@@ -368,7 +376,11 @@ export default function SED() {
               if (!c) return;
               updates.step_accountant_req = null; updates.fix_comment = "Фин (Оплата): " + c;
           }
-          if (actionType === 'REJECT') updates.step_finance_review = 0;
+          if (actionType === 'REJECT') {
+              const reason = prompt("Укажите причину отказа в согласовании:");
+              if (!reason) return;
+              updates.step_finance_review = 0; updates.fix_comment = "Отказ Финансиста: " + reason; comments = reason;
+          }
       }
       else if (role === 'ACCOUNTANT') {
           if (actionType === 'REQ_PAY') {
@@ -653,7 +665,19 @@ export default function SED() {
     </div>
 </div>
 
-         {req.fix_comment && <div className="bg-orange-900/30 border border-orange-600 p-2 rounded mb-3 text-xs text-orange-200"><b className="block mb-1">⚠️ ТРЕБУЮТСЯ ПРАВКИ:</b>{req.fix_comment}</div>}
+         {/* ЕСЛИ ПРОСТО ВОЗВРАТ НА ДОРАБОТКУ */}
+        {req.fix_comment && !req.fix_comment.includes('Отказ') && (
+            <div className="bg-orange-900/30 border border-orange-600 p-2 rounded mb-3 text-xs text-orange-200">
+                <b className="block mb-1">⚠️ ТРЕБУЮТСЯ ПРАВКИ:</b>{req.fix_comment}
+            </div>
+        )}
+
+        {/* ЕСЛИ ПОЛНЫЙ ОТКАЗ */}
+        {req.fix_comment && req.fix_comment.includes('Отказ') && (
+            <div className="bg-red-900/30 border border-red-600 p-3 rounded mb-3 text-xs text-red-200 shadow-inner">
+                <b className="block mb-1 text-red-400 text-sm uppercase">❌ ЗАЯВКА ОТКЛОНЕНА:</b>{req.fix_comment}
+            </div>
+        )}
 
          <div className="text-sm space-y-2 text-gray-300 mb-4">
              <div className="font-bold text-white text-lg leading-tight break-words pr-2">
