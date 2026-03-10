@@ -7,8 +7,9 @@ import React, { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { ArrowLeft, User, Lock, CheckCircle, Loader2, ListTodo, Wallet, ChevronDown, ChevronUp, X, Building, Paperclip, Calendar, AlignLeft, Zap, Archive, Check, Download, FileText } from "lucide-react";
 
-const supabaseUrl = "https://ykmvlughekjnqgdyddmp.supabase.co"; 
-const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlrbXZsdWdoZWtqbnFnZHlkZG1wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1NzQ3OTAsImV4cCI6MjA4NTE1MDc5MH0.ZaPeruXSJ6EQJ21nk4VPdvzQFMxoLUSxewQVK4EOE8Y";
+// --- ДАННЫЕ БЕРУТСЯ ИЗ ЗАЩИЩЕННОГО .ENV ФАЙЛА ---
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL; 
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 export default function ManagerDashboard() {
