@@ -6,13 +6,13 @@ import {
   ExternalLink, AlertTriangle, Table, Truck, Wrench, Info, DollarSign, Calendar, 
   MapPin, Eye, Clock, BarChart3, Phone, User, Factory, AlertCircle, Briefcase, FileSignature, 
   Package, Scale, ShieldCheck, Keyboard, History, GitMerge, Settings, ChevronRight, MessageCircle, Paperclip, Hash, CreditCard, Layers,
-  Monitor, PieChart, ShoppingCart, TrendingUp
+  Monitor, PieChart, ShoppingCart, TrendingUp, PenTool
 } from 'lucide-react';
 
 const APP_VERSION = "v12.18 (SMART TG NOTIFY)";
 // Ссылки:
 const STAND_SCRIPT_URL = "https://ohmk-sed.vercel.app/stand"; 
-const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; // ПРОШУ ВЕРНУТЬ СЮДА СВОЮ ССЫЛКУ ОТ GOOGLE APPS SCRIPT ЕСЛИ ОНА ДРУГАЯ!
+const STAND_URL = "https://script.google.com/macros/s/AKfycbwPVrrM4BuRPhbJXyFCmMY88QHQaI12Pbhj9Db9Ru0ke5a3blJV8luSONKao-DD6SNN/exec"; 
 const SHEET_URL = "https://ohmk-sed.vercel.app/stand"; 
 
 const supabase = createClient(
@@ -922,9 +922,42 @@ export default function SED() {
     );
   };
    
+  // Функция для вызова сообщения при клике по новым модулям
+  const handleComingSoon = (e) => {
+    e.preventDefault();
+    alert("🚀 Новая версия СЭД v2.0 начнет работу 11 марта в 05:00.\nК этому времени мы уже всё доделаем! 😉");
+  };
+
   if (!role) return (
     <div className="min-h-screen bg-[#0d1117] flex flex-col items-center justify-center p-4 relative">
-      <div className="text-center mb-8"><h1 className="text-4xl font-bold text-blue-500 tracking-widest">ОХМК СЭД</h1><p className="text-gray-500 text-xs mt-2">CORPORATE SYSTEM</p></div>
+      
+      {/* === АНОНС НОВОЙ СЭД V2.0 === */}
+      <div className="w-full max-w-3xl mb-12 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <button onClick={handleComingSoon} className="bg-gradient-to-br from-indigo-900/50 to-blue-900/20 border border-indigo-500/30 p-6 rounded-2xl hover:border-indigo-400 transition text-left flex items-start gap-4 group">
+              <div className="bg-indigo-500/20 p-3 rounded-xl text-indigo-400 group-hover:scale-110 transition">
+                  <PenTool size={28}/>
+              </div>
+              <div>
+                  <h3 className="text-white font-bold text-lg mb-1">Оставить заявку v2.0</h3>
+                  <p className="text-gray-400 text-xs">Новая удобная форма для инициаторов</p>
+              </div>
+          </button>
+
+          <button onClick={handleComingSoon} className="bg-gradient-to-br from-emerald-900/50 to-green-900/20 border border-emerald-500/30 p-6 rounded-2xl hover:border-emerald-400 transition text-left flex items-start gap-4 group">
+              <div className="bg-emerald-500/20 p-3 rounded-xl text-emerald-400 group-hover:scale-110 transition">
+                  <Briefcase size={28}/>
+              </div>
+              <div>
+                  <h3 className="text-white font-bold text-lg mb-1">Кабинет руководителя v2.0</h3>
+                  <p className="text-gray-400 text-xs">Новый интерфейс согласования</p>
+              </div>
+          </button>
+      </div>
+
+      <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold text-blue-500 tracking-widest">ОХМК СЭД</h1>
+          <p className="text-gray-500 text-xs mt-2">CORPORATE SYSTEM</p>
+      </div>
       <form onSubmit={handleLogin} className="flex flex-col gap-4 w-64">
         <div className="relative">
             <input ref={pinInputRef} type="password" inputMode="numeric" pattern="[0-9]*" value={pin} onChange={e => setPin(e.target.value)} className="bg-[#161b22] border-2 border-[#30363d] text-white text-4xl text-center p-4 rounded-2xl outline-none focus:border-blue-500 transition w-full" placeholder="••••" autoFocus />
