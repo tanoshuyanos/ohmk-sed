@@ -1,17 +1,15 @@
 // ==========================================
-// ФАЙЛ №3: КАБИНЕТ РУКОВОДИТЕЛЯ (С ДАШБОРДОМ БЮДЖЕТОВ)
+// ФАЙЛ: КАБИНЕТ РУКОВОДИТЕЛЯ (ИНТЕРАКТИВНЫЙ ДАШБОРД БЮДЖЕТОВ)
 // ПУТЬ: app/manager/page.js
 // ==========================================
 
 "use client";
 import React, { useState, useEffect, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { ArrowLeft, User, CheckCircle, Loader2, Wallet, ChevronDown, ChevronUp, X, Paperclip, Download, FileText, PieChart, TrendingDown } from "lucide-react";
+import { ArrowLeft, User, CheckCircle, Loader2, Wallet, ChevronDown, ChevronUp, X, Paperclip, Download, FileText, PieChart, TrendingDown, Calendar, Receipt } from "lucide-react";
 
-// Подключаем наш умный моторчик маршрутов!
 import { getNextStep } from "../utils/workflow";
 
-// Берем ключи из .env
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL; 
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
@@ -29,6 +27,7 @@ export default function ManagerDashboard() {
   const [budgets, setBudgets] = useState([]);
   const [viewMode, setViewMode] = useState("active"); 
   const [expandedReq, setExpandedReq] = useState(null); 
+  const [expandedDept, setExpandedDept] = useState(null); // Открытая шкала бюджета
   const [selectedDept, setSelectedDept] = useState({}); 
   const [selectedBudget, setSelectedBudget] = useState({}); 
   const [processingId, setProcessingId] = useState(null);
@@ -56,7 +55,6 @@ export default function ManagerDashboard() {
 
   const loadManagerData = async (department) => {
       setLoading(true);
-      // Если это Дирекция, грузим все заявки, иначе только своего отдела
       let query = supabase.from("v2_requests").select("*").order("created_at", { ascending: false });
       if (department !== "Дирекция" && department !== "Руководство") {
           query = query.eq("department", department);
@@ -77,46 +75,53 @@ export default function ManagerDashboard() {
               setRequestItems(grouped);
           }
       }
-      // Всегда грузим все бюджеты компании для сводки
       const { data: bgs } = await supabase.from("v2_budgets").select("*").order("item_name");
       if (bgs) setBudgets(bgs);
       setLoading(false);
   };
 
-  // 🧠 УМНЫЙ КАЛЬКУЛЯТОР БЮДЖЕТОВ
+  // 🧠 УМНЫЙ КАЛЬКУЛЯТОР БЮДЖЕТОВ С ДЕТАЛИЗАЦИЕЙ ЗАЯВОК
   const budgetStats = useMemo(() => {
       const stats = {};
       let grandTotal = 0;
       let grandSpent = 0;
 
-      // 1. Считаем общие лимиты (из таблицы v2_budgets)
+      // 1. Собираем пустые корзины лимитов
       budgets.forEach(b => {
           const dept = b.department || "Общие";
-          if (!stats[dept]) stats[dept] = { total: 0, spent: 0 };
+          if (!stats[dept]) stats[dept] = { total: 0, spent: 0, history: [] };
           
           const total = Number(b.amount) || 0;
-          // Если в базе уже есть колонка spent, берем её. Иначе 0.
           const spent = Number(b.spent) || 0; 
 
           stats[dept].total += total;
           stats[dept].spent += spent;
-          
           grandTotal += total;
           grandSpent += spent;
       });
 
-      // 2. Симуляция: прибавляем к расходам одобренные заявки с экрана
-      // (Чтобы шкала заполнялась в реальном времени даже без колонки spent в базе)
+      // 2. Раскладываем одобренные заявки по корзинам отделов
       allRequests.forEach(req => {
           if (req.current_step > 1 && req.budget_id) {
               const b = budgets.find(bg => bg.id === req.budget_id);
-              if (b && !b.spent) { // Считаем только если база сама не отдает spent
+              if (b) {
                   const dept = b.department || "Общие";
-                  // Берем сумму (пока условную, если нет точной суммы договора)
-                  const reqSum = Number(req.contract_sum) || Number(req.payment_sum) || 15000; 
+                  const reqSum = Number(req.contract_sum) || Number(req.payment_sum) || 0; 
+                  
                   if (stats[dept]) {
-                      stats[dept].spent += reqSum;
-                      grandSpent += reqSum;
+                      if (!b.spent && reqSum > 0) {
+                          stats[dept].spent += reqSum;
+                          grandSpent += reqSum;
+                      }
+                      // Сохраняем заявку для детализации внутри шкалы
+                      stats[dept].history.push({
+                          id: req.id,
+                          num: req.req_number || 'B/N',
+                          date: req.created_at,
+                          category: req.budget_category || req.category,
+                          sum: reqSum,
+                          initiator: req.initiator
+                      });
                   }
               }
           }
@@ -132,8 +137,6 @@ export default function ManagerDashboard() {
       const budgetObj = budgets.find(b => b.id === selectedBudgetId);
       
       setProcessingId(reqId);
-
-      // ⚙️ МОТОРЧИК: Спрашиваем маршрут у админки
       const nextStep = await getNextStep(req.current_step || 1, req);
 
       const { error } = await supabase.from("v2_requests").update({ 
@@ -158,6 +161,8 @@ export default function ManagerDashboard() {
   };
 
   const formatMoney = (amount) => { if (!amount) return "0"; return Number(amount).toLocaleString('ru-RU'); };
+  const formatDate = (dateStr) => { if(!dateStr) return ""; return new Date(dateStr).toLocaleDateString('ru-RU', {day: '2-digit', month: 'short'}); };
+  
   const isImage = (url) => url.match(/\.(jpeg|jpg|gif|png|webp|bmp)(\?.*)?$/i);
   const isPdf = (url) => url.match(/\.(pdf)(\?.*)?$/i);
   const isDoc = (url) => url.match(/\.(doc|docx|xls|xlsx|ppt|pptx|rtf)(\?.*)?$/i);
@@ -169,7 +174,7 @@ export default function ManagerDashboard() {
   return (
     <div className="min-h-screen bg-slate-50 font-sans pb-10 relative text-slate-900">
       
-      {/* МОДАЛКА ПРОСМОТРА */}
+      {/* МОДАЛКА ПРОСМОТРА ФАЙЛОВ */}
       {previewUrl && (
           <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center bg-slate-900/90 backdrop-blur-sm p-0 md:p-4">
               <div className="bg-white w-full max-w-5xl h-[92vh] md:h-[85vh] rounded-t-[32px] md:rounded-[24px] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-full duration-300">
@@ -211,7 +216,7 @@ export default function ManagerDashboard() {
 
       <main className="max-w-xl mx-auto p-4 md:p-8">
         {!isAuthenticated ? (
-            /* ВХОД */
+            /* ЭКРАН ВХОДА */
             <div className="bg-white rounded-[32px] shadow-xl border border-slate-100 p-6 space-y-6">
                 <div className="text-center space-y-1">
                     <h2 className="text-xl font-black text-slate-800">СЭД v2.0</h2>
@@ -236,6 +241,7 @@ export default function ManagerDashboard() {
                             <button onClick={() => {setSelectedEmp(null); setInputPassword("");}} className="text-indigo-300"><X size={20}/></button>
                         </div>
                         <input type="password" value={inputPassword} onChange={(e) => setInputPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && checkPassword()} className="w-full bg-white border border-slate-200 rounded-2xl py-4 text-center text-2xl font-black tracking-[0.5em]" placeholder="PIN" autoFocus />
+                        {passwordError && <p className="text-red-500 text-xs font-bold text-center">Неверный PIN-код</p>}
                         <button onClick={checkPassword} className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black uppercase shadow-lg shadow-indigo-100">Войти</button>
                     </div>
                 )}
@@ -246,7 +252,7 @@ export default function ManagerDashboard() {
                 {/* КАРТОЧКА ПРОФИЛЯ */}
                 <div className="bg-white rounded-[24px] p-5 shadow-sm border border-slate-100 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white font-black">{selectedEmp.name[0]}</div>
+                        <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white font-black shadow-inner">{selectedEmp.name[0]}</div>
                         <div>
                             <h2 className="text-sm font-black text-slate-800 leading-none">{selectedEmp.name}</h2>
                             <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">{selectedEmp.department}</p>
@@ -254,7 +260,7 @@ export default function ManagerDashboard() {
                     </div>
                 </div>
 
-                {/* 📊 ДАШБОРД БЮДЖЕТОВ (ШКАЛЫ) */}
+                {/* 📊 ИНТЕРАКТИВНЫЙ ДАШБОРД БЮДЖЕТОВ */}
                 {Object.keys(budgetStats.departments).length > 0 && (
                     <div className="bg-white rounded-[24px] p-5 shadow-sm border border-slate-100 space-y-4">
                         <div className="flex items-center gap-2 mb-2">
@@ -262,8 +268,8 @@ export default function ManagerDashboard() {
                             <h3 className="font-black text-slate-800 text-sm uppercase tracking-widest">Бюджет компании</h3>
                         </div>
                         
-                        {/* ОБЩИЙ БЮДЖЕТ (Только если есть права или грузятся все бюджеты) */}
-                        <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
+                        {/* ОБЩИЙ БЮДЖЕТ (Всегда виден) */}
+                        <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 mb-4">
                             <div className="flex justify-between text-xs font-black mb-2 text-indigo-900">
                                 <span className="uppercase">Всего израсходовано</span>
                                 <span>{formatMoney(budgetStats.grandSpent)} / {formatMoney(budgetStats.grandTotal)} ₸</span>
@@ -273,24 +279,68 @@ export default function ManagerDashboard() {
                             </div>
                         </div>
 
-                        {/* ШКАЛЫ ПО ОТДЕЛАМ */}
-                        <div className="space-y-4 pt-2">
+                        {/* ШКАЛЫ ПО ОТДЕЛАМ С РАСКРЫТИЕМ */}
+                        <div className="space-y-3">
                             {Object.entries(budgetStats.departments).map(([dept, data]) => {
                                 const percent = Math.min((data.spent / (data.total || 1)) * 100, 100);
-                                // Динамический цвет: Зеленый -> Желтый -> Красный
                                 let barColor = "bg-emerald-500";
                                 if (percent > 60) barColor = "bg-amber-500";
                                 if (percent > 90) barColor = "bg-red-500";
+                                
+                                const isExpanded = expandedDept === dept;
 
                                 return (
-                                    <div key={dept} className="space-y-1.5">
-                                        <div className="flex justify-between text-[10px] font-bold">
-                                            <span className="text-slate-600 uppercase flex items-center gap-1"><TrendingDown size={12} className="text-slate-400"/> {dept}</span>
-                                            <span className="text-slate-500">{formatMoney(data.spent)} / <span className="text-slate-800">{formatMoney(data.total)}</span> ₸</span>
+                                    <div key={dept} className={`border rounded-2xl transition-all duration-300 ${isExpanded ? 'border-indigo-200 bg-white shadow-md' : 'border-slate-100 bg-slate-50 hover:border-slate-200'}`}>
+                                        
+                                        {/* КЛИКАБЕЛЬНАЯ ШАПКА ШКАЛЫ */}
+                                        <div className="p-4 cursor-pointer" onClick={() => setExpandedDept(isExpanded ? null : dept)}>
+                                            <div className="flex justify-between items-center mb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <div className={`p-1 rounded-md transition-transform ${isExpanded ? 'rotate-180 bg-indigo-100 text-indigo-600' : 'bg-slate-200 text-slate-500'}`}>
+                                                        <ChevronDown size={14}/>
+                                                    </div>
+                                                    <span className="text-[11px] font-black text-slate-700 uppercase tracking-wide">{dept}</span>
+                                                </div>
+                                                <span className="text-[11px] font-bold text-slate-500">
+                                                    {formatMoney(data.spent)} / <span className="text-slate-900">{formatMoney(data.total)}</span> ₸
+                                                </span>
+                                            </div>
+                                            <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                                                <div className={`${barColor} h-2 rounded-full transition-all duration-1000 ease-out`} style={{ width: `${percent}%` }}></div>
+                                            </div>
                                         </div>
-                                        <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                                            <div className={`${barColor} h-2 rounded-full transition-all duration-1000 ease-out`} style={{ width: `${percent}%` }}></div>
-                                        </div>
+
+                                        {/* СПИСОК ЗАЯВОК (ДЕТАЛИЗАЦИЯ ПРИ КЛИКЕ) */}
+                                        {isExpanded && (
+                                            <div className="px-4 pb-4 pt-1 border-t border-slate-50 animate-in slide-in-from-top-2 duration-200">
+                                                {data.history.length === 0 ? (
+                                                    <div className="text-center py-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                                                        <p className="text-[10px] text-slate-400 font-bold uppercase">Пока нет списаний</p>
+                                                    </div>
+                                                ) : (
+                                                    <div className="space-y-2 mt-2">
+                                                        {data.history.map((r, i) => (
+                                                            <div key={i} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:border-indigo-100 transition">
+                                                                <div className="flex items-start gap-3 overflow-hidden">
+                                                                    <div className="bg-indigo-50 text-indigo-500 p-2 rounded-lg mt-0.5"><Receipt size={14}/></div>
+                                                                    <div className="min-w-0">
+                                                                        <div className="flex items-center gap-2 mb-1">
+                                                                            <span className="text-[10px] font-black text-slate-800">#{r.num}</span>
+                                                                            <span className="text-[9px] font-bold text-slate-400 flex items-center gap-0.5"><Calendar size={10}/> {formatDate(r.date)}</span>
+                                                                        </div>
+                                                                        <p className="text-[10px] font-bold text-slate-500 uppercase truncate max-w-[140px] md:max-w-[200px]">{r.category}</p>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="text-right shrink-0">
+                                                                    <p className="text-[11px] font-black text-slate-800">-{formatMoney(r.sum)} ₸</p>
+                                                                    <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">{r.initiator.split(' ')[0]}</p>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })}
@@ -298,41 +348,42 @@ export default function ManagerDashboard() {
                     </div>
                 )}
 
-                {/* ПЕРЕКЛЮЧАТЕЛЬ ВКЛАДОК */}
+                {/* ПЕРЕКЛЮЧАТЕЛЬ ВКЛАДОК ЗАЯВОК */}
                 <div className="flex gap-2 bg-slate-200/50 p-1 rounded-2xl">
-                    <button onClick={() => setViewMode('active')} className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${viewMode === 'active' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}>Ожидают ({activeRequests.length})</button>
+                    <button onClick={() => setViewMode('active')} className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${viewMode === 'active' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}>Ожидают решения ({activeRequests.length})</button>
                     <button onClick={() => setViewMode('history')} className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${viewMode === 'history' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}>История ({historyRequests.length})</button>
                 </div>
 
-                {/* СПИСОК ЗАЯВОК */}
+                {/* СПИСОК ЗАЯВОК ДЛЯ ОДОБРЕНИЯ */}
                 <div className="space-y-4">
                     {displayedRequests.map(req => (
-                        <div key={req.id} className={`bg-white rounded-[28px] shadow-sm border ${expandedReq === req.id ? "border-indigo-300 ring-4 ring-indigo-50" : "border-slate-100"}`}>
+                        <div key={req.id} className={`bg-white rounded-[28px] shadow-sm border transition-all ${expandedReq === req.id ? "border-indigo-300 ring-4 ring-indigo-50" : "border-slate-100 hover:border-slate-200"}`}>
                             <div onClick={() => { setExpandedReq(expandedReq === req.id ? null : req.id); if (expandedReq !== req.id && !selectedDept[req.id]) setSelectedDept({...selectedDept, [req.id]: req.department}); }} className="p-5 cursor-pointer flex justify-between items-center">
                                 <div className="flex-1">
                                     <div className="flex items-center gap-2 mb-1">
                                         <span className="text-[10px] font-black bg-slate-100 text-slate-500 px-2 py-0.5 rounded">#{req.req_number || 'B/N'}</span>
-                                        {req.urgency === "срочно" && <span className="text-[9px] font-black bg-red-600 text-white px-2 py-0.5 rounded uppercase">Срочно</span>}
-                                        {/* Если заявка обработана, показываем её текущий статус из Умного Маршрутизатора */}
+                                        <span className="text-[9px] font-black bg-slate-100 text-slate-400 px-2 py-0.5 rounded flex items-center gap-1"><Calendar size={10}/> {formatDate(req.created_at)}</span>
+                                        {req.urgency === "срочно" && <span className="text-[9px] font-black bg-red-600 text-white px-2 py-0.5 rounded uppercase shadow-sm shadow-red-200">Срочно</span>}
                                         {req.current_step > 1 && <span className="text-[9px] font-black bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded uppercase">{req.status_text || "В работе"}</span>}
                                     </div>
-                                    <h4 className="font-bold text-slate-800 text-sm leading-tight">{req.category}</h4>
+                                    <h4 className="font-bold text-slate-800 text-sm leading-tight pr-4">{req.category}</h4>
                                     <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase">От: {req.initiator}</p>
                                 </div>
-                                <div className="text-slate-300">{expandedReq === req.id ? <ChevronUp size={24}/> : <ChevronDown size={24}/>}</div>
+                                <div className={`text-slate-300 transition-transform ${expandedReq === req.id ? 'rotate-180 text-indigo-500' : ''}`}><ChevronDown size={24}/></div>
                             </div>
 
+                            {/* РАСКРЫТАЯ ЗАЯВКА */}
                             {expandedReq === req.id && (
-                                <div className="p-5 border-t border-slate-50 space-y-6">
+                                <div className="p-5 border-t border-slate-50 space-y-6 bg-slate-50/50 rounded-b-[28px]">
                                     {req.description && (
-                                        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
                                             <p className="text-xs text-slate-600 italic">"{req.description}"</p>
                                         </div>
                                     )}
 
                                     <div className="space-y-2">
                                         {requestItems[req.id]?.map((item) => (
-                                            <div key={item.id} className="bg-white p-3 rounded-2xl border border-slate-200 flex justify-between items-center">
+                                            <div key={item.id} className="bg-white p-3 rounded-2xl border border-slate-200 flex justify-between items-center shadow-sm">
                                                 <p className="text-sm font-black text-slate-800">{item.name}</p>
                                                 <div className="bg-slate-100 px-3 py-1 rounded-xl font-black text-xs text-slate-700">{item.quantity} {item.unit}</div>
                                             </div>
@@ -342,28 +393,30 @@ export default function ManagerDashboard() {
                                     {req.attachment_url && (
                                         <div className="flex flex-wrap gap-2">
                                             {req.attachment_url.split(',').map((url, idx) => (
-                                                <button key={idx} onClick={() => setPreviewUrl(url.trim())} className="flex items-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-3 rounded-2xl text-[10px] font-black border border-indigo-100 shadow-sm"><Paperclip size={14}/> ФАЙЛ {idx + 1}</button>
+                                                <button key={idx} onClick={() => setPreviewUrl(url.trim())} className="flex items-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-3 rounded-2xl text-[10px] font-black border border-indigo-100 shadow-sm hover:bg-indigo-100 transition"><Paperclip size={14}/> ФАЙЛ {idx + 1}</button>
                                             ))}
                                         </div>
                                     )}
 
                                     {viewMode === "active" ? (
                                         <div className="space-y-3 pt-2">
-                                            <div className="bg-indigo-600 rounded-3xl p-4">
-                                                <select value={selectedDept[req.id] || ""} onChange={(e) => { setSelectedDept({...selectedDept, [req.id]: e.target.value}); setSelectedBudget({...selectedBudget, [req.id]: ""}); }} className="w-full bg-indigo-500 text-white rounded-xl p-4 font-black text-sm outline-none mb-3 border-none">
+                                            <div className="bg-indigo-600 rounded-3xl p-4 shadow-lg shadow-indigo-200">
+                                                <label className="text-[10px] font-black text-indigo-200 uppercase ml-1 mb-1 block">Отдел списания</label>
+                                                <select value={selectedDept[req.id] || ""} onChange={(e) => { setSelectedDept({...selectedDept, [req.id]: e.target.value}); setSelectedBudget({...selectedBudget, [req.id]: ""}); }} className="w-full bg-indigo-500 text-white rounded-xl p-4 font-black text-sm outline-none mb-3 border border-indigo-400">
                                                     <option value="" disabled>ВЫБРАТЬ ОТДЕЛ...</option>
                                                     {[...new Set(budgets.map(b => b.department))].sort().map(dept => <option key={dept} value={dept}>{dept}</option>)}
                                                 </select>
-                                                <select value={selectedBudget[req.id] || ""} onChange={(e) => setSelectedBudget({...selectedBudget, [req.id]: e.target.value})} disabled={!selectedDept[req.id]} className="w-full bg-white text-slate-800 rounded-xl p-4 font-black text-sm border-none outline-none">
+                                                <label className="text-[10px] font-black text-indigo-200 uppercase ml-1 mb-1 block">Статья расходов</label>
+                                                <select value={selectedBudget[req.id] || ""} onChange={(e) => setSelectedBudget({...selectedBudget, [req.id]: e.target.value})} disabled={!selectedDept[req.id]} className="w-full bg-white text-slate-800 rounded-xl p-4 font-black text-sm border-none outline-none shadow-inner">
                                                     <option value="" disabled>ВЫБРАТЬ СТАТЬЮ...</option>
                                                     {budgets.filter(b => b.department === selectedDept[req.id]).map(b => (
                                                         <option key={b.id} value={b.id}>
-                                                            {b.item_name} | {formatMoney(b.amount)} ₸ {b.priority ? `(Приоритет: ${b.priority})` : ''}
+                                                            {b.item_name} | {formatMoney(b.amount)} ₸ {b.priority ? `(${b.priority})` : ''}
                                                         </option>
                                                     ))}
                                                 </select>
                                             </div>
-                                            <button onClick={() => handleApprove(req.id)} disabled={processingId === req.id} className="w-full py-5 bg-emerald-500 text-white rounded-3xl font-black uppercase text-xs shadow-xl flex items-center justify-center gap-2">
+                                            <button onClick={() => handleApprove(req.id)} disabled={processingId === req.id} className="w-full py-5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-3xl font-black uppercase text-xs shadow-xl shadow-emerald-200 flex items-center justify-center gap-2 transition-all">
                                                 {processingId === req.id ? <Loader2 className="animate-spin" size={18}/> : <CheckCircle size={18}/>}
                                                 Одобрить и Отправить 
                                             </button>
