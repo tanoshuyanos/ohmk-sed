@@ -138,7 +138,7 @@ export default function WorkflowAdmin() {
                                     <label className="text-[10px] font-black uppercase text-slate-400 mb-1 block">Оператор:</label>
                                     <select value={condOp} onChange={(e) => setCondOp(e.target.value)} className="w-full p-3 rounded-xl border border-slate-200 text-sm font-bold bg-white">
                                         <option value="=">Равно (=)</option>
-                                        <option value=">">Больше (>)</option>
+                                        <option value=">">Больше (&gt;)</option>
                                         <option value="<">Меньше (&lt;)</option>
                                     </select>
                                 </div>
