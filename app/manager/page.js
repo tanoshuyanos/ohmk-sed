@@ -1,14 +1,17 @@
 // ==========================================
-// ФАЙЛ №3: КАБИНЕТ РУКОВОДИТЕЛЯ (ИСПРАВЛЕННЫЙ ПРОСМОТР И СУММЫ)
+// ФАЙЛ №3: КАБИНЕТ РУКОВОДИТЕЛЯ (С ДАШБОРДОМ БЮДЖЕТОВ)
+// ПУТЬ: app/manager/page.js
 // ==========================================
 
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { ArrowLeft, User, Lock, CheckCircle, Loader2, ListTodo, Wallet, ChevronDown, ChevronUp, X, Building, Paperclip, Calendar, AlignLeft, Zap, Archive, Check, Download, FileText } from "lucide-react";
+import { ArrowLeft, User, CheckCircle, Loader2, Wallet, ChevronDown, ChevronUp, X, Paperclip, Download, FileText, PieChart, TrendingDown } from "lucide-react";
+
+// Подключаем наш умный моторчик маршрутов!
 import { getNextStep } from "../utils/workflow";
 
-// --- ДАННЫЕ БЕРУТСЯ ИЗ ЗАЩИЩЕННОГО .ENV ФАЙЛА ---
+// Берем ключи из .env
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL; 
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
@@ -53,7 +56,13 @@ export default function ManagerDashboard() {
 
   const loadManagerData = async (department) => {
       setLoading(true);
-      const { data: reqs } = await supabase.from("v2_requests").select("*").eq("department", department).order("created_at", { ascending: false });
+      // Если это Дирекция, грузим все заявки, иначе только своего отдела
+      let query = supabase.from("v2_requests").select("*").order("created_at", { ascending: false });
+      if (department !== "Дирекция" && department !== "Руководство") {
+          query = query.eq("department", department);
+      }
+      
+      const { data: reqs } = await query;
       if (reqs) setAllRequests(reqs);
 
       if (reqs && reqs.length > 0) {
@@ -68,22 +77,63 @@ export default function ManagerDashboard() {
               setRequestItems(grouped);
           }
       }
+      // Всегда грузим все бюджеты компании для сводки
       const { data: bgs } = await supabase.from("v2_budgets").select("*").order("item_name");
       if (bgs) setBudgets(bgs);
       setLoading(false);
   };
 
+  // 🧠 УМНЫЙ КАЛЬКУЛЯТОР БЮДЖЕТОВ
+  const budgetStats = useMemo(() => {
+      const stats = {};
+      let grandTotal = 0;
+      let grandSpent = 0;
+
+      // 1. Считаем общие лимиты (из таблицы v2_budgets)
+      budgets.forEach(b => {
+          const dept = b.department || "Общие";
+          if (!stats[dept]) stats[dept] = { total: 0, spent: 0 };
+          
+          const total = Number(b.amount) || 0;
+          // Если в базе уже есть колонка spent, берем её. Иначе 0.
+          const spent = Number(b.spent) || 0; 
+
+          stats[dept].total += total;
+          stats[dept].spent += spent;
+          
+          grandTotal += total;
+          grandSpent += spent;
+      });
+
+      // 2. Симуляция: прибавляем к расходам одобренные заявки с экрана
+      // (Чтобы шкала заполнялась в реальном времени даже без колонки spent в базе)
+      allRequests.forEach(req => {
+          if (req.current_step > 1 && req.budget_id) {
+              const b = budgets.find(bg => bg.id === req.budget_id);
+              if (b && !b.spent) { // Считаем только если база сама не отдает spent
+                  const dept = b.department || "Общие";
+                  // Берем сумму (пока условную, если нет точной суммы договора)
+                  const reqSum = Number(req.contract_sum) || Number(req.payment_sum) || 15000; 
+                  if (stats[dept]) {
+                      stats[dept].spent += reqSum;
+                      grandSpent += reqSum;
+                  }
+              }
+          }
+      });
+
+      return { departments: stats, grandTotal, grandSpent };
+  }, [budgets, allRequests]);
+
   const handleApprove = async (reqId) => {
-      // Находим саму заявку в списке
       const req = allRequests.find(r => r.id === reqId);
-      
       const selectedBudgetId = selectedBudget[reqId];
       if (!selectedBudgetId) return alert("⚠️ Пожалуйста, выберите статью бюджета!");
       const budgetObj = budgets.find(b => b.id === selectedBudgetId);
       
       setProcessingId(reqId);
 
-      // 🧠 МАГИЯ ЗДЕСЬ: Спрашиваем у моторчика, куда отправить заявку дальше
+      // ⚙️ МОТОРЧИК: Спрашиваем маршрут у админки
       const nextStep = await getNextStep(req.current_step || 1, req);
 
       const { error } = await supabase.from("v2_requests").update({ 
@@ -95,7 +145,6 @@ export default function ManagerDashboard() {
 
       if (error) { alert("ОШИБКА: " + error.message); setProcessingId(null); return; }
       
-      // Убираем заявку из списка "Ожидают"
       setAllRequests(allRequests.map(r => r.id === reqId ? { 
           ...r, 
           current_step: nextStep, 
@@ -140,7 +189,6 @@ export default function ManagerDashboard() {
                       ) : isPdf(previewUrl) ? (
                           <iframe src={`${previewUrl}#toolbar=0`} className="w-full h-full border-none bg-white"/>
                       ) : isDoc(previewUrl) ? (
-                          /* ИСПОЛЬЗУЕМ MICROSOFT OFFICE VIEWER (РАБОТАЕТ ЛУЧШЕ ДЛЯ DOCX И XLSX) */
                           <iframe src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(previewUrl)}`} className="w-full h-full border-none bg-white"/>
                       ) : (
                           <div className="text-center p-10">
@@ -193,8 +241,9 @@ export default function ManagerDashboard() {
                 )}
             </div>
         ) : (
-            /* СПИСОК ЗАЯВОК */
             <div className="space-y-6">
+                
+                {/* КАРТОЧКА ПРОФИЛЯ */}
                 <div className="bg-white rounded-[24px] p-5 shadow-sm border border-slate-100 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white font-black">{selectedEmp.name[0]}</div>
@@ -205,11 +254,57 @@ export default function ManagerDashboard() {
                     </div>
                 </div>
 
+                {/* 📊 ДАШБОРД БЮДЖЕТОВ (ШКАЛЫ) */}
+                {Object.keys(budgetStats.departments).length > 0 && (
+                    <div className="bg-white rounded-[24px] p-5 shadow-sm border border-slate-100 space-y-4">
+                        <div className="flex items-center gap-2 mb-2">
+                            <PieChart className="text-indigo-600" size={20}/>
+                            <h3 className="font-black text-slate-800 text-sm uppercase tracking-widest">Бюджет компании</h3>
+                        </div>
+                        
+                        {/* ОБЩИЙ БЮДЖЕТ (Только если есть права или грузятся все бюджеты) */}
+                        <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
+                            <div className="flex justify-between text-xs font-black mb-2 text-indigo-900">
+                                <span className="uppercase">Всего израсходовано</span>
+                                <span>{formatMoney(budgetStats.grandSpent)} / {formatMoney(budgetStats.grandTotal)} ₸</span>
+                            </div>
+                            <div className="w-full bg-indigo-200/50 rounded-full h-3 overflow-hidden">
+                                <div className="bg-indigo-600 h-3 rounded-full transition-all duration-1000" style={{ width: `${Math.min((budgetStats.grandSpent / (budgetStats.grandTotal || 1)) * 100, 100)}%` }}></div>
+                            </div>
+                        </div>
+
+                        {/* ШКАЛЫ ПО ОТДЕЛАМ */}
+                        <div className="space-y-4 pt-2">
+                            {Object.entries(budgetStats.departments).map(([dept, data]) => {
+                                const percent = Math.min((data.spent / (data.total || 1)) * 100, 100);
+                                // Динамический цвет: Зеленый -> Желтый -> Красный
+                                let barColor = "bg-emerald-500";
+                                if (percent > 60) barColor = "bg-amber-500";
+                                if (percent > 90) barColor = "bg-red-500";
+
+                                return (
+                                    <div key={dept} className="space-y-1.5">
+                                        <div className="flex justify-between text-[10px] font-bold">
+                                            <span className="text-slate-600 uppercase flex items-center gap-1"><TrendingDown size={12} className="text-slate-400"/> {dept}</span>
+                                            <span className="text-slate-500">{formatMoney(data.spent)} / <span className="text-slate-800">{formatMoney(data.total)}</span> ₸</span>
+                                        </div>
+                                        <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                                            <div className={`${barColor} h-2 rounded-full transition-all duration-1000 ease-out`} style={{ width: `${percent}%` }}></div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                {/* ПЕРЕКЛЮЧАТЕЛЬ ВКЛАДОК */}
                 <div className="flex gap-2 bg-slate-200/50 p-1 rounded-2xl">
                     <button onClick={() => setViewMode('active')} className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${viewMode === 'active' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}>Ожидают ({activeRequests.length})</button>
                     <button onClick={() => setViewMode('history')} className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${viewMode === 'history' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}>История ({historyRequests.length})</button>
                 </div>
 
+                {/* СПИСОК ЗАЯВОК */}
                 <div className="space-y-4">
                     {displayedRequests.map(req => (
                         <div key={req.id} className={`bg-white rounded-[28px] shadow-sm border ${expandedReq === req.id ? "border-indigo-300 ring-4 ring-indigo-50" : "border-slate-100"}`}>
@@ -218,6 +313,8 @@ export default function ManagerDashboard() {
                                     <div className="flex items-center gap-2 mb-1">
                                         <span className="text-[10px] font-black bg-slate-100 text-slate-500 px-2 py-0.5 rounded">#{req.req_number || 'B/N'}</span>
                                         {req.urgency === "срочно" && <span className="text-[9px] font-black bg-red-600 text-white px-2 py-0.5 rounded uppercase">Срочно</span>}
+                                        {/* Если заявка обработана, показываем её текущий статус из Умного Маршрутизатора */}
+                                        {req.current_step > 1 && <span className="text-[9px] font-black bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded uppercase">{req.status_text || "В работе"}</span>}
                                     </div>
                                     <h4 className="font-bold text-slate-800 text-sm leading-tight">{req.category}</h4>
                                     <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase">От: {req.initiator}</p>
@@ -257,8 +354,6 @@ export default function ManagerDashboard() {
                                                     <option value="" disabled>ВЫБРАТЬ ОТДЕЛ...</option>
                                                     {[...new Set(budgets.map(b => b.department))].sort().map(dept => <option key={dept} value={dept}>{dept}</option>)}
                                                 </select>
-                                                
-                                                {/* ВОТ ЗДЕСЬ ВЕРНУЛИ СУММЫ И ПРИОРИТЕТЫ В ПОЛНОМ ОБЪЕМЕ */}
                                                 <select value={selectedBudget[req.id] || ""} onChange={(e) => setSelectedBudget({...selectedBudget, [req.id]: e.target.value})} disabled={!selectedDept[req.id]} className="w-full bg-white text-slate-800 rounded-xl p-4 font-black text-sm border-none outline-none">
                                                     <option value="" disabled>ВЫБРАТЬ СТАТЬЮ...</option>
                                                     {budgets.filter(b => b.department === selectedDept[req.id]).map(b => (
@@ -267,11 +362,10 @@ export default function ManagerDashboard() {
                                                         </option>
                                                     ))}
                                                 </select>
-
                                             </div>
                                             <button onClick={() => handleApprove(req.id)} disabled={processingId === req.id} className="w-full py-5 bg-emerald-500 text-white rounded-3xl font-black uppercase text-xs shadow-xl flex items-center justify-center gap-2">
                                                 {processingId === req.id ? <Loader2 className="animate-spin" size={18}/> : <CheckCircle size={18}/>}
-                                                Одобрить
+                                                Одобрить и Отправить 
                                             </button>
                                         </div>
                                     ) : (
