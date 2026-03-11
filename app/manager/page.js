@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { ArrowLeft, User, Lock, CheckCircle, Loader2, ListTodo, Wallet, ChevronDown, ChevronUp, X, Building, Paperclip, Calendar, AlignLeft, Zap, Archive, Check, Download, FileText } from "lucide-react";
+import { getNextStep } from "../utils/workflow";
 
 // --- ДАННЫЕ БЕРУТСЯ ИЗ ЗАЩИЩЕННОГО .ENV ФАЙЛА ---
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL; 
@@ -73,13 +74,36 @@ export default function ManagerDashboard() {
   };
 
   const handleApprove = async (reqId) => {
+      // Находим саму заявку в списке
+      const req = allRequests.find(r => r.id === reqId);
+      
       const selectedBudgetId = selectedBudget[reqId];
       if (!selectedBudgetId) return alert("⚠️ Пожалуйста, выберите статью бюджета!");
       const budgetObj = budgets.find(b => b.id === selectedBudgetId);
+      
       setProcessingId(reqId);
-      const { error } = await supabase.from("v2_requests").update({ current_step: 2, status_text: "Одобрено", budget_id: budgetObj.id, budget_category: budgetObj.item_name }).eq("id", reqId);
+
+      // 🧠 МАГИЯ ЗДЕСЬ: Спрашиваем у моторчика, куда отправить заявку дальше
+      const nextStep = await getNextStep(req.current_step || 1, req);
+
+      const { error } = await supabase.from("v2_requests").update({ 
+          current_step: nextStep, 
+          status_text: `В работе (Этап ${nextStep})`, 
+          budget_id: budgetObj.id, 
+          budget_category: budgetObj.item_name 
+      }).eq("id", reqId);
+
       if (error) { alert("ОШИБКА: " + error.message); setProcessingId(null); return; }
-      setAllRequests(allRequests.map(r => r.id === reqId ? { ...r, current_step: 2, status_text: "Одобрено", budget_id: budgetObj.id, budget_category: budgetObj.item_name } : r));
+      
+      // Убираем заявку из списка "Ожидают"
+      setAllRequests(allRequests.map(r => r.id === reqId ? { 
+          ...r, 
+          current_step: nextStep, 
+          status_text: `В работе (Этап ${nextStep})`, 
+          budget_id: budgetObj.id, 
+          budget_category: budgetObj.item_name 
+      } : r));
+      
       setProcessingId(null);
       setExpandedReq(null);
   };
