@@ -1,18 +1,25 @@
 // ==========================================
-// ФАЙЛ: КАБИНЕТ РУКОВОДИТЕЛЯ (ИНТЕРАКТИВНЫЙ ДАШБОРД БЮДЖЕТОВ)
+// ФАЙЛ: КАБИНЕТ РУКОВОДИТЕЛЯ (PREMIUM DESIGN + УМНЫЙ КАЛЬКУЛЯТОР)
 // ПУТЬ: app/manager/page.js
 // ==========================================
 
 "use client";
 import React, { useState, useEffect, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { ArrowLeft, User, CheckCircle, Loader2, Wallet, ChevronDown, ChevronUp, X, Paperclip, Download, FileText, PieChart, TrendingDown, Calendar, Receipt } from "lucide-react";
+import { ArrowLeft, User, CheckCircle, Loader2, Wallet, ChevronDown, Paperclip, Download, FileText, PieChart, Calendar, Receipt, CreditCard, ChevronRight } from "lucide-react";
 
 import { getNextStep } from "../utils/workflow";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL; 
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+// Бронебойный очиститель чисел (убирает пробелы, буквы, запятые)
+const cleanNumber = (val) => {
+    if (!val) return 0;
+    if (typeof val === 'number') return val;
+    return Number(String(val).replace(/[^0-9.-]+/g, "")) || 0;
+};
 
 export default function ManagerDashboard() {
   const [loading, setLoading] = useState(true);
@@ -27,7 +34,7 @@ export default function ManagerDashboard() {
   const [budgets, setBudgets] = useState([]);
   const [viewMode, setViewMode] = useState("active"); 
   const [expandedReq, setExpandedReq] = useState(null); 
-  const [expandedDept, setExpandedDept] = useState(null); // Открытая шкала бюджета
+  const [expandedDept, setExpandedDept] = useState(null);
   const [selectedDept, setSelectedDept] = useState({}); 
   const [selectedBudget, setSelectedBudget] = useState({}); 
   const [processingId, setProcessingId] = useState(null);
@@ -80,19 +87,17 @@ export default function ManagerDashboard() {
       setLoading(false);
   };
 
-  // 🧠 УМНЫЙ КАЛЬКУЛЯТОР БЮДЖЕТОВ С ДЕТАЛИЗАЦИЕЙ ЗАЯВОК
   const budgetStats = useMemo(() => {
       const stats = {};
       let grandTotal = 0;
       let grandSpent = 0;
 
-      // 1. Собираем пустые корзины лимитов
       budgets.forEach(b => {
           const dept = b.department || "Общие";
           if (!stats[dept]) stats[dept] = { total: 0, spent: 0, history: [] };
           
-          const total = Number(b.amount) || 0;
-          const spent = Number(b.spent) || 0; 
+          const total = cleanNumber(b.amount);
+          const spent = cleanNumber(b.spent); 
 
           stats[dept].total += total;
           stats[dept].spent += spent;
@@ -100,20 +105,19 @@ export default function ManagerDashboard() {
           grandSpent += spent;
       });
 
-      // 2. Раскладываем одобренные заявки по корзинам отделов
       allRequests.forEach(req => {
           if (req.current_step > 1 && req.budget_id) {
               const b = budgets.find(bg => bg.id === req.budget_id);
               if (b) {
                   const dept = b.department || "Общие";
-                  const reqSum = Number(req.contract_sum) || Number(req.payment_sum) || 0; 
+                  // Ищем сумму везде, где она может быть спрятана
+                  const reqSum = cleanNumber(req.amount) || cleanNumber(req.contract_sum) || cleanNumber(req.payment_sum) || cleanNumber(req.sum) || 0;
                   
                   if (stats[dept]) {
                       if (!b.spent && reqSum > 0) {
                           stats[dept].spent += reqSum;
                           grandSpent += reqSum;
                       }
-                      // Сохраняем заявку для детализации внутри шкалы
                       stats[dept].history.push({
                           id: req.id,
                           num: req.req_number || 'B/N',
@@ -163,177 +167,160 @@ export default function ManagerDashboard() {
   const formatMoney = (amount) => { if (!amount) return "0"; return Number(amount).toLocaleString('ru-RU'); };
   const formatDate = (dateStr) => { if(!dateStr) return ""; return new Date(dateStr).toLocaleDateString('ru-RU', {day: '2-digit', month: 'short'}); };
   
-  const isImage = (url) => url.match(/\.(jpeg|jpg|gif|png|webp|bmp)(\?.*)?$/i);
-  const isPdf = (url) => url.match(/\.(pdf)(\?.*)?$/i);
-  const isDoc = (url) => url.match(/\.(doc|docx|xls|xlsx|ppt|pptx|rtf)(\?.*)?$/i);
-
   const activeRequests = allRequests.filter(r => r.current_step === 1);
   const historyRequests = allRequests.filter(r => r.current_step > 1);
   const displayedRequests = viewMode === "active" ? activeRequests : historyRequests;
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans pb-10 relative text-slate-900">
+    <div className="min-h-screen bg-[#f4f6f8] font-sans pb-20 relative text-slate-900">
       
-      {/* МОДАЛКА ПРОСМОТРА ФАЙЛОВ */}
+      {/* ПРЕВЬЮ ФАЙЛОВ */}
       {previewUrl && (
-          <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center bg-slate-900/90 backdrop-blur-sm p-0 md:p-4">
-              <div className="bg-white w-full max-w-5xl h-[92vh] md:h-[85vh] rounded-t-[32px] md:rounded-[24px] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-full duration-300">
-                  <div className="p-4 border-b flex justify-between items-center bg-white sticky top-0 z-10">
-                      <div className="flex items-center gap-2">
-                          <button onClick={() => setPreviewUrl(null)} className="p-2 -ml-2 text-slate-400 md:hidden"><ArrowLeft/></button>
-                          <h3 className="font-black text-slate-800 text-sm">Просмотр документа</h3>
+          <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center bg-slate-900/60 backdrop-blur-md p-0 md:p-4 transition-all">
+              <div className="bg-white w-full max-w-5xl h-[92vh] md:h-[85vh] rounded-t-[32px] md:rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-full duration-300">
+                  <div className="p-5 flex justify-between items-center bg-white/80 backdrop-blur-xl border-b border-slate-100 z-10">
+                      <div className="flex items-center gap-3">
+                          <button onClick={() => setPreviewUrl(null)} className="md:hidden bg-slate-100 p-2 rounded-full"><ArrowLeft size={18}/></button>
+                          <h3 className="font-bold text-slate-800 text-sm">Документ</h3>
                       </div>
                       <div className="flex gap-2">
-                          <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100"><Download size={20}/></a>
-                          <button onClick={() => setPreviewUrl(null)} className="hidden md:block p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-100"><X size={20}/></button>
+                          <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="p-3 bg-indigo-50 text-indigo-600 rounded-full hover:bg-indigo-100 transition"><Download size={18}/></a>
+                          <button onClick={() => setPreviewUrl(null)} className="hidden md:block p-3 bg-slate-100 text-slate-600 rounded-full hover:bg-slate-200 transition"><X size={18}/></button>
                       </div>
                   </div>
-                  <div className="flex-1 bg-slate-100 flex items-center justify-center overflow-auto relative">
-                      {isImage(previewUrl) ? (
-                          <img src={previewUrl} className="max-w-full max-h-full object-contain p-2" alt="Файл" />
-                      ) : isPdf(previewUrl) ? (
-                          <iframe src={`${previewUrl}#toolbar=0`} className="w-full h-full border-none bg-white"/>
-                      ) : isDoc(previewUrl) ? (
-                          <iframe src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(previewUrl)}`} className="w-full h-full border-none bg-white"/>
+                  <div className="flex-1 bg-slate-50 flex items-center justify-center overflow-auto relative p-4">
+                      {previewUrl.match(/\.(jpeg|jpg|gif|png|webp|bmp)(\?.*)?$/i) ? (
+                          <img src={previewUrl} className="max-w-full max-h-full rounded-xl shadow-sm" alt="Файл" />
                       ) : (
-                          <div className="text-center p-10">
-                              <FileText size={48} className="mx-auto text-slate-300 mb-4"/>
-                              <p className="text-slate-500 font-bold mb-4">Предпросмотр недоступен</p>
-                              <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="inline-block bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold">Открыть / Скачать</a>
-                          </div>
+                          <iframe src={previewUrl.match(/\.(pdf)(\?.*)?$/i) ? `${previewUrl}#toolbar=0` : `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(previewUrl)}`} className="w-full h-full border-none bg-white rounded-xl shadow-sm"/>
                       )}
                   </div>
               </div>
           </div>
       )}
 
-      {/* ШАПКА */}
-      <div className="p-4 flex items-center justify-between sticky top-0 z-20 bg-indigo-600 text-white shadow-md">
-        <a href="/" className="p-2 -ml-2"><ArrowLeft size={24} /></a>
-        <h1 className="text-sm font-black uppercase tracking-widest">Кабинет руководителя</h1>
-        <div className="w-10"></div>
+      {/* ШАПКА PREMIUM */}
+      <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-5 sticky top-0 z-20 shadow-lg shadow-slate-900/10 rounded-b-[32px] md:rounded-none">
+        <div className="max-w-xl mx-auto flex items-center justify-between">
+            <a href="/" className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition backdrop-blur-md"><ArrowLeft size={20} /></a>
+            <div className="text-center">
+                <h1 className="text-sm font-black tracking-widest uppercase">Панель управления</h1>
+                {isAuthenticated && <p className="text-[10px] text-slate-400 font-medium tracking-wide mt-0.5">{selectedEmp.department}</p>}
+            </div>
+            <div className="w-9 h-9 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-full flex items-center justify-center text-xs font-black shadow-inner">
+                {isAuthenticated ? selectedEmp.name[0] : <User size={16}/>}
+            </div>
+        </div>
       </div>
 
-      <main className="max-w-xl mx-auto p-4 md:p-8">
+      <main className="max-w-xl mx-auto p-4 md:p-6 -mt-2">
         {!isAuthenticated ? (
             /* ЭКРАН ВХОДА */
-            <div className="bg-white rounded-[32px] shadow-xl border border-slate-100 p-6 space-y-6">
-                <div className="text-center space-y-1">
-                    <h2 className="text-xl font-black text-slate-800">СЭД v2.0</h2>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Вход для руководителей</p>
+            <div className="bg-white/80 backdrop-blur-xl rounded-[32px] shadow-2xl shadow-slate-200/50 border border-white p-8 mt-10">
+                <div className="text-center mb-8">
+                    <div className="w-16 h-16 bg-slate-900 rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-lg"><User className="text-white" size={28}/></div>
+                    <h2 className="text-2xl font-black text-slate-800 tracking-tight">Вход в систему</h2>
                 </div>
                 {!selectedEmp ? (
                     <div className="relative">
-                        <User className="absolute left-4 top-4 text-slate-300" size={20} />
-                        <input type="text" value={initiator} onChange={(e) => setInitiator(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 font-bold outline-none" placeholder="Фамилия..." />
+                        <input type="text" value={initiator} onChange={(e) => setInitiator(e.target.value)} className="w-full bg-slate-100/50 border-0 rounded-2xl py-4 px-6 font-bold text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 transition" placeholder="Ваша фамилия..." />
                         {initiator.length > 0 && (
-                            <ul className="absolute z-50 w-full bg-white border border-slate-200 rounded-2xl mt-2 shadow-2xl max-h-60 overflow-y-auto p-2">
+                            <ul className="absolute z-50 w-full bg-white/90 backdrop-blur-xl border border-slate-100 rounded-2xl mt-2 shadow-2xl overflow-hidden p-1">
                                 {employeesDB.filter(e => e.name.toLowerCase().includes(initiator.toLowerCase())).map((emp) => (
-                                    <li key={emp.id} onClick={() => { setSelectedEmp(emp); setInitiator(emp.name); }} className="p-4 hover:bg-indigo-50 rounded-xl font-black text-slate-800 border-b last:border-0">{emp.name}</li>
+                                    <li key={emp.id} onClick={() => { setSelectedEmp(emp); setInitiator(emp.name); }} className="p-4 hover:bg-indigo-50 rounded-xl font-bold text-slate-700 cursor-pointer transition">{emp.name}</li>
                                 ))}
                             </ul>
                         )}
                     </div>
                 ) : (
-                    <div className="space-y-4">
-                        <div className="w-full bg-indigo-50 border border-indigo-100 rounded-2xl p-4 flex justify-between items-center">
-                            <span className="font-black text-indigo-700">{selectedEmp.name}</span>
-                            <button onClick={() => {setSelectedEmp(null); setInputPassword("");}} className="text-indigo-300"><X size={20}/></button>
+                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
+                        <div className="w-full bg-indigo-50/50 rounded-2xl p-4 flex justify-between items-center border border-indigo-100/50">
+                            <span className="font-bold text-indigo-900">{selectedEmp.name}</span>
+                            <button onClick={() => {setSelectedEmp(null); setInputPassword("");}} className="bg-white p-1.5 rounded-full text-slate-400 shadow-sm"><X size={14}/></button>
                         </div>
-                        <input type="password" value={inputPassword} onChange={(e) => setInputPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && checkPassword()} className="w-full bg-white border border-slate-200 rounded-2xl py-4 text-center text-2xl font-black tracking-[0.5em]" placeholder="PIN" autoFocus />
-                        {passwordError && <p className="text-red-500 text-xs font-bold text-center">Неверный PIN-код</p>}
-                        <button onClick={checkPassword} className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black uppercase shadow-lg shadow-indigo-100">Войти</button>
+                        <input type="password" value={inputPassword} onChange={(e) => setInputPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && checkPassword()} className="w-full bg-slate-100/50 border-0 rounded-2xl py-4 text-center text-2xl font-black tracking-[0.5em] focus:ring-2 focus:ring-indigo-500 transition" placeholder="PIN" autoFocus />
+                        <button onClick={checkPassword} className="w-full bg-slate-900 hover:bg-slate-800 text-white py-4 rounded-2xl font-bold tracking-wide shadow-xl shadow-slate-900/20 transition">Подтвердить</button>
                     </div>
                 )}
             </div>
         ) : (
-            <div className="space-y-6">
+            <div className="space-y-6 mt-4">
                 
-                {/* КАРТОЧКА ПРОФИЛЯ */}
-                <div className="bg-white rounded-[24px] p-5 shadow-sm border border-slate-100 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white font-black shadow-inner">{selectedEmp.name[0]}</div>
-                        <div>
-                            <h2 className="text-sm font-black text-slate-800 leading-none">{selectedEmp.name}</h2>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">{selectedEmp.department}</p>
-                        </div>
-                    </div>
-                </div>
-
-                {/* 📊 ИНТЕРАКТИВНЫЙ ДАШБОРД БЮДЖЕТОВ */}
+                {/* 📊 ФИНАНСОВЫЙ ДАШБОРД */}
                 {Object.keys(budgetStats.departments).length > 0 && (
-                    <div className="bg-white rounded-[24px] p-5 shadow-sm border border-slate-100 space-y-4">
-                        <div className="flex items-center gap-2 mb-2">
-                            <PieChart className="text-indigo-600" size={20}/>
-                            <h3 className="font-black text-slate-800 text-sm uppercase tracking-widest">Бюджет компании</h3>
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-2 px-2">
+                            <PieChart className="text-slate-400" size={18}/>
+                            <h3 className="font-bold text-slate-500 text-xs uppercase tracking-widest">Бюджеты отделов</h3>
                         </div>
                         
-                        {/* ОБЩИЙ БЮДЖЕТ (Всегда виден) */}
-                        <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 mb-4">
-                            <div className="flex justify-between text-xs font-black mb-2 text-indigo-900">
-                                <span className="uppercase">Всего израсходовано</span>
-                                <span>{formatMoney(budgetStats.grandSpent)} / {formatMoney(budgetStats.grandTotal)} ₸</span>
+                        {/* ОБЩИЙ СВОД */}
+                        <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-[32px] p-6 text-white shadow-xl shadow-indigo-500/20 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
+                            <p className="text-indigo-100 text-[10px] font-bold uppercase tracking-widest mb-1">Всего израсходовано</p>
+                            <div className="flex items-end gap-2 mb-4">
+                                <h2 className="text-3xl font-black tracking-tight">{formatMoney(budgetStats.grandSpent)} ₸</h2>
+                                <p className="text-indigo-200 text-sm font-medium mb-1">/ {formatMoney(budgetStats.grandTotal)}</p>
                             </div>
-                            <div className="w-full bg-indigo-200/50 rounded-full h-3 overflow-hidden">
-                                <div className="bg-indigo-600 h-3 rounded-full transition-all duration-1000" style={{ width: `${Math.min((budgetStats.grandSpent / (budgetStats.grandTotal || 1)) * 100, 100)}%` }}></div>
+                            <div className="w-full bg-black/20 rounded-full h-1.5 overflow-hidden">
+                                <div className="bg-white h-1.5 rounded-full transition-all duration-1000 relative" style={{ width: `${Math.min((budgetStats.grandSpent / (budgetStats.grandTotal || 1)) * 100, 100)}%` }}></div>
                             </div>
                         </div>
 
-                        {/* ШКАЛЫ ПО ОТДЕЛАМ С РАСКРЫТИЕМ */}
-                        <div className="space-y-3">
+                        {/* ШКАЛЫ ПО ОТДЕЛАМ */}
+                        <div className="grid grid-cols-1 gap-3">
                             {Object.entries(budgetStats.departments).map(([dept, data]) => {
                                 const percent = Math.min((data.spent / (data.total || 1)) * 100, 100);
-                                let barColor = "bg-emerald-500";
-                                if (percent > 60) barColor = "bg-amber-500";
-                                if (percent > 90) barColor = "bg-red-500";
+                                let gradient = "from-emerald-400 to-emerald-500";
+                                if (percent > 60) gradient = "from-amber-400 to-amber-500";
+                                if (percent > 90) gradient = "from-red-400 to-red-500";
                                 
                                 const isExpanded = expandedDept === dept;
 
                                 return (
-                                    <div key={dept} className={`border rounded-2xl transition-all duration-300 ${isExpanded ? 'border-indigo-200 bg-white shadow-md' : 'border-slate-100 bg-slate-50 hover:border-slate-200'}`}>
+                                    <div key={dept} className={`bg-white rounded-3xl transition-all duration-300 border ${isExpanded ? 'shadow-xl shadow-slate-200/50 border-transparent' : 'shadow-sm border-slate-100 hover:border-slate-200'}`}>
                                         
-                                        {/* КЛИКАБЕЛЬНАЯ ШАПКА ШКАЛЫ */}
-                                        <div className="p-4 cursor-pointer" onClick={() => setExpandedDept(isExpanded ? null : dept)}>
-                                            <div className="flex justify-between items-center mb-2">
-                                                <div className="flex items-center gap-2">
-                                                    <div className={`p-1 rounded-md transition-transform ${isExpanded ? 'rotate-180 bg-indigo-100 text-indigo-600' : 'bg-slate-200 text-slate-500'}`}>
-                                                        <ChevronDown size={14}/>
+                                        <div className="p-5 cursor-pointer" onClick={() => setExpandedDept(isExpanded ? null : dept)}>
+                                            <div className="flex justify-between items-center mb-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${isExpanded ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-50 text-slate-400'}`}>
+                                                        <Wallet size={14}/>
                                                     </div>
-                                                    <span className="text-[11px] font-black text-slate-700 uppercase tracking-wide">{dept}</span>
+                                                    <span className="text-sm font-bold text-slate-800">{dept}</span>
                                                 </div>
-                                                <span className="text-[11px] font-bold text-slate-500">
-                                                    {formatMoney(data.spent)} / <span className="text-slate-900">{formatMoney(data.total)}</span> ₸
-                                                </span>
+                                                <div className="text-right">
+                                                    <span className="text-sm font-black text-slate-900">{formatMoney(data.spent)} ₸</span>
+                                                    <p className="text-[10px] text-slate-400 font-medium mt-0.5">из {formatMoney(data.total)}</p>
+                                                </div>
                                             </div>
-                                            <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
-                                                <div className={`${barColor} h-2 rounded-full transition-all duration-1000 ease-out`} style={{ width: `${percent}%` }}></div>
+                                            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                                                <div className={`bg-gradient-to-r ${gradient} h-2 rounded-full transition-all duration-1000 ease-out`} style={{ width: `${percent}%` }}></div>
                                             </div>
                                         </div>
 
-                                        {/* СПИСОК ЗАЯВОК (ДЕТАЛИЗАЦИЯ ПРИ КЛИКЕ) */}
                                         {isExpanded && (
-                                            <div className="px-4 pb-4 pt-1 border-t border-slate-50 animate-in slide-in-from-top-2 duration-200">
+                                            <div className="px-5 pb-5 pt-2 border-t border-slate-50 animate-in slide-in-from-top-2">
                                                 {data.history.length === 0 ? (
-                                                    <div className="text-center py-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                                                        <p className="text-[10px] text-slate-400 font-bold uppercase">Пока нет списаний</p>
+                                                    <div className="text-center py-6">
+                                                        <p className="text-xs text-slate-400 font-medium">Списаний пока нет</p>
                                                     </div>
                                                 ) : (
-                                                    <div className="space-y-2 mt-2">
+                                                    <div className="space-y-3 mt-2">
                                                         {data.history.map((r, i) => (
-                                                            <div key={i} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:border-indigo-100 transition">
-                                                                <div className="flex items-start gap-3 overflow-hidden">
-                                                                    <div className="bg-indigo-50 text-indigo-500 p-2 rounded-lg mt-0.5"><Receipt size={14}/></div>
+                                                            <div key={i} className="flex justify-between items-center bg-slate-50/50 p-3.5 rounded-2xl hover:bg-slate-50 transition">
+                                                                <div className="flex items-center gap-3 overflow-hidden">
+                                                                    <div className="bg-white p-2 rounded-xl shadow-sm border border-slate-100 text-slate-400"><Receipt size={14}/></div>
                                                                     <div className="min-w-0">
-                                                                        <div className="flex items-center gap-2 mb-1">
-                                                                            <span className="text-[10px] font-black text-slate-800">#{r.num}</span>
-                                                                            <span className="text-[9px] font-bold text-slate-400 flex items-center gap-0.5"><Calendar size={10}/> {formatDate(r.date)}</span>
+                                                                        <p className="text-xs font-bold text-slate-700 truncate">{r.category}</p>
+                                                                        <div className="flex items-center gap-2 mt-1">
+                                                                            <span className="text-[9px] font-bold text-slate-400">#{r.num}</span>
+                                                                            <span className="text-[9px] font-medium text-slate-400">{formatDate(r.date)}</span>
                                                                         </div>
-                                                                        <p className="text-[10px] font-bold text-slate-500 uppercase truncate max-w-[140px] md:max-w-[200px]">{r.category}</p>
                                                                     </div>
                                                                 </div>
                                                                 <div className="text-right shrink-0">
-                                                                    <p className="text-[11px] font-black text-slate-800">-{formatMoney(r.sum)} ₸</p>
-                                                                    <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">{r.initiator.split(' ')[0]}</p>
+                                                                    <p className="text-xs font-black text-slate-900">-{formatMoney(r.sum)} ₸</p>
+                                                                    <p className="text-[9px] text-slate-400 mt-1 uppercase">{r.initiator.split(' ')[0]}</p>
                                                                 </div>
                                                             </div>
                                                         ))}
@@ -348,88 +335,91 @@ export default function ManagerDashboard() {
                     </div>
                 )}
 
-                {/* ПЕРЕКЛЮЧАТЕЛЬ ВКЛАДОК ЗАЯВОК */}
-                <div className="flex gap-2 bg-slate-200/50 p-1 rounded-2xl">
-                    <button onClick={() => setViewMode('active')} className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${viewMode === 'active' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}>Ожидают решения ({activeRequests.length})</button>
-                    <button onClick={() => setViewMode('history')} className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${viewMode === 'history' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}>История ({historyRequests.length})</button>
+                {/* ПЕРЕКЛЮЧАТЕЛЬ */}
+                <div className="flex gap-2 bg-slate-200/50 p-1.5 rounded-2xl mt-8">
+                    <button onClick={() => setViewMode('active')} className={`flex-1 py-3 rounded-xl font-bold text-xs transition-all ${viewMode === 'active' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>Ожидают ({activeRequests.length})</button>
+                    <button onClick={() => setViewMode('history')} className={`flex-1 py-3 rounded-xl font-bold text-xs transition-all ${viewMode === 'history' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>В работе ({historyRequests.length})</button>
                 </div>
 
-                {/* СПИСОК ЗАЯВОК ДЛЯ ОДОБРЕНИЯ */}
+                {/* СПИСОК ЗАЯВОК */}
                 <div className="space-y-4">
                     {displayedRequests.map(req => (
-                        <div key={req.id} className={`bg-white rounded-[28px] shadow-sm border transition-all ${expandedReq === req.id ? "border-indigo-300 ring-4 ring-indigo-50" : "border-slate-100 hover:border-slate-200"}`}>
+                        <div key={req.id} className={`bg-white rounded-3xl transition-all duration-300 ${expandedReq === req.id ? "shadow-2xl shadow-indigo-500/10 ring-2 ring-indigo-500/20" : "shadow-sm border border-slate-100 hover:shadow-md"}`}>
                             <div onClick={() => { setExpandedReq(expandedReq === req.id ? null : req.id); if (expandedReq !== req.id && !selectedDept[req.id]) setSelectedDept({...selectedDept, [req.id]: req.department}); }} className="p-5 cursor-pointer flex justify-between items-center">
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <span className="text-[10px] font-black bg-slate-100 text-slate-500 px-2 py-0.5 rounded">#{req.req_number || 'B/N'}</span>
-                                        <span className="text-[9px] font-black bg-slate-100 text-slate-400 px-2 py-0.5 rounded flex items-center gap-1"><Calendar size={10}/> {formatDate(req.created_at)}</span>
-                                        {req.urgency === "срочно" && <span className="text-[9px] font-black bg-red-600 text-white px-2 py-0.5 rounded uppercase shadow-sm shadow-red-200">Срочно</span>}
-                                        {req.current_step > 1 && <span className="text-[9px] font-black bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded uppercase">{req.status_text || "В работе"}</span>}
+                                <div className="flex-1 pr-4">
+                                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                                        <span className="text-[10px] font-black bg-slate-100 text-slate-500 px-2 py-1 rounded-md">#{req.req_number || 'B/N'}</span>
+                                        <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1"><Calendar size={10}/> {formatDate(req.created_at)}</span>
+                                        {req.urgency === "срочно" && <span className="text-[9px] font-black bg-rose-500 text-white px-2 py-1 rounded-md uppercase shadow-sm shadow-rose-200">Срочно</span>}
+                                        {req.current_step > 1 && <span className="text-[9px] font-black bg-emerald-100 text-emerald-700 px-2 py-1 rounded-md uppercase">{req.status_text || "В работе"}</span>}
                                     </div>
-                                    <h4 className="font-bold text-slate-800 text-sm leading-tight pr-4">{req.category}</h4>
-                                    <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase">От: {req.initiator}</p>
+                                    <h4 className="font-bold text-slate-800 text-sm leading-tight">{req.category}</h4>
+                                    <p className="text-[11px] font-medium text-slate-400 mt-1.5">{req.initiator}</p>
                                 </div>
-                                <div className={`text-slate-300 transition-transform ${expandedReq === req.id ? 'rotate-180 text-indigo-500' : ''}`}><ChevronDown size={24}/></div>
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${expandedReq === req.id ? 'bg-indigo-50 text-indigo-600 rotate-90' : 'bg-slate-50 text-slate-400'} shrink-0`}><ChevronRight size={18}/></div>
                             </div>
 
-                            {/* РАСКРЫТАЯ ЗАЯВКА */}
+                            {/* РАСКРЫТАЯ ЧАСТЬ */}
                             {expandedReq === req.id && (
-                                <div className="p-5 border-t border-slate-50 space-y-6 bg-slate-50/50 rounded-b-[28px]">
-                                    {req.description && (
-                                        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-                                            <p className="text-xs text-slate-600 italic">"{req.description}"</p>
-                                        </div>
-                                    )}
-
-                                    <div className="space-y-2">
-                                        {requestItems[req.id]?.map((item) => (
-                                            <div key={item.id} className="bg-white p-3 rounded-2xl border border-slate-200 flex justify-between items-center shadow-sm">
-                                                <p className="text-sm font-black text-slate-800">{item.name}</p>
-                                                <div className="bg-slate-100 px-3 py-1 rounded-xl font-black text-xs text-slate-700">{item.quantity} {item.unit}</div>
+                                <div className="px-5 pb-5 animate-in slide-in-from-top-2">
+                                    <div className="pt-4 border-t border-slate-100 space-y-5">
+                                        
+                                        {req.description && (
+                                            <div className="bg-amber-50/50 p-4 rounded-2xl border border-amber-100/50">
+                                                <p className="text-xs text-amber-900/70 font-medium">"{req.description}"</p>
                                             </div>
-                                        ))}
-                                    </div>
+                                        )}
 
-                                    {req.attachment_url && (
-                                        <div className="flex flex-wrap gap-2">
-                                            {req.attachment_url.split(',').map((url, idx) => (
-                                                <button key={idx} onClick={() => setPreviewUrl(url.trim())} className="flex items-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-3 rounded-2xl text-[10px] font-black border border-indigo-100 shadow-sm hover:bg-indigo-100 transition"><Paperclip size={14}/> ФАЙЛ {idx + 1}</button>
+                                        <div className="space-y-2">
+                                            {requestItems[req.id]?.map((item) => (
+                                                <div key={item.id} className="bg-slate-50 p-3.5 rounded-2xl flex justify-between items-center">
+                                                    <p className="text-sm font-bold text-slate-700">{item.name}</p>
+                                                    <div className="bg-white px-3 py-1.5 rounded-xl shadow-sm text-xs font-black text-slate-800">{item.quantity} {item.unit}</div>
+                                                </div>
                                             ))}
                                         </div>
-                                    )}
 
-                                    {viewMode === "active" ? (
-                                        <div className="space-y-3 pt-2">
-                                            <div className="bg-indigo-600 rounded-3xl p-4 shadow-lg shadow-indigo-200">
-                                                <label className="text-[10px] font-black text-indigo-200 uppercase ml-1 mb-1 block">Отдел списания</label>
-                                                <select value={selectedDept[req.id] || ""} onChange={(e) => { setSelectedDept({...selectedDept, [req.id]: e.target.value}); setSelectedBudget({...selectedBudget, [req.id]: ""}); }} className="w-full bg-indigo-500 text-white rounded-xl p-4 font-black text-sm outline-none mb-3 border border-indigo-400">
-                                                    <option value="" disabled>ВЫБРАТЬ ОТДЕЛ...</option>
-                                                    {[...new Set(budgets.map(b => b.department))].sort().map(dept => <option key={dept} value={dept}>{dept}</option>)}
+                                        {req.attachment_url && (
+                                            <div className="flex flex-wrap gap-2">
+                                                {req.attachment_url.split(',').map((url, idx) => (
+                                                    <button key={idx} onClick={() => setPreviewUrl(url.trim())} className="flex items-center gap-2 bg-indigo-50/50 hover:bg-indigo-100 text-indigo-600 px-4 py-3 rounded-2xl text-[11px] font-bold transition"><Paperclip size={14}/> Файл {idx + 1}</button>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {viewMode === "active" ? (
+                                            <div className="bg-slate-900 rounded-[28px] p-5 shadow-2xl shadow-slate-900/20">
+                                                <h4 className="text-white font-bold text-xs mb-4 flex items-center gap-2"><CreditCard size={14} className="text-indigo-400"/> Финансирование</h4>
+                                                
+                                                <select value={selectedDept[req.id] || ""} onChange={(e) => { setSelectedDept({...selectedDept, [req.id]: e.target.value}); setSelectedBudget({...selectedBudget, [req.id]: ""}); }} className="w-full bg-white/10 text-white border-0 rounded-2xl p-4 font-bold text-sm mb-3 focus:ring-2 focus:ring-indigo-500 appearance-none">
+                                                    <option value="" disabled className="text-slate-900">Выбрать отдел...</option>
+                                                    {[...new Set(budgets.map(b => b.department))].sort().map(dept => <option key={dept} value={dept} className="text-slate-900">{dept}</option>)}
                                                 </select>
-                                                <label className="text-[10px] font-black text-indigo-200 uppercase ml-1 mb-1 block">Статья расходов</label>
-                                                <select value={selectedBudget[req.id] || ""} onChange={(e) => setSelectedBudget({...selectedBudget, [req.id]: e.target.value})} disabled={!selectedDept[req.id]} className="w-full bg-white text-slate-800 rounded-xl p-4 font-black text-sm border-none outline-none shadow-inner">
-                                                    <option value="" disabled>ВЫБРАТЬ СТАТЬЮ...</option>
+                                                
+                                                <select value={selectedBudget[req.id] || ""} onChange={(e) => setSelectedBudget({...selectedBudget, [req.id]: e.target.value})} disabled={!selectedDept[req.id]} className="w-full bg-white text-slate-900 border-0 rounded-2xl p-4 font-bold text-sm focus:ring-2 focus:ring-indigo-500 appearance-none mb-4">
+                                                    <option value="" disabled>Статья расходов...</option>
                                                     {budgets.filter(b => b.department === selectedDept[req.id]).map(b => (
                                                         <option key={b.id} value={b.id}>
-                                                            {b.item_name} | {formatMoney(b.amount)} ₸ {b.priority ? `(${b.priority})` : ''}
+                                                            {b.item_name} | Ост: {formatMoney(b.amount)} ₸
                                                         </option>
                                                     ))}
                                                 </select>
+                                                
+                                                <button onClick={() => handleApprove(req.id)} disabled={processingId === req.id} className="w-full py-4 bg-indigo-500 hover:bg-indigo-400 text-white rounded-2xl font-black uppercase tracking-wide text-xs shadow-lg shadow-indigo-500/30 flex items-center justify-center gap-2 transition">
+                                                    {processingId === req.id ? <Loader2 className="animate-spin" size={18}/> : <CheckCircle size={18}/>}
+                                                    Утвердить заявку
+                                                </button>
                                             </div>
-                                            <button onClick={() => handleApprove(req.id)} disabled={processingId === req.id} className="w-full py-5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-3xl font-black uppercase text-xs shadow-xl shadow-emerald-200 flex items-center justify-center gap-2 transition-all">
-                                                {processingId === req.id ? <Loader2 className="animate-spin" size={18}/> : <CheckCircle size={18}/>}
-                                                Одобрить и Отправить 
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex items-center gap-3">
-                                            <div className="w-8 h-8 bg-emerald-100 text-emerald-600 rounded-lg flex items-center justify-center"><Wallet size={16}/></div>
-                                            <div>
-                                                <p className="text-[10px] text-slate-400 font-bold uppercase">Списано со статьи:</p>
-                                                <p className="text-xs font-black text-slate-800">{req.budget_category}</p>
+                                        ) : (
+                                            <div className="bg-emerald-50/50 p-4 rounded-2xl flex items-center gap-3">
+                                                <div className="w-10 h-10 bg-white shadow-sm text-emerald-500 rounded-full flex items-center justify-center"><Wallet size={16}/></div>
+                                                <div>
+                                                    <p className="text-[10px] text-slate-400 font-medium">Статья расходов:</p>
+                                                    <p className="text-xs font-bold text-slate-800 mt-0.5">{req.budget_category}</p>
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
+                                        )}
+                                    </div>
                                 </div>
                             )}
                         </div>
