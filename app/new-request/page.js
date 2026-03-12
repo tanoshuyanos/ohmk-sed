@@ -1,12 +1,12 @@
 // ==========================================
-// ФАЙЛ №2: ЗАЯВКА (С ЭКРАНОМ УСПЕХА, ФАЙЛАМИ И БАЗОЙ ТЕХНИКИ)
+// ФАЙЛ №2: ЗАЯВКА (С УМНЫМ ПОИСКОМ ТЕХНИКИ)
 // ПУТЬ К ФАЙЛУ: app/new-request/page.js
 // ==========================================
 
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { ArrowLeft, Plus, Trash2, FileText, User, X, Flame, AlertTriangle, Calendar, Lock, CheckCircle, Loader2, Send, ChevronDown } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, FileText, User, X, Flame, AlertTriangle, Calendar, Lock, CheckCircle, Loader2, Send, Search } from "lucide-react";
 
 // --- ВСТАВЬ СВОИ ДАННЫЕ ИЗ АДМИНКИ ---
 const supabaseUrl = "https://ykmvlughekjnqgdyddmp.supabase.co"; 
@@ -21,12 +21,12 @@ export default function NewRequest() {
   const [submittedId, setSubmittedId] = useState(null);
 
   const [employeesDB, setEmployeesDB] = useState([]);
-  const [vehicles, setVehicles] = useState([]);     
-  const [agriMachinery, setAgriMachinery] = useState([]); 
+  const [allEquipment, setAllEquipment] = useState([]); // Единая база техники
 
   const step2Ref = useRef(null);
   const step3Ref = useRef(null);
   const suggestionRef = useRef(null);
+  const bindingRef = useRef(null); // Реф для закрытия поиска техники
 
   useEffect(() => {
     const loadData = async () => {
@@ -34,23 +34,10 @@ export default function NewRequest() {
         const { data: emp } = await supabase.from("v2_employees").select("*").eq("is_active", true).order("name");
         if (emp) setEmployeesDB(emp);
 
-        // Загружаем только активную технику
+        // Загружаем ВСЮ активную технику для умного поиска
         const { data: veh } = await supabase.from("v2_equipment").select("*").eq("is_active", true).order("name");
-        if (veh) {
-            // Умный фильтр для АВТОТРАНСПОРТА (Гараж, Легковые, Грузовые)
-            setVehicles(veh.filter(v => 
-                (v.department && v.department.toUpperCase() === "ГАРАЖ") || 
-                (v.type && (v.type.toLowerCase().includes("легк") || v.type.toLowerCase().includes("груз") || v.type.toLowerCase().includes("авто")))
-            ));
-            
-            // Умный фильтр для СЕЛЬХОЗТЕХНИКИ (МТМ, Спецтехника, Трактора, Комбайны)
-            setAgriMachinery(veh.filter(v => 
-                (v.department && v.department.toUpperCase() === "МТМ") || 
-                (v.type && (v.type.toLowerCase().includes("спец") || v.type.toLowerCase().includes("тракт") || v.type.toLowerCase().includes("комбайн") || v.type.toLowerCase().includes("с/х"))) ||
-                // Если тип не указан, но это не гараж, кидаем в С/Х на всякий случай
-                (!v.type && v.department !== "ГАРАЖ")
-            ));
-        }
+        if (veh) setAllEquipment(veh);
+
         setLoading(false);
     };
     loadData();
@@ -60,6 +47,7 @@ export default function NewRequest() {
   const [inputPassword, setInputPassword] = useState("");
   const [passwordError, setPasswordError] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [activeBindingId, setActiveBindingId] = useState(null); // Какой товар сейчас ищет технику
 
   const [type, setType] = useState("goods");
   const [costType, setCostType] = useState("");
@@ -82,9 +70,11 @@ export default function NewRequest() {
 
   const filteredEmployees = employeesDB.filter(emp => emp.name && emp.name.toLowerCase().includes(initiator.toLowerCase()));
 
+  // Закрытие выпадающих списков при клике мимо
   useEffect(() => {
     const handleClickOutside = (event) => { 
         if (suggestionRef.current && !suggestionRef.current.contains(event.target)) setShowSuggestions(false); 
+        if (bindingRef.current && !bindingRef.current.contains(event.target)) setActiveBindingId(null);
     };
     document.addEventListener("mousedown", handleClickOutside); 
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -130,7 +120,6 @@ export default function NewRequest() {
 
     setSending(true);
 
-    // === ЗАГРУЗКА ФАЙЛОВ ===
     let finalAttachmentUrls = "";
     if (selectedFiles.length > 0) {
         const formData = new FormData();
@@ -157,7 +146,6 @@ export default function NewRequest() {
         }
     }
 
-    // === СОХРАНЯЕМ ШАПКУ ===
     const requestData = {
         initiator_id: selectedEmp.id, 
         initiator: selectedEmp.name,  
@@ -182,7 +170,6 @@ export default function NewRequest() {
     const newRequestId = reqResult[0].id;
     const newReqNumber = reqResult[0].req_number || reqResult[0].id; 
 
-    // === СОХРАНЯЕМ ТОВАРЫ ===
     if (type === "goods" && items.length > 0) {
         const itemsToInsert = items.map(item => ({
             request_id: newRequestId,
@@ -204,7 +191,7 @@ export default function NewRequest() {
     setSubmittedId(newReqNumber); 
   };
 
-  const getBindingPlaceholder = () => costType.includes("авто") ? "Выберите авто..." : costType.includes("с/х") ? "Выберите технику..." : "Для кого/чего?";
+  const getBindingPlaceholder = () => (costType.includes("авто") || costType.includes("с/х")) ? "Поиск по номеру или названию..." : "Для кого/чего?";
   const setQuickDate = (offsetType) => { const date = new Date(); if (offsetType === "tomorrow") date.setDate(date.getDate() + 1); if (offsetType === "week") date.setDate(date.getDate() + 7); if (offsetType === "month") date.setMonth(date.getMonth() + 1); setReqDate(date.toISOString().split('T')[0]); };
 
   if (submittedId) {
@@ -376,16 +363,52 @@ export default function NewRequest() {
                                             <div className="col-span-2"><select value={item.unit} onChange={(e) => updateItem(item.id, "unit", e.target.value)} className={`w-full border rounded-xl p-3 text-xs font-bold cursor-pointer appearance-none transition-all ${item.unit === "" ? "bg-blue-50 border-blue-400 text-blue-600" : "bg-white border-slate-200 text-slate-600"}`}><option value="" disabled>Ед.изм</option>{units.map(u => <option key={u}>{u}</option>)}</select></div>
                                             <div className="col-span-1 flex justify-center"><button type="button" onClick={() => removeItem(item.id)} className="p-2 text-red-300 hover:bg-white hover:text-red-500 rounded-full"><Trash2 size={20} /></button></div>
                                             
+                                            {/* БЛОК ПРИВЯЗКИ ТЕХНИКИ ИЛИ ОБЪЕКТА */}
                                             <div className="col-span-4">
                                                 {(costType.includes("авто") || costType.includes("с/х")) ? (
-                                                    <div className="relative">
-                                                        <select value={item.binding} onChange={(e) => updateItem(item.id, "binding", e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl p-3 pr-8 text-xs font-bold text-blue-700 cursor-pointer appearance-none">
-                                                            <option value="" disabled>{getBindingPlaceholder()}</option>
-                                                            {(costType.includes("авто") ? vehicles : agriMachinery).map(v => (
-                                                                <option key={v.id} value={`${v.name} | ${v.inventory_number || ''}`}>{v.name} {v.inventory_number ? `(${v.inventory_number})` : ''}</option>
-                                                            ))}
-                                                        </select>
-                                                        <ChevronDown className="absolute right-3 top-3 text-slate-400 pointer-events-none" size={16} />
+                                                    <div className="relative" ref={activeBindingId === item.id ? bindingRef : null}>
+                                                        <div className="relative">
+                                                            <Search className="absolute left-3 top-3 text-blue-400" size={16} />
+                                                            <input 
+                                                                type="text" 
+                                                                value={item.binding} 
+                                                                onChange={(e) => {
+                                                                    updateItem(item.id, "binding", e.target.value);
+                                                                    setActiveBindingId(item.id);
+                                                                }}
+                                                                onFocus={() => setActiveBindingId(item.id)}
+                                                                className="w-full bg-white border border-slate-200 rounded-xl p-3 pl-9 text-xs font-bold text-blue-700 outline-none focus:ring-2 focus:ring-blue-500" 
+                                                                placeholder={getBindingPlaceholder()} 
+                                                            />
+                                                        </div>
+                                                        
+                                                        {activeBindingId === item.id && (
+                                                            <ul className="absolute z-50 w-full bg-white border border-slate-300 rounded-xl mt-1 shadow-2xl max-h-48 overflow-y-auto animate-in fade-in zoom-in-95">
+                                                                {(() => {
+                                                                    const searchTerm = (item.binding || "").toLowerCase();
+                                                                    const filtered = allEquipment.filter(v => 
+                                                                        (v.name && v.name.toLowerCase().includes(searchTerm)) ||
+                                                                        (v.inventory_number && String(v.inventory_number).toLowerCase().includes(searchTerm))
+                                                                    );
+                                                                    
+                                                                    if (filtered.length === 0) return <li className="p-3 text-xs text-slate-400 text-center font-bold">Ничего не найдено</li>;
+                                                                    
+                                                                    return filtered.map(v => (
+                                                                        <li 
+                                                                            key={v.id} 
+                                                                            onClick={() => {
+                                                                                updateItem(item.id, "binding", `${v.name} | ${v.inventory_number || 'Б/Н'}`);
+                                                                                setActiveBindingId(null);
+                                                                            }}
+                                                                            className="p-3 hover:bg-blue-50 cursor-pointer border-b border-slate-100 last:border-0 text-xs"
+                                                                        >
+                                                                            <div className="font-bold text-slate-800">{v.name}</div>
+                                                                            <div className="text-[10px] text-slate-500 uppercase">{v.inventory_number || 'Б/Н'} • {v.type || 'Техника'}</div>
+                                                                        </li>
+                                                                    ));
+                                                                })()}
+                                                            </ul>
+                                                        )}
                                                     </div>
                                                 ) : (
                                                     <input type="text" value={item.binding} onChange={(e) => updateItem(item.id, "binding", e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl p-3 text-xs font-bold text-blue-700" placeholder={getBindingPlaceholder()} />
