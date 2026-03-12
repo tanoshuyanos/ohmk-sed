@@ -1,5 +1,5 @@
 // ==========================================
-// ФАЙЛ №2: ЗАЯВКА (БЕЗОПАСНЫЕ КЛЮЧИ + УМНЫЙ ПОИСК)
+// ФАЙЛ №2: ЗАЯВКА (ОБЯЗАТЕЛЬНЫЕ ЗАПЧАСТИ + БЕЗЛИМИТ ФАЙЛЫ)
 // ПУТЬ К ФАЙЛУ: app/new-request/page.js
 // ==========================================
 
@@ -108,6 +108,15 @@ export default function NewRequest() {
             alert("⚠️ ОШИБКА: Пожалуйста, укажите Наименование, Количество и обязательно выберите Единицу измерения для всех добавленных товаров!");
             return;
         }
+
+        // 🔥 ЖЕСТКАЯ ПРОВЕРКА НА ЗАПЧАСТИ 🔥
+        if (costType.toLowerCase().includes("запчасть")) {
+            const hasEmptyBinding = items.some(item => !item.binding || !item.binding.trim());
+            if (hasEmptyBinding) {
+                alert("⚠️ ВНИМАНИЕ: Вы оформляете заявку на ЗАПЧАСТИ. Пожалуйста, укажите привязку к технике (Для кого/чего) для КАЖДОГО товара!");
+                return;
+            }
+        }
     } else if (type === "service") {
         if (!serviceName.trim()) {
             alert("⚠️ ОШИБКА: Пожалуйста, укажите название услуги!");
@@ -117,25 +126,33 @@ export default function NewRequest() {
 
     setSending(true);
 
+    // 🔥 ПРЯМАЯ ЗАГРУЗКА ФАЙЛОВ В SUPABASE STORAGE (ОБХОД ЛИМИТОВ) 🔥
     let finalAttachmentUrls = "";
     if (selectedFiles.length > 0) {
-        const formData = new FormData();
-        selectedFiles.forEach(file => formData.append("files", file));
-
+        let uploadedUrls = [];
+        
         try {
-            const res = await fetch('/api/upload', {
-                method: 'POST',
-                body: formData
-            });
-            const data = await res.json();
-            
-            if (data.urls && data.urls.length > 0) {
-                finalAttachmentUrls = data.urls.join(', ');
-            } else if (data.error) {
-                alert("Ошибка загрузки файла на сервер: " + data.error);
-                setSending(false);
-                return;
+            for (const file of selectedFiles) {
+                const fileExt = file.name.split('.').pop();
+                const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
+
+                // Загружаем файл напрямую в бакет 'attachments'
+                const { data, error } = await supabase.storage
+                    .from('attachments')
+                    .upload(fileName, file, { cacheControl: '3600', upsert: false });
+
+                if (error) {
+                    alert(`Ошибка загрузки файла ${file.name}: ` + error.message);
+                    setSending(false);
+                    return;
+                }
+
+                // Получаем публичную ссылку на загруженный файл
+                const { data: publicUrlData } = supabase.storage.from('attachments').getPublicUrl(fileName);
+                uploadedUrls.push(publicUrlData.publicUrl);
             }
+            // Объединяем все ссылки через запятую
+            finalAttachmentUrls = uploadedUrls.join(', ');
         } catch (e) {
             alert("Сбой сети при загрузке файлов: " + e.message);
             setSending(false);
@@ -143,6 +160,7 @@ export default function NewRequest() {
         }
     }
 
+    // Сохраняем шапку заявки
     const requestData = {
         initiator_id: selectedEmp.id, 
         initiator: selectedEmp.name,  
@@ -167,6 +185,7 @@ export default function NewRequest() {
     const newRequestId = reqResult[0].id;
     const newReqNumber = reqResult[0].req_number || reqResult[0].id; 
 
+    // Сохраняем товары
     if (type === "goods" && items.length > 0) {
         const itemsToInsert = items.map(item => ({
             request_id: newRequestId,
@@ -374,7 +393,7 @@ export default function NewRequest() {
                                                                     setActiveBindingId(item.id);
                                                                 }}
                                                                 onFocus={() => setActiveBindingId(item.id)}
-                                                                className="w-full bg-white border border-slate-200 rounded-xl p-3 pl-9 text-xs font-bold text-blue-700 outline-none focus:ring-2 focus:ring-blue-500" 
+                                                                className={`w-full bg-white border rounded-xl p-3 pl-9 text-xs font-bold text-blue-700 outline-none focus:ring-2 focus:ring-blue-500 ${costType.toLowerCase().includes("запчасть") && !item.binding ? "border-red-300 ring-1 ring-red-100" : "border-slate-200"}`} 
                                                                 placeholder={getBindingPlaceholder()} 
                                                             />
                                                         </div>
@@ -408,7 +427,7 @@ export default function NewRequest() {
                                                         )}
                                                     </div>
                                                 ) : (
-                                                    <input type="text" value={item.binding} onChange={(e) => updateItem(item.id, "binding", e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl p-3 text-xs font-bold text-blue-700" placeholder={getBindingPlaceholder()} />
+                                                    <input type="text" value={item.binding} onChange={(e) => updateItem(item.id, "binding", e.target.value)} className={`w-full bg-white border rounded-xl p-3 text-xs font-bold text-blue-700 ${costType.toLowerCase().includes("запчасть") && !item.binding ? "border-red-300 ring-1 ring-red-100" : "border-slate-200"}`} placeholder={getBindingPlaceholder()} />
                                                 )}
                                             </div>
                                         </div>
