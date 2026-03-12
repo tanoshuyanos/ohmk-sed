@@ -1,12 +1,12 @@
 // ==========================================
-// ФАЙЛ: КАБИНЕТ РУКОВОДИТЕЛЯ (PREMIUM DESIGN + УМНЫЙ КАЛЬКУЛЯТОР)
+// ФАЙЛ: КАБИНЕТ РУКОВОДИТЕЛЯ (СТОПКА КАРТ + PREMIUM DESIGN)
 // ПУТЬ: app/manager/page.js
 // ==========================================
 
 "use client";
 import React, { useState, useEffect, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { ArrowLeft, User, CheckCircle, Loader2, Wallet, ChevronDown, Paperclip, Download, FileText, PieChart, Calendar, Receipt, CreditCard, ChevronRight, X } from "lucide-react";
+import { ArrowLeft, User, CheckCircle, Loader2, Wallet, ChevronDown, Paperclip, Download, FileText, PieChart, Calendar, Receipt, CreditCard, ChevronRight, X, Layers } from "lucide-react";
 
 import { getNextStep } from "../utils/workflow";
 
@@ -14,7 +14,7 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Бронебойный очиститель чисел (убирает пробелы, буквы, запятые)
+// Бронебойный очиститель чисел
 const cleanNumber = (val) => {
     if (!val) return 0;
     if (typeof val === 'number') return val;
@@ -32,9 +32,14 @@ export default function ManagerDashboard() {
   const [allRequests, setAllRequests] = useState([]); 
   const [requestItems, setRequestItems] = useState({});
   const [budgets, setBudgets] = useState([]);
+  
   const [viewMode, setViewMode] = useState("active"); 
   const [expandedReq, setExpandedReq] = useState(null); 
   const [expandedDept, setExpandedDept] = useState(null);
+  
+  // 🔥 НОВОЕ СОСТОЯНИЕ ДЛЯ АНИМАЦИИ СТОПКИ
+  const [isStackExpanded, setIsStackExpanded] = useState(false);
+
   const [selectedDept, setSelectedDept] = useState({}); 
   const [selectedBudget, setSelectedBudget] = useState({}); 
   const [processingId, setProcessingId] = useState(null);
@@ -110,7 +115,6 @@ export default function ManagerDashboard() {
               const b = budgets.find(bg => bg.id === req.budget_id);
               if (b) {
                   const dept = b.department || "Общие";
-                  // Ищем сумму везде, где она может быть спрятана
                   const reqSum = cleanNumber(req.amount) || cleanNumber(req.contract_sum) || cleanNumber(req.payment_sum) || cleanNumber(req.sum) || 0;
                   
                   if (stats[dept]) {
@@ -246,18 +250,13 @@ export default function ManagerDashboard() {
         ) : (
             <div className="space-y-6 mt-4">
                 
-                {/* 📊 ФИНАНСОВЫЙ ДАШБОРД */}
                 {Object.keys(budgetStats.departments).length > 0 && (
                     <div className="space-y-4">
-                        <div className="flex items-center gap-2 px-2">
-                            <PieChart className="text-slate-400" size={18}/>
-                            <h3 className="font-bold text-slate-500 text-xs uppercase tracking-widest">Бюджеты отделов</h3>
-                        </div>
                         
                         {/* ОБЩИЙ СВОД */}
-                        <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-[32px] p-6 text-white shadow-xl shadow-indigo-500/20 relative overflow-hidden">
+                        <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-[32px] p-6 text-white shadow-xl shadow-indigo-500/20 relative overflow-hidden mb-6">
                             <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
-                            <p className="text-indigo-100 text-[10px] font-bold uppercase tracking-widest mb-1">Всего израсходовано</p>
+                            <p className="text-indigo-100 text-[10px] font-bold uppercase tracking-widest mb-1">Всего израсходовано (Компания)</p>
                             <div className="flex items-end gap-2 mb-4">
                                 <h2 className="text-3xl font-black tracking-tight">{formatMoney(budgetStats.grandSpent)} ₸</h2>
                                 <p className="text-indigo-200 text-sm font-medium mb-1">/ {formatMoney(budgetStats.grandTotal)}</p>
@@ -267,23 +266,66 @@ export default function ManagerDashboard() {
                             </div>
                         </div>
 
-                        {/* ШКАЛЫ ПО ОТДЕЛАМ */}
-                        <div className="grid grid-cols-1 gap-3">
-                            {Object.entries(budgetStats.departments).map(([dept, data]) => {
+                        {/* 🔥 ЗАГОЛОВОК СТОПКИ */}
+                        <div className="flex justify-between items-center mb-2 px-2 cursor-pointer group" onClick={() => { setIsStackExpanded(!isStackExpanded); if (isStackExpanded) setExpandedDept(null); }}>
+                            <div className="flex items-center gap-2">
+                                <Layers className="text-indigo-400 group-hover:text-indigo-500 transition-colors" size={18}/>
+                                <h3 className="font-bold text-slate-500 text-xs uppercase tracking-widest">Бюджеты отделов</h3>
+                            </div>
+                            <div className={`text-[10px] font-black uppercase px-3 py-1.5 rounded-full flex items-center gap-1 transition-all ${isStackExpanded ? 'bg-slate-200 text-slate-600' : 'bg-indigo-100 text-indigo-600 shadow-sm shadow-indigo-200'}`}>
+                                {isStackExpanded ? "Свернуть" : `Веер (${Object.keys(budgetStats.departments).length})`}
+                                {isStackExpanded ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
+                            </div>
+                        </div>
+
+                        {/* 🔥 САМА АНИМИРОВАННАЯ СТОПКА КАРТ */}
+                        <div className="flex flex-col relative pb-4">
+                            {Object.entries(budgetStats.departments).map(([dept, data], i) => {
                                 const percent = Math.min((data.spent / (data.total || 1)) * 100, 100);
                                 let gradient = "from-emerald-400 to-emerald-500";
                                 if (percent > 60) gradient = "from-amber-400 to-amber-500";
                                 if (percent > 90) gradient = "from-red-400 to-red-500";
                                 
-                                const isExpanded = expandedDept === dept;
+                                const isCardExpanded = expandedDept === dept;
+                                const isStacked = !isStackExpanded;
+
+                                // МАГИЯ АНИМАЦИИ: Рассчитываем положение каждой карты
+                                let mt = "0px";
+                                let scale = 1;
+                                let opacity = 1;
+                                
+                                if (isStacked) {
+                                    if (i === 0) { scale = 1; mt = "0px"; } 
+                                    else if (i === 1) { scale = 0.95; mt = "-65px"; } 
+                                    else if (i === 2) { scale = 0.90; mt = "-75px"; } 
+                                    else { scale = 0.85; mt = "-100px"; opacity = 0; } // Скрываем глубокие карты
+                                } else {
+                                    mt = i === 0 ? "0px" : "12px"; // Раскрытый веер
+                                }
+
+                                const cardStyle = {
+                                    zIndex: 50 - i,
+                                    marginTop: mt,
+                                    transform: `scale(${scale})`,
+                                    transformOrigin: 'top center',
+                                    opacity: opacity,
+                                    transition: 'all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)', // Apple пружина
+                                    pointerEvents: isStacked && i > 0 ? 'none' : 'auto' // Клик только по верхней, если свернуто
+                                };
 
                                 return (
-                                    <div key={dept} className={`bg-white rounded-3xl transition-all duration-300 border ${isExpanded ? 'shadow-xl shadow-slate-200/50 border-transparent' : 'shadow-sm border-slate-100 hover:border-slate-200'}`}>
+                                    <div key={dept} style={cardStyle} className={`bg-white rounded-3xl relative border ${isCardExpanded ? 'shadow-2xl shadow-slate-200/50 border-transparent' : 'shadow-[0_8px_30px_rgb(0,0,0,0.04)] border-slate-100'}`}>
                                         
-                                        <div className="p-5 cursor-pointer" onClick={() => setExpandedDept(isExpanded ? null : dept)}>
+                                        <div className="p-5 cursor-pointer" onClick={() => {
+                                            if (isStacked) {
+                                                setIsStackExpanded(true); // Раскрываем веер
+                                            } else {
+                                                setExpandedDept(isCardExpanded ? null : dept); // Открываем внутренности отдела
+                                            }
+                                        }}>
                                             <div className="flex justify-between items-center mb-3">
                                                 <div className="flex items-center gap-3">
-                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${isExpanded ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-50 text-slate-400'}`}>
+                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${isCardExpanded ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-50 text-slate-400'}`}>
                                                         <Wallet size={14}/>
                                                     </div>
                                                     <span className="text-sm font-bold text-slate-800">{dept}</span>
@@ -298,7 +340,8 @@ export default function ManagerDashboard() {
                                             </div>
                                         </div>
 
-                                        {isExpanded && (
+                                        {/* ВНУТРЕННОСТИ (СПИСОК ТРАТ), если веер раскрыт и кликнули на отдел */}
+                                        {isCardExpanded && !isStacked && (
                                             <div className="px-5 pb-5 pt-2 border-t border-slate-50 animate-in slide-in-from-top-2">
                                                 {data.history.length === 0 ? (
                                                     <div className="text-center py-6">
@@ -306,8 +349,8 @@ export default function ManagerDashboard() {
                                                     </div>
                                                 ) : (
                                                     <div className="space-y-3 mt-2">
-                                                        {data.history.map((r, i) => (
-                                                            <div key={i} className="flex justify-between items-center bg-slate-50/50 p-3.5 rounded-2xl hover:bg-slate-50 transition">
+                                                        {data.history.map((r, idx) => (
+                                                            <div key={idx} className="flex justify-between items-center bg-slate-50/50 p-3.5 rounded-2xl hover:bg-slate-50 transition">
                                                                 <div className="flex items-center gap-3 overflow-hidden">
                                                                     <div className="bg-white p-2 rounded-xl shadow-sm border border-slate-100 text-slate-400"><Receipt size={14}/></div>
                                                                     <div className="min-w-0">
@@ -335,7 +378,7 @@ export default function ManagerDashboard() {
                     </div>
                 )}
 
-                {/* ПЕРЕКЛЮЧАТЕЛЬ */}
+                {/* ПЕРЕКЛЮЧАТЕЛЬ ЗАЯВОК */}
                 <div className="flex gap-2 bg-slate-200/50 p-1.5 rounded-2xl mt-8">
                     <button onClick={() => setViewMode('active')} className={`flex-1 py-3 rounded-xl font-bold text-xs transition-all ${viewMode === 'active' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>Ожидают ({activeRequests.length})</button>
                     <button onClick={() => setViewMode('history')} className={`flex-1 py-3 rounded-xl font-bold text-xs transition-all ${viewMode === 'history' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>В работе ({historyRequests.length})</button>
@@ -359,7 +402,6 @@ export default function ManagerDashboard() {
                                 <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${expandedReq === req.id ? 'bg-indigo-50 text-indigo-600 rotate-90' : 'bg-slate-50 text-slate-400'} shrink-0`}><ChevronRight size={18}/></div>
                             </div>
 
-                            {/* РАСКРЫТАЯ ЧАСТЬ */}
                             {expandedReq === req.id && (
                                 <div className="px-5 pb-5 animate-in slide-in-from-top-2">
                                     <div className="pt-4 border-t border-slate-100 space-y-5">
