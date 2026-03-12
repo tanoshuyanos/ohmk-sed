@@ -1,12 +1,12 @@
 // ==========================================
-// ФАЙЛ: КАБИНЕТ РУКОВОДИТЕЛЯ (+ СМЕНА ПАРОЛЯ)
+// ФАЙЛ: КАБИНЕТ РУКОВОДИТЕЛЯ (ФИО В ШАПКЕ + КНОПКА ВЫХОДА)
 // ПУТЬ: app/manager/page.js
 // ==========================================
 
 "use client";
 import React, { useState, useEffect, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { ArrowLeft, User, CheckCircle, Loader2, Wallet, ChevronDown, Paperclip, Download, FileText, PieChart, Calendar, Receipt, CreditCard, ChevronRight, X, Layers, Moon, Sun, Key } from "lucide-react";
+import { ArrowLeft, User, CheckCircle, Loader2, Wallet, ChevronDown, Paperclip, Download, FileText, PieChart, Calendar, Receipt, CreditCard, ChevronRight, X, Layers, Moon, Sun, Key, LogOut } from "lucide-react";
 
 import { getNextStep } from "../utils/workflow";
 
@@ -38,7 +38,6 @@ export default function ManagerDashboard() {
   const [isStackExpanded, setIsStackExpanded] = useState(false);
   const [isDark, setIsDark] = useState(true);
 
-  // СТЕЙТЫ ДЛЯ СМЕНЫ ПАРОЛЯ
   const [showPinModal, setShowPinModal] = useState(false);
   const [newPin, setNewPin] = useState("");
   const [isSavingPin, setIsSavingPin] = useState(false);
@@ -68,21 +67,27 @@ export default function ManagerDashboard() {
     }
   };
 
-  // ФУНКЦИЯ СОХРАНЕНИЯ НОВОГО ПАРОЛЯ
+  // ФУНКЦИЯ ВЫХОДА
+  const handleLogout = () => {
+      setIsAuthenticated(false);
+      setSelectedEmp(null);
+      setInitiator("");
+      setInputPassword("");
+  };
+
   const handleSaveNewPin = async () => {
       if (!newPin || newPin.length < 4) return alert("PIN должен быть не менее 4 символов!");
       setIsSavingPin(true);
       
       const { error } = await supabase
           .from("v2_employees")
-          .update({ password: newPin, pin_code: newPin }) // Обновляем обе колонки на всякий случай
+          .update({ password: newPin, pin_code: newPin })
           .eq("id", selectedEmp.id);
           
       if (error) {
           alert("Ошибка при сохранении: " + error.message);
       } else {
           alert("Ваш PIN успешно изменен!");
-          // Обновляем локальные данные, чтобы не пришлось перезаходить
           setSelectedEmp({...selectedEmp, password: newPin, pin_code: newPin});
           setShowPinModal(false);
           setNewPin("");
@@ -242,7 +247,6 @@ export default function ManagerDashboard() {
   return (
     <div className={`min-h-screen ${theme.bgMain} ${theme.textMain} font-sans pb-20 relative transition-colors duration-500`}>
       
-      {/* МОДАЛКА СМЕНЫ ПАРОЛЯ */}
       {showPinModal && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
               <div className={`${theme.cardBg} w-full max-w-sm rounded-[32px] p-8 border ${theme.cardBorder} shadow-2xl animate-in zoom-in-95 duration-200`}>
@@ -262,7 +266,6 @@ export default function ManagerDashboard() {
           </div>
       )}
 
-      {/* ПРЕВЬЮ ФАЙЛОВ */}
       {previewUrl && (
           <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center bg-black/80 backdrop-blur-md p-0 md:p-4 transition-all">
               <div className="bg-[#1E293B] border border-slate-700 w-full max-w-5xl h-[92vh] md:h-[85vh] rounded-t-[32px] md:rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-full duration-300">
@@ -288,34 +291,51 @@ export default function ManagerDashboard() {
       )}
 
       {/* ШАПКА */}
-      <div className={`bg-gradient-to-r ${isDark ? 'from-[#0F172A] to-[#1E293B]' : 'from-slate-900 to-slate-800'} text-white p-5 sticky top-0 z-20 shadow-xl shadow-black/20 rounded-b-[32px] md:rounded-none transition-colors duration-500`}>
+      <div className={`bg-gradient-to-r ${isDark ? 'from-[#0F172A] to-[#1E293B]' : 'from-slate-900 to-slate-800'} text-white p-4 sm:p-5 sticky top-0 z-20 shadow-xl shadow-black/20 rounded-b-[32px] md:rounded-none transition-colors duration-500`}>
         <div className="max-w-xl mx-auto flex items-center justify-between">
-            <a href="/" className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition backdrop-blur-md"><ArrowLeft size={20} /></a>
-            <div className="text-center">
-                <h1 className="text-sm font-black tracking-widest uppercase text-white">Управление</h1>
-                {isAuthenticated && <p className="text-[10px] text-indigo-300 font-bold tracking-wide mt-0.5">{selectedEmp.department}</p>}
+            
+            <a href="/" className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition backdrop-blur-md shrink-0"><ArrowLeft size={18} /></a>
+            
+            {/* ЦЕНТР ШАПКИ (ФИО И ДОЛЖНОСТЬ) */}
+            <div className="flex-1 px-3 min-w-0 text-center">
+                {isAuthenticated ? (
+                    <>
+                        <h1 className="text-xs sm:text-sm font-black uppercase text-white truncate">{selectedEmp.name}</h1>
+                        <p className="text-[9px] sm:text-[10px] text-indigo-300 font-bold tracking-wide mt-0.5 truncate">
+                            {selectedEmp.position ? `${selectedEmp.position} • ` : ''}{selectedEmp.department}
+                        </p>
+                    </>
+                ) : (
+                    <h1 className="text-sm font-black tracking-widest uppercase text-white">Управление</h1>
+                )}
             </div>
-            <div className="flex items-center gap-3">
-                {/* КНОПКА СМЕНЫ ПАРОЛЯ (появляется только после входа) */}
+
+            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                 {isAuthenticated && (
                     <button onClick={() => setShowPinModal(true)} className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition text-emerald-300" title="Сменить PIN">
-                        <Key size={18}/>
+                        <Key size={16}/>
                     </button>
                 )}
-                {/* Переключатель темы */}
-                <button onClick={() => setIsDark(!isDark)} className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition text-yellow-300">
-                    {isDark ? <Sun size={18}/> : <Moon size={18} className="text-slate-200"/>}
+                <button onClick={() => setIsDark(!isDark)} className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition text-yellow-300" title="Сменить тему">
+                    {isDark ? <Sun size={16}/> : <Moon size={16} className="text-slate-200"/>}
                 </button>
-                <div className="w-9 h-9 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-full flex items-center justify-center text-xs font-black shadow-inner shadow-black/50 border border-white/10">
-                    {isAuthenticated ? selectedEmp.name[0] : <User size={16}/>}
-                </div>
+                {/* КНОПКА ВЫХОДА */}
+                {isAuthenticated ? (
+                    <button onClick={handleLogout} className="p-2 bg-rose-500/20 rounded-full hover:bg-rose-500/40 transition text-rose-400" title="Выйти">
+                        <LogOut size={16}/>
+                    </button>
+                ) : (
+                    <div className="w-8 h-8 sm:w-9 sm:h-9 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-full flex items-center justify-center text-xs font-black shadow-inner shadow-black/50 border border-white/10">
+                        <User size={14}/>
+                    </div>
+                )}
             </div>
+
         </div>
       </div>
 
       <main className="max-w-xl mx-auto p-4 md:p-6 mt-2">
         {!isAuthenticated ? (
-            /* ЭКРАН ВХОДА */
             <div className={`${theme.cardBg} border ${theme.cardBorder} ${theme.cardShadow} backdrop-blur-xl rounded-[32px] p-8 mt-6 transition-all`}>
                 <div className="text-center mb-8">
                     <div className="w-16 h-16 bg-gradient-to-tr from-indigo-500 to-purple-600 rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-lg shadow-indigo-500/30"><User className="text-white" size={28}/></div>
@@ -335,8 +355,11 @@ export default function ManagerDashboard() {
                 ) : (
                     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
                         <div className={`w-full ${isDark ? 'bg-indigo-500/10 border-indigo-500/20' : 'bg-indigo-50 border-indigo-100'} border rounded-2xl p-4 flex justify-between items-center`}>
-                            <span className="font-bold text-indigo-500">{selectedEmp.name}</span>
-                            <button onClick={() => {setSelectedEmp(null); setInputPassword("");}} className={`p-1.5 rounded-full ${isDark ? 'bg-[#0B1121] text-slate-400' : 'bg-white text-slate-400'} shadow-sm`}><X size={14}/></button>
+                            <div className="min-w-0 pr-4">
+                                <span className="font-bold text-indigo-500 block truncate">{selectedEmp.name}</span>
+                                <span className="text-[10px] text-slate-500 block truncate">{selectedEmp.position} • {selectedEmp.department}</span>
+                            </div>
+                            <button onClick={() => {setSelectedEmp(null); setInputPassword("");}} className={`p-1.5 rounded-full ${isDark ? 'bg-[#0B1121] text-slate-400' : 'bg-white text-slate-400'} shadow-sm shrink-0`}><X size={14}/></button>
                         </div>
                         <input type="password" value={inputPassword} onChange={(e) => setInputPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && checkPassword()} className={`w-full ${theme.inputBg} border ${theme.inputBorder} rounded-2xl py-4 text-center text-2xl font-black tracking-[0.5em] ${theme.textMain} focus:ring-2 focus:ring-indigo-500 transition outline-none`} placeholder="PIN" autoFocus />
                         <button onClick={checkPassword} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-4 rounded-2xl font-bold tracking-wide shadow-xl shadow-indigo-600/20 transition">Подтвердить</button>
@@ -349,7 +372,6 @@ export default function ManagerDashboard() {
                 {stackCards.length > 0 && (
                     <div className="space-y-4">
                         
-                        {/* ЗАГОЛОВОК СТОПКИ */}
                         <div className="flex justify-between items-center px-2 cursor-pointer group" onClick={() => { setIsStackExpanded(!isStackExpanded); if (isStackExpanded) setExpandedDept(null); }}>
                             <div className="flex items-center gap-2">
                                 <Layers className="text-indigo-500" size={18}/>
@@ -361,7 +383,6 @@ export default function ManagerDashboard() {
                             </div>
                         </div>
 
-                        {/* АНИМИРОВАННАЯ СТОПКА КАРТ */}
                         <div className="flex flex-col relative pb-4">
                             {stackCards.map((card, i) => {
                                 const percent = Math.min((card.spent / (card.total || 1)) * 100, 100);
@@ -468,13 +489,11 @@ export default function ManagerDashboard() {
                     </div>
                 )}
 
-                {/* ПЕРЕКЛЮЧАТЕЛЬ ЗАЯВОК */}
                 <div className={`flex gap-2 ${theme.toggleBg} p-1.5 rounded-2xl mt-8 shadow-inner`}>
                     <button onClick={() => setViewMode('active')} className={`flex-1 py-3 rounded-xl font-bold text-xs transition-all ${viewMode === 'active' ? `${theme.tabActiveBg} shadow-md` : theme.tabInactiveText}`}>Ожидают ({activeRequests.length})</button>
                     <button onClick={() => setViewMode('history')} className={`flex-1 py-3 rounded-xl font-bold text-xs transition-all ${viewMode === 'history' ? `${theme.tabActiveBg} shadow-md` : theme.tabInactiveText}`}>В работе ({historyRequests.length})</button>
                 </div>
 
-                {/* СПИСОК ЗАЯВОК */}
                 <div className="space-y-4">
                     {displayedRequests.map(req => (
                         <div key={req.id} className={`${theme.cardBg} rounded-3xl transition-all duration-300 border ${expandedReq === req.id ? (isDark ? "border-indigo-500/50 shadow-2xl shadow-indigo-500/10" : "border-indigo-300 shadow-2xl shadow-indigo-500/10") : `${theme.cardBorder} ${theme.cardShadow}`}`}>
