@@ -1,5 +1,5 @@
 // ==========================================
-// ФАЙЛ №2: ЗАЯВКА (ПОФИКСИЛИ ВЫПАДАЮЩИЙ СПИСОК)
+// ФАЙЛ №2: ЗАЯВКА (БЕЗОПАСНЫЕ КЛЮЧИ + УМНЫЙ ПОИСК)
 // ПУТЬ К ФАЙЛУ: app/new-request/page.js
 // ==========================================
 
@@ -8,9 +8,9 @@ import React, { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { ArrowLeft, Plus, Trash2, FileText, User, X, Flame, AlertTriangle, Calendar, Lock, CheckCircle, Loader2, Send, Search } from "lucide-react";
 
-// --- ВСТАВЬ СВОИ ДАННЫЕ ИЗ АДМИНКИ ---
-const supabaseUrl = "https://ykmvlughekjnqgdyddmp.supabase.co"; 
-const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlrbXZsdWdoZWtqbnFnZHlkZG1wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1NzQ3OTAsImV4cCI6MjA4NTE1MDc5MH0.ZaPeruXSJ6EQJ21nk4VPdvzQFMxoLUSxewQVK4EOE8Y";
+// --- БЕЗОПАСНОЕ ПОДКЛЮЧЕНИЕ К БАЗЕ ---
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL; 
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const DEFAULT_COMPANY_ID = "a32814de-7f0e-4109-87ee-555e1a4f0509"; 
