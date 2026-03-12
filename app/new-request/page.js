@@ -1,5 +1,5 @@
-﻿// ==========================================
-// ФАЙЛ №2: ЗАЯВКА (С ЭКРАНОМ УСПЕХА И ФАЙЛАМИ)
+// ==========================================
+// ФАЙЛ №2: ЗАЯВКА (С ЭКРАНОМ УСПЕХА, ФАЙЛАМИ И БАЗОЙ ТЕХНИКИ)
 // ПУТЬ К ФАЙЛУ: app/new-request/page.js
 // ==========================================
 
@@ -30,13 +30,26 @@ export default function NewRequest() {
 
   useEffect(() => {
     const loadData = async () => {
-        const { data: emp } = await supabase.from("v2_employees").select("*").order("name");
+        // Загружаем только активных сотрудников
+        const { data: emp } = await supabase.from("v2_employees").select("*").eq("is_active", true).order("name");
         if (emp) setEmployeesDB(emp);
 
-        const { data: veh } = await supabase.from("v2_equipment").select("*").order("name");
+        // Загружаем только активную технику
+        const { data: veh } = await supabase.from("v2_equipment").select("*").eq("is_active", true).order("name");
         if (veh) {
-            setVehicles(veh.filter(v => v.type === "auto" || v.department === "Гараж")); 
-            setAgriMachinery(veh.filter(v => v.type === "agro" || v.department === "МТМ"));
+            // Умный фильтр для АВТОТРАНСПОРТА (Гараж, Легковые, Грузовые)
+            setVehicles(veh.filter(v => 
+                (v.department && v.department.toUpperCase() === "ГАРАЖ") || 
+                (v.type && (v.type.toLowerCase().includes("легк") || v.type.toLowerCase().includes("груз") || v.type.toLowerCase().includes("авто")))
+            ));
+            
+            // Умный фильтр для СЕЛЬХОЗТЕХНИКИ (МТМ, Спецтехника, Трактора, Комбайны)
+            setAgriMachinery(veh.filter(v => 
+                (v.department && v.department.toUpperCase() === "МТМ") || 
+                (v.type && (v.type.toLowerCase().includes("спец") || v.type.toLowerCase().includes("тракт") || v.type.toLowerCase().includes("комбайн") || v.type.toLowerCase().includes("с/х"))) ||
+                // Если тип не указан, но это не гараж, кидаем в С/Х на всякий случай
+                (!v.type && v.department !== "ГАРАЖ")
+            ));
         }
         setLoading(false);
     };
@@ -56,7 +69,6 @@ export default function NewRequest() {
   const [description, setDescription] = useState("");
   const [items, setItems] = useState([{ id: 1, name: "", qty: "", unit: "", binding: "" }]);
   
-  // --- СОСТОЯНИЕ ДЛЯ ФАЙЛОВ ---
   const [selectedFiles, setSelectedFiles] = useState([]);
 
   const [initiator, setInitiator] = useState(""); 
@@ -93,7 +105,6 @@ export default function NewRequest() {
   const removeItem = (id) => setItems(items.filter(i => i.id !== id));
   const updateItem = (id, field, value) => setItems(items.map(i => i.id === id ? { ...i, [field]: value } : i));
   
-  // --- ОБРАБОТКА ВЫБОРА ФАЙЛОВ ---
   const handleFileChange = (e) => {
       setSelectedFiles([...selectedFiles, ...Array.from(e.target.files)]);
   };
@@ -119,14 +130,13 @@ export default function NewRequest() {
 
     setSending(true);
 
-    // === ДЕЙСТВИЕ 0: ЗАГРУЗКА ФАЙЛОВ В BACKBLAZE (ЕСЛИ ЕСТЬ) ===
+    // === ЗАГРУЗКА ФАЙЛОВ ===
     let finalAttachmentUrls = "";
     if (selectedFiles.length > 0) {
         const formData = new FormData();
         selectedFiles.forEach(file => formData.append("files", file));
 
         try {
-            // Отправляем файлы на наш защищенный API
             const res = await fetch('/api/upload', {
                 method: 'POST',
                 body: formData
@@ -134,7 +144,7 @@ export default function NewRequest() {
             const data = await res.json();
             
             if (data.urls && data.urls.length > 0) {
-                finalAttachmentUrls = data.urls.join(', '); // Соединяем ссылки через запятую
+                finalAttachmentUrls = data.urls.join(', ');
             } else if (data.error) {
                 alert("Ошибка загрузки файла на сервер: " + data.error);
                 setSending(false);
@@ -147,7 +157,7 @@ export default function NewRequest() {
         }
     }
 
-    // === ДЕЙСТВИЕ 1: СОХРАНЯЕМ "ШАПКУ" ЗАЯВКИ ===
+    // === СОХРАНЯЕМ ШАПКУ ===
     const requestData = {
         initiator_id: selectedEmp.id, 
         initiator: selectedEmp.name,  
@@ -157,7 +167,7 @@ export default function NewRequest() {
         urgency: urgency === "urgent" ? "срочно" : "normal",
         target_date: reqDate,
         description: description,
-        attachment_url: finalAttachmentUrls, // Пишем полученные ссылки в базу
+        attachment_url: finalAttachmentUrls,
         status_text: "Новая",
         current_step: 1
     };
@@ -172,7 +182,7 @@ export default function NewRequest() {
     const newRequestId = reqResult[0].id;
     const newReqNumber = reqResult[0].req_number || reqResult[0].id; 
 
-    // === ДЕЙСТВИЕ 2: СОХРАНЯЕМ ТОВАРЫ ===
+    // === СОХРАНЯЕМ ТОВАРЫ ===
     if (type === "goods" && items.length > 0) {
         const itemsToInsert = items.map(item => ({
             request_id: newRequestId,
