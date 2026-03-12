@@ -1,12 +1,12 @@
 // ==========================================
-// ФАЙЛ: КАБИНЕТ РУКОВОДИТЕЛЯ (ФИО В ШАПКЕ + КНОПКА ВЫХОДА)
+// ФАЙЛ: КАБИНЕТ РУКОВОДИТЕЛЯ (С ИСТОРИЕЙ ДЕЙСТВИЙ И ТЕМОЙ)
 // ПУТЬ: app/manager/page.js
 // ==========================================
 
 "use client";
 import React, { useState, useEffect, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { ArrowLeft, User, CheckCircle, Loader2, Wallet, ChevronDown, Paperclip, Download, FileText, PieChart, Calendar, Receipt, CreditCard, ChevronRight, X, Layers, Moon, Sun, Key, LogOut } from "lucide-react";
+import { ArrowLeft, User, CheckCircle, Loader2, Wallet, ChevronDown, Paperclip, Download, PieChart, Calendar, Receipt, CreditCard, ChevronRight, X, Layers, Moon, Sun, Key, LogOut, Clock, Activity } from "lucide-react";
 
 import { getNextStep } from "../utils/workflow";
 
@@ -38,7 +38,11 @@ export default function ManagerDashboard() {
   const [isStackExpanded, setIsStackExpanded] = useState(false);
   const [isDark, setIsDark] = useState(true);
 
-  const [showPinModal, setShowPinModal] = useState(false);
+  // Стейты для профиля (история + смена пин-кода)
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileTab, setProfileTab] = useState("history"); // 'history' или 'pin'
+  const [userHistory, setUserHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const [newPin, setNewPin] = useState("");
   const [isSavingPin, setIsSavingPin] = useState(false);
 
@@ -49,30 +53,66 @@ export default function ManagerDashboard() {
 
   useEffect(() => {
     const loadEmployees = async () => {
-        const { data: emp } = await supabase.from("v2_employees").select("*").order("name");
+        const { data: emp } = await supabase.from("v2_employees").select("*").eq("is_active", true).order("name");
         if (emp) setEmployeesDB(emp);
         setLoading(false);
     };
     loadEmployees();
   }, []);
 
+  // ФУНКЦИЯ: Смена темы с сохранением в БД
+  const toggleTheme = async () => {
+      const newTheme = isDark ? 'light' : 'dark';
+      setIsDark(!isDark); // Меняем сразу визуально
+      
+      if (isAuthenticated && selectedEmp) {
+          await supabase.from("v2_employees").update({ theme: newTheme }).eq("id", selectedEmp.id);
+      }
+  };
+
   const checkPassword = async () => {
     const dbPin = String(selectedEmp.pin_code || selectedEmp.password || "");
     if (selectedEmp && inputPassword === dbPin) {
         setIsAuthenticated(true);
         setPasswordError(false);
+        
+        // Применяем тему пользователя из базы
+        if (selectedEmp.theme) setIsDark(selectedEmp.theme === 'dark');
+
+        // Логируем вход в историю
+        supabase.from("v2_action_history").insert([{
+            employee_id: selectedEmp.id,
+            employee_name: selectedEmp.name,
+            action_type: 'ВХОД',
+            description: 'Вход в панель руководителя'
+        }]).then();
+
         await loadManagerData(selectedEmp.department);
     } else {
         setPasswordError(true);
     }
   };
 
-  // ФУНКЦИЯ ВЫХОДА
   const handleLogout = () => {
       setIsAuthenticated(false);
       setSelectedEmp(null);
       setInitiator("");
       setInputPassword("");
+  };
+
+  // ФУНКЦИЯ: Открытие профиля и загрузка истории
+  const openProfile = async () => {
+      setShowProfileModal(true);
+      setProfileTab("history");
+      setLoadingHistory(true);
+      const { data } = await supabase
+          .from("v2_action_history")
+          .select("*")
+          .eq("employee_id", selectedEmp.id)
+          .order("created_at", { ascending: false })
+          .limit(30); // Загружаем последние 30 действий
+      if (data) setUserHistory(data);
+      setLoadingHistory(false);
   };
 
   const handleSaveNewPin = async () => {
@@ -88,8 +128,17 @@ export default function ManagerDashboard() {
           alert("Ошибка при сохранении: " + error.message);
       } else {
           alert("Ваш PIN успешно изменен!");
+          
+          // Логируем смену пароля
+          supabase.from("v2_action_history").insert([{
+              employee_id: selectedEmp.id,
+              employee_name: selectedEmp.name,
+              action_type: 'БЕЗОПАСНОСТЬ',
+              description: 'Изменен PIN-код для входа'
+          }]).then();
+
           setSelectedEmp({...selectedEmp, password: newPin, pin_code: newPin});
-          setShowPinModal(false);
+          setShowProfileModal(false);
           setNewPin("");
       }
       setIsSavingPin(false);
@@ -186,6 +235,14 @@ export default function ManagerDashboard() {
 
       if (error) { alert("ОШИБКА: " + error.message); setProcessingId(null); return; }
       
+      // Логируем утверждение заявки
+      supabase.from("v2_action_history").insert([{
+          employee_id: selectedEmp.id,
+          employee_name: selectedEmp.name,
+          action_type: 'УТВЕРЖДЕНИЕ',
+          description: `Утвердил заявку #${req.req_number || 'B/N'}. Статья: ${budgetObj.item_name}`
+      }]).then();
+
       setAllRequests(allRequests.map(r => r.id === reqId ? { 
           ...r, 
           current_step: nextStep, 
@@ -199,7 +256,7 @@ export default function ManagerDashboard() {
   };
 
   const formatMoney = (amount) => { if (!amount) return "0"; return Number(amount).toLocaleString('ru-RU'); };
-  const formatDate = (dateStr) => { if(!dateStr) return ""; return new Date(dateStr).toLocaleDateString('ru-RU', {day: '2-digit', month: 'short'}); };
+  const formatDate = (dateStr) => { if(!dateStr) return ""; return new Date(dateStr).toLocaleDateString('ru-RU', {day: '2-digit', month: 'short', hour: '2-digit', minute:'2-digit'}); };
   
   const activeRequests = allRequests.filter(r => r.current_step === 1);
   const historyRequests = allRequests.filter(r => r.current_step > 1);
@@ -247,25 +304,74 @@ export default function ManagerDashboard() {
   return (
     <div className={`min-h-screen ${theme.bgMain} ${theme.textMain} font-sans pb-20 relative transition-colors duration-500`}>
       
-      {showPinModal && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-              <div className={`${theme.cardBg} w-full max-w-sm rounded-[32px] p-8 border ${theme.cardBorder} shadow-2xl animate-in zoom-in-95 duration-200`}>
-                  <div className="text-center mb-6">
-                      <div className="w-14 h-14 bg-indigo-500/20 text-indigo-400 rounded-full mx-auto flex items-center justify-center mb-3"><Key size={24}/></div>
-                      <h3 className={`font-black text-xl ${theme.textMain}`}>Смена PIN-кода</h3>
-                      <p className={`text-xs ${theme.textMuted} mt-1`}>Придумайте новый пароль для входа</p>
+      {/* МОДАЛЬНОЕ ОКНО ПРОФИЛЯ (ИСТОРИЯ + СМЕНА ПАРОЛЯ) */}
+      {showProfileModal && (
+          <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4">
+              <div className={`${theme.cardBg} w-full max-w-md h-[85vh] sm:h-[600px] rounded-t-[32px] sm:rounded-[32px] border ${theme.cardBorder} shadow-2xl animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-200 flex flex-col overflow-hidden`}>
+                  
+                  {/* Шапка профиля */}
+                  <div className="p-6 border-b border-slate-700/50 bg-[#0B1121]/30">
+                      <div className="flex justify-between items-start mb-4">
+                          <div className="flex items-center gap-4">
+                              <div className="w-14 h-14 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-full flex items-center justify-center text-xl font-black text-white shadow-lg shadow-indigo-500/30">
+                                  {selectedEmp?.name[0]}
+                              </div>
+                              <div>
+                                  <h3 className={`font-black text-lg ${theme.textMain} leading-tight`}>{selectedEmp?.name}</h3>
+                                  <p className={`text-[11px] ${theme.textMuted} font-bold uppercase mt-1`}>{selectedEmp?.position} • {selectedEmp?.department}</p>
+                              </div>
+                          </div>
+                          <button onClick={() => setShowProfileModal(false)} className={`p-2 rounded-full ${isDark ? 'bg-[#0F172A] text-slate-400 hover:text-white' : 'bg-slate-100 text-slate-500 hover:text-black'} transition`}><X size={18}/></button>
+                      </div>
+                      
+                      {/* Вкладки */}
+                      <div className={`flex gap-2 ${isDark ? 'bg-[#0F172A]' : 'bg-slate-100'} p-1.5 rounded-2xl`}>
+                          <button onClick={() => setProfileTab('history')} className={`flex-1 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${profileTab === 'history' ? `${theme.tabActiveBg} shadow-sm` : theme.tabInactiveText}`}><Clock size={14}/> История</button>
+                          <button onClick={() => setProfileTab('pin')} className={`flex-1 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${profileTab === 'pin' ? `${theme.tabActiveBg} shadow-sm` : theme.tabInactiveText}`}><Key size={14}/> PIN-код</button>
+                      </div>
                   </div>
-                  <input type="password" value={newPin} onChange={(e) => setNewPin(e.target.value)} className={`w-full ${theme.inputBg} border ${theme.inputBorder} rounded-2xl py-4 text-center text-2xl font-black tracking-[0.5em] ${theme.textMain} focus:ring-2 focus:ring-indigo-500 transition outline-none mb-4`} placeholder="НОВЫЙ PIN" autoFocus />
-                  <div className="flex gap-2">
-                      <button onClick={() => {setShowPinModal(false); setNewPin("");}} className={`flex-1 py-4 rounded-2xl font-bold ${isDark ? 'bg-[#0F172A] text-slate-400' : 'bg-slate-100 text-slate-500'} transition`}>Отмена</button>
-                      <button onClick={handleSaveNewPin} disabled={isSavingPin} className="flex-1 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold shadow-lg shadow-indigo-500/30 flex items-center justify-center gap-2 transition">
-                          {isSavingPin ? <Loader2 className="animate-spin" size={18}/> : "Сохранить"}
-                      </button>
+
+                  {/* Контент профиля */}
+                  <div className="flex-1 overflow-y-auto p-6 bg-black/5">
+                      {profileTab === 'history' ? (
+                          <div className="space-y-4">
+                              {loadingHistory ? (
+                                  <div className="flex justify-center py-10 text-indigo-500"><Loader2 className="animate-spin" size={24}/></div>
+                              ) : userHistory.length === 0 ? (
+                                  <div className="text-center py-10 opacity-50"><Activity size={32} className="mx-auto mb-2"/> <p className="text-xs font-bold">История чиста</p></div>
+                              ) : (
+                                  userHistory.map(log => (
+                                      <div key={log.id} className={`${theme.innerBg} p-4 rounded-2xl border ${isDark ? 'border-[#334155]' : 'border-slate-100'} flex gap-4`}>
+                                          <div className={`w-2 h-2 mt-1.5 rounded-full shrink-0 ${log.action_type === 'ВХОД' ? 'bg-blue-400' : log.action_type === 'УТВЕРЖДЕНИЕ' ? 'bg-emerald-400' : log.action_type === 'НОВАЯ_ЗАЯВКА' ? 'bg-purple-400' : 'bg-amber-400'}`}></div>
+                                          <div>
+                                              <div className="flex items-center gap-2 mb-1">
+                                                  <span className={`text-[10px] font-black uppercase ${theme.textMain}`}>{log.action_type}</span>
+                                                  <span className={`text-[9px] font-bold ${theme.textMuted}`}>{formatDate(log.created_at)}</span>
+                                              </div>
+                                              <p className={`text-xs ${theme.textMuted} leading-relaxed`}>{log.description}</p>
+                                          </div>
+                                      </div>
+                                  ))
+                              )}
+                          </div>
+                      ) : (
+                          <div className="animate-in fade-in zoom-in-95 duration-200 py-4">
+                              <div className="text-center mb-6">
+                                  <h3 className={`font-black text-lg ${theme.textMain}`}>Смена пароля</h3>
+                                  <p className={`text-xs ${theme.textMuted} mt-1`}>Придумайте новый PIN для входа</p>
+                              </div>
+                              <input type="password" value={newPin} onChange={(e) => setNewPin(e.target.value)} className={`w-full ${theme.inputBg} border ${theme.inputBorder} rounded-2xl py-4 text-center text-2xl font-black tracking-[0.5em] ${theme.textMain} focus:ring-2 focus:ring-indigo-500 transition outline-none mb-4`} placeholder="НОВЫЙ PIN" />
+                              <button onClick={handleSaveNewPin} disabled={isSavingPin} className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold shadow-lg shadow-indigo-500/30 flex items-center justify-center gap-2 transition">
+                                  {isSavingPin ? <Loader2 className="animate-spin" size={18}/> : "Сохранить PIN"}
+                              </button>
+                          </div>
+                      )}
                   </div>
               </div>
           </div>
       )}
 
+      {/* ПРЕВЬЮ ФАЙЛОВ */}
       {previewUrl && (
           <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center bg-black/80 backdrop-blur-md p-0 md:p-4 transition-all">
               <div className="bg-[#1E293B] border border-slate-700 w-full max-w-5xl h-[92vh] md:h-[85vh] rounded-t-[32px] md:rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-full duration-300">
@@ -296,13 +402,13 @@ export default function ManagerDashboard() {
             
             <a href="/" className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition backdrop-blur-md shrink-0"><ArrowLeft size={18} /></a>
             
-            {/* ЦЕНТР ШАПКИ (ФИО И ДОЛЖНОСТЬ) */}
-            <div className="flex-1 px-3 min-w-0 text-center">
+            <div className="flex-1 px-3 min-w-0 text-center cursor-pointer" onClick={() => isAuthenticated && openProfile()}>
                 {isAuthenticated ? (
                     <>
                         <h1 className="text-xs sm:text-sm font-black uppercase text-white truncate">{selectedEmp.name}</h1>
-                        <p className="text-[9px] sm:text-[10px] text-indigo-300 font-bold tracking-wide mt-0.5 truncate">
+                        <p className="text-[9px] sm:text-[10px] text-indigo-300 font-bold tracking-wide mt-0.5 truncate flex items-center justify-center gap-1">
                             {selectedEmp.position ? `${selectedEmp.position} • ` : ''}{selectedEmp.department}
+                            <ChevronDown size={10} className="opacity-50"/>
                         </p>
                     </>
                 ) : (
@@ -311,15 +417,9 @@ export default function ManagerDashboard() {
             </div>
 
             <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-                {isAuthenticated && (
-                    <button onClick={() => setShowPinModal(true)} className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition text-emerald-300" title="Сменить PIN">
-                        <Key size={16}/>
-                    </button>
-                )}
-                <button onClick={() => setIsDark(!isDark)} className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition text-yellow-300" title="Сменить тему">
+                <button onClick={toggleTheme} className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition text-yellow-300" title="Сменить тему">
                     {isDark ? <Sun size={16}/> : <Moon size={16} className="text-slate-200"/>}
                 </button>
-                {/* КНОПКА ВЫХОДА */}
                 {isAuthenticated ? (
                     <button onClick={handleLogout} className="p-2 bg-rose-500/20 rounded-full hover:bg-rose-500/40 transition text-rose-400" title="Выйти">
                         <LogOut size={16}/>
