@@ -1,5 +1,5 @@
 // ==========================================
-// ФАЙЛ №2: ЗАЯВКА (С УМНЫМ ПОИСКОМ ТЕХНИКИ)
+// ФАЙЛ №2: ЗАЯВКА (ПОФИКСИЛИ ВЫПАДАЮЩИЙ СПИСОК)
 // ПУТЬ К ФАЙЛУ: app/new-request/page.js
 // ==========================================
 
@@ -21,20 +21,18 @@ export default function NewRequest() {
   const [submittedId, setSubmittedId] = useState(null);
 
   const [employeesDB, setEmployeesDB] = useState([]);
-  const [allEquipment, setAllEquipment] = useState([]); // Единая база техники
+  const [allEquipment, setAllEquipment] = useState([]); 
 
   const step2Ref = useRef(null);
   const step3Ref = useRef(null);
   const suggestionRef = useRef(null);
-  const bindingRef = useRef(null); // Реф для закрытия поиска техники
+  const bindingRef = useRef(null); 
 
   useEffect(() => {
     const loadData = async () => {
-        // Загружаем только активных сотрудников
         const { data: emp } = await supabase.from("v2_employees").select("*").eq("is_active", true).order("name");
         if (emp) setEmployeesDB(emp);
 
-        // Загружаем ВСЮ активную технику для умного поиска
         const { data: veh } = await supabase.from("v2_equipment").select("*").eq("is_active", true).order("name");
         if (veh) setAllEquipment(veh);
 
@@ -47,7 +45,7 @@ export default function NewRequest() {
   const [inputPassword, setInputPassword] = useState("");
   const [passwordError, setPasswordError] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [activeBindingId, setActiveBindingId] = useState(null); // Какой товар сейчас ищет технику
+  const [activeBindingId, setActiveBindingId] = useState(null); 
 
   const [type, setType] = useState("goods");
   const [costType, setCostType] = useState("");
@@ -70,7 +68,6 @@ export default function NewRequest() {
 
   const filteredEmployees = employeesDB.filter(emp => emp.name && emp.name.toLowerCase().includes(initiator.toLowerCase()));
 
-  // Закрытие выпадающих списков при клике мимо
   useEffect(() => {
     const handleClickOutside = (event) => { 
         if (suggestionRef.current && !suggestionRef.current.contains(event.target)) setShowSuggestions(false); 
@@ -239,7 +236,7 @@ export default function NewRequest() {
 
             {/* ШАГ 1: КТО? */}
             <div className={`bg-white rounded-[24px] shadow-sm border p-6 space-y-5 relative transition-all duration-500 ${!isAuthenticated ? "border-blue-300 ring-4 ring-blue-50" : "border-slate-100"}`}>
-                <div className={`absolute top-0 left-0 w-1.5 h-full rounded-l-2xl transition-colors ${!isAuthenticated ? "bg-blue-500" : "bg-green-500"}`}></div>
+                <div className={`absolute top-0 left-0 w-1.5 h-full rounded-l-[24px] transition-colors ${!isAuthenticated ? "bg-blue-500" : "bg-green-500"}`}></div>
                 <div className="flex justify-between items-center pl-2">
                     <h2 className="text-sm font-black uppercase text-slate-400">1. Инициатор</h2>
                     {isAuthenticated && <span className="text-[10px] font-bold text-green-600 bg-green-100 px-2 py-1 rounded flex items-center gap-1"><CheckCircle size={12}/> Подтверждено</span>}
@@ -296,8 +293,8 @@ export default function NewRequest() {
 
             {/* ШАГ 2: ПАРАМЕТРЫ */}
             {isAuthenticated && (
-                <div ref={step2Ref} className={`bg-white rounded-[24px] shadow-sm border p-6 space-y-5 relative overflow-hidden transition-all duration-500 animate-in fade-in slide-in-from-bottom-4 ${urgency === "urgent" ? "border-red-500 ring-4 ring-red-100" : "border-slate-100"}`}>
-                    <div className={`absolute top-0 left-0 w-1.5 h-full transition-colors duration-500 ${urgency === "urgent" ? "bg-red-600" : "bg-emerald-500"}`}></div>
+                <div ref={step2Ref} className={`bg-white rounded-[24px] shadow-sm border p-6 space-y-5 relative transition-all duration-500 animate-in fade-in slide-in-from-bottom-4 ${urgency === "urgent" ? "border-red-500 ring-4 ring-red-100" : "border-slate-100"}`}>
+                    <div className={`absolute top-0 left-0 w-1.5 h-full rounded-l-[24px] transition-colors duration-500 ${urgency === "urgent" ? "bg-red-600" : "bg-emerald-500"}`}></div>
                     <h2 className="text-sm font-black uppercase text-slate-400 pl-2">2. Параметры</h2>
                     <div>
                         <div className="flex bg-slate-100 p-1 rounded-2xl mb-4">
@@ -325,8 +322,8 @@ export default function NewRequest() {
             {/* ШАГ 3: ДЕТАЛИ И ТОВАРЫ */}
             {isAuthenticated && costType && (
                 <div ref={step3Ref} className="space-y-6">
-                    <div className="bg-white rounded-[24px] shadow-sm border border-slate-100 p-6 space-y-5 relative overflow-hidden animate-in fade-in slide-in-from-bottom-4">
-                        <div className="absolute top-0 left-0 w-1.5 h-full bg-purple-500"></div>
+                    <div className="bg-white rounded-[24px] shadow-sm border border-slate-100 p-6 space-y-5 relative animate-in fade-in slide-in-from-bottom-4">
+                        <div className="absolute top-0 left-0 w-1.5 h-full bg-purple-500 rounded-l-[24px]"></div>
                         <h2 className="text-sm font-black uppercase text-slate-400 pl-2">3. Детали</h2>
                         {type === "service" && (
                             <div className="animate-in fade-in"><label className="text-[10px] font-bold uppercase text-slate-400 block mb-2">Название услуги</label><input type="text" value={serviceName} onChange={(e) => setServiceName(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 font-bold" placeholder="Ремонт..." /></div>
@@ -344,8 +341,8 @@ export default function NewRequest() {
                     </div>
 
                     {type === "goods" && (
-                        <div className="bg-white rounded-[24px] shadow-sm border border-slate-100 p-6 space-y-5 relative overflow-hidden animate-in fade-in slide-in-from-bottom-4">
-                            <div className="absolute top-0 left-0 w-1.5 h-full bg-orange-500"></div>
+                        <div className="bg-white rounded-[24px] shadow-sm border border-slate-100 p-6 space-y-5 relative animate-in fade-in slide-in-from-bottom-4">
+                            <div className="absolute top-0 left-0 w-1.5 h-full bg-orange-500 rounded-l-[24px]"></div>
                             <div className="flex justify-between items-center pl-2">
                                 <h2 className="text-sm font-black uppercase text-slate-400">4. Товары</h2>
                                 <button type="button" onClick={addItem} className="px-3 py-2 bg-orange-50 text-orange-600 rounded-xl text-[10px] font-black border border-orange-100 flex items-center gap-1"><Plus size={14} /> ДОБАВИТЬ</button>
@@ -353,7 +350,7 @@ export default function NewRequest() {
                             
                             <div className="space-y-4">
                                 {items.map((item, index) => (
-                                    <div key={item.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 relative">
+                                    <div key={item.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 relative" style={{ zIndex: 50 - index }}>
                                         <div className="absolute top-2 right-2 text-[10px] font-black text-slate-300">#{index + 1}</div>
                                         <div className="grid grid-cols-4 gap-2">
                                             <div className="col-span-4"><input type="text" value={item.name} onChange={(e) => updateItem(item.id, "name", e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl p-3 text-xs font-bold" placeholder="Наименование" /></div>
@@ -422,8 +419,8 @@ export default function NewRequest() {
                     )}
 
                     {/* РАБОЧИЙ БЛОК ЗАГРУЗКИ ФАЙЛОВ */}
-                    <div className="bg-white rounded-[24px] shadow-sm border border-slate-100 p-6 space-y-5 relative overflow-hidden animate-in fade-in slide-in-from-bottom-4">
-                        <div className="absolute top-0 left-0 w-1.5 h-full bg-slate-400"></div>
+                    <div className="bg-white rounded-[24px] shadow-sm border border-slate-100 p-6 space-y-5 relative animate-in fade-in slide-in-from-bottom-4">
+                        <div className="absolute top-0 left-0 w-1.5 h-full bg-slate-400 rounded-l-[24px]"></div>
                         <h2 className="text-sm font-black uppercase text-slate-400 pl-2">Файлы (Опционально)</h2>
                         
                         {/* СПИСОК ВЫБРАННЫХ ФАЙЛОВ */}
