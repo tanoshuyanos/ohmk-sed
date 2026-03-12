@@ -1,12 +1,12 @@
 // ==========================================
-// ФАЙЛ: КАБИНЕТ РУКОВОДИТЕЛЯ (DARK MODE + ОБЩИЙ ВЕЕР)
+// ФАЙЛ: КАБИНЕТ РУКОВОДИТЕЛЯ (+ СМЕНА ПАРОЛЯ)
 // ПУТЬ: app/manager/page.js
 // ==========================================
 
 "use client";
 import React, { useState, useEffect, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { ArrowLeft, User, CheckCircle, Loader2, Wallet, ChevronDown, Paperclip, Download, FileText, PieChart, Calendar, Receipt, CreditCard, ChevronRight, X, Layers, Moon, Sun } from "lucide-react";
+import { ArrowLeft, User, CheckCircle, Loader2, Wallet, ChevronDown, Paperclip, Download, FileText, PieChart, Calendar, Receipt, CreditCard, ChevronRight, X, Layers, Moon, Sun, Key } from "lucide-react";
 
 import { getNextStep } from "../utils/workflow";
 
@@ -14,7 +14,6 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Бронебойный очиститель чисел
 const cleanNumber = (val) => {
     if (!val) return 0;
     if (typeof val === 'number') return val;
@@ -36,12 +35,13 @@ export default function ManagerDashboard() {
   const [viewMode, setViewMode] = useState("active"); 
   const [expandedReq, setExpandedReq] = useState(null); 
   const [expandedDept, setExpandedDept] = useState(null);
-  
-  // Анимация стопки
   const [isStackExpanded, setIsStackExpanded] = useState(false);
-
-  // ТЕМНАЯ / СВЕТЛАЯ ТЕМА (По умолчанию темная)
   const [isDark, setIsDark] = useState(true);
+
+  // СТЕЙТЫ ДЛЯ СМЕНЫ ПАРОЛЯ
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [newPin, setNewPin] = useState("");
+  const [isSavingPin, setIsSavingPin] = useState(false);
 
   const [selectedDept, setSelectedDept] = useState({}); 
   const [selectedBudget, setSelectedBudget] = useState({}); 
@@ -66,6 +66,28 @@ export default function ManagerDashboard() {
     } else {
         setPasswordError(true);
     }
+  };
+
+  // ФУНКЦИЯ СОХРАНЕНИЯ НОВОГО ПАРОЛЯ
+  const handleSaveNewPin = async () => {
+      if (!newPin || newPin.length < 4) return alert("PIN должен быть не менее 4 символов!");
+      setIsSavingPin(true);
+      
+      const { error } = await supabase
+          .from("v2_employees")
+          .update({ password: newPin, pin_code: newPin }) // Обновляем обе колонки на всякий случай
+          .eq("id", selectedEmp.id);
+          
+      if (error) {
+          alert("Ошибка при сохранении: " + error.message);
+      } else {
+          alert("Ваш PIN успешно изменен!");
+          // Обновляем локальные данные, чтобы не пришлось перезаходить
+          setSelectedEmp({...selectedEmp, password: newPin, pin_code: newPin});
+          setShowPinModal(false);
+          setNewPin("");
+      }
+      setIsSavingPin(false);
   };
 
   const loadManagerData = async (department) => {
@@ -178,19 +200,16 @@ export default function ManagerDashboard() {
   const historyRequests = allRequests.filter(r => r.current_step > 1);
   const displayedRequests = viewMode === "active" ? activeRequests : historyRequests;
 
-  // СОБИРАЕМ ВСЕ КАРТЫ В ОДИН МАССИВ ДЛЯ ВЕЕРА
   const stackCards = useMemo(() => {
       const cards = [];
-      // 1. Главная карта (Общий бюджет)
       cards.push({
           id: 'grandTotal',
           isTotal: true,
           title: 'Компания (Общий)',
           spent: budgetStats.grandSpent,
           total: budgetStats.grandTotal,
-          history: [] // Для общей не выводим историю, чтобы не дублировать
+          history: [] 
       });
-      // 2. Карты отделов
       Object.entries(budgetStats.departments).forEach(([dept, data]) => {
           cards.push({
               id: dept,
@@ -204,7 +223,6 @@ export default function ManagerDashboard() {
       return cards;
   }, [budgetStats]);
 
-  // Цветовые константы для темы
   const theme = {
       bgMain: isDark ? "bg-[#0B1121]" : "bg-[#f4f6f8]",
       textMain: isDark ? "text-slate-100" : "text-slate-900",
@@ -224,6 +242,26 @@ export default function ManagerDashboard() {
   return (
     <div className={`min-h-screen ${theme.bgMain} ${theme.textMain} font-sans pb-20 relative transition-colors duration-500`}>
       
+      {/* МОДАЛКА СМЕНЫ ПАРОЛЯ */}
+      {showPinModal && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+              <div className={`${theme.cardBg} w-full max-w-sm rounded-[32px] p-8 border ${theme.cardBorder} shadow-2xl animate-in zoom-in-95 duration-200`}>
+                  <div className="text-center mb-6">
+                      <div className="w-14 h-14 bg-indigo-500/20 text-indigo-400 rounded-full mx-auto flex items-center justify-center mb-3"><Key size={24}/></div>
+                      <h3 className={`font-black text-xl ${theme.textMain}`}>Смена PIN-кода</h3>
+                      <p className={`text-xs ${theme.textMuted} mt-1`}>Придумайте новый пароль для входа</p>
+                  </div>
+                  <input type="password" value={newPin} onChange={(e) => setNewPin(e.target.value)} className={`w-full ${theme.inputBg} border ${theme.inputBorder} rounded-2xl py-4 text-center text-2xl font-black tracking-[0.5em] ${theme.textMain} focus:ring-2 focus:ring-indigo-500 transition outline-none mb-4`} placeholder="НОВЫЙ PIN" autoFocus />
+                  <div className="flex gap-2">
+                      <button onClick={() => {setShowPinModal(false); setNewPin("");}} className={`flex-1 py-4 rounded-2xl font-bold ${isDark ? 'bg-[#0F172A] text-slate-400' : 'bg-slate-100 text-slate-500'} transition`}>Отмена</button>
+                      <button onClick={handleSaveNewPin} disabled={isSavingPin} className="flex-1 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold shadow-lg shadow-indigo-500/30 flex items-center justify-center gap-2 transition">
+                          {isSavingPin ? <Loader2 className="animate-spin" size={18}/> : "Сохранить"}
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {/* ПРЕВЬЮ ФАЙЛОВ */}
       {previewUrl && (
           <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center bg-black/80 backdrop-blur-md p-0 md:p-4 transition-all">
@@ -258,6 +296,12 @@ export default function ManagerDashboard() {
                 {isAuthenticated && <p className="text-[10px] text-indigo-300 font-bold tracking-wide mt-0.5">{selectedEmp.department}</p>}
             </div>
             <div className="flex items-center gap-3">
+                {/* КНОПКА СМЕНЫ ПАРОЛЯ (появляется только после входа) */}
+                {isAuthenticated && (
+                    <button onClick={() => setShowPinModal(true)} className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition text-emerald-300" title="Сменить PIN">
+                        <Key size={18}/>
+                    </button>
+                )}
                 {/* Переключатель темы */}
                 <button onClick={() => setIsDark(!isDark)} className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition text-yellow-300">
                     {isDark ? <Sun size={18}/> : <Moon size={18} className="text-slate-200"/>}
@@ -317,12 +361,11 @@ export default function ManagerDashboard() {
                             </div>
                         </div>
 
-                        {/* АНИМИРОВАННАЯ СТОПКА КАРТ (ТЕПЕРЬ С ОБЩЕЙ СУММОЙ) */}
+                        {/* АНИМИРОВАННАЯ СТОПКА КАРТ */}
                         <div className="flex flex-col relative pb-4">
                             {stackCards.map((card, i) => {
                                 const percent = Math.min((card.spent / (card.total || 1)) * 100, 100);
                                 
-                                // Цвета шкалы
                                 let gradient = "from-emerald-400 to-emerald-500";
                                 if (percent > 60) gradient = "from-amber-400 to-amber-500";
                                 if (percent > 90) gradient = "from-red-400 to-red-500";
@@ -330,7 +373,6 @@ export default function ManagerDashboard() {
                                 const isCardExpanded = expandedDept === card.id;
                                 const isStacked = !isStackExpanded;
 
-                                // Настройка отображения карты "Всего"
                                 const cardBgClass = card.isTotal 
                                     ? (isDark ? "bg-gradient-to-br from-[#1E293B] to-[#0F172A] border-[#334155]" : "bg-gradient-to-br from-indigo-500 to-indigo-600 text-white border-transparent")
                                     : `${theme.cardBg} border ${theme.cardBorder}`;
@@ -340,7 +382,6 @@ export default function ManagerDashboard() {
                                 const subtitleColor = card.isTotal ? (isDark ? "text-slate-400" : "text-indigo-200") : theme.textMuted;
                                 const barBg = card.isTotal && !isDark ? "bg-black/20" : (isDark ? "bg-[#0F172A]" : "bg-slate-100");
 
-                                // Логика анимации позиции
                                 let mt = "0px";
                                 let scale = 1;
                                 let opacity = 1;
@@ -367,7 +408,6 @@ export default function ManagerDashboard() {
                                 return (
                                     <div key={card.id} style={cardStyle} className={`${cardBgClass} rounded-3xl relative border ${theme.cardShadow} ${!isStacked && theme.cardHover} transition-colors overflow-hidden`}>
                                         
-                                        {/* Если это общая карта в темной теме, добавим свечение */}
                                         {card.isTotal && isDark && <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>}
 
                                         <div className="p-5 cursor-pointer relative z-10" onClick={() => {
@@ -391,7 +431,6 @@ export default function ManagerDashboard() {
                                             </div>
                                         </div>
 
-                                        {/* ИСТОРИЯ ВНУТРИ ОТДЕЛА */}
                                         {isCardExpanded && !isStacked && !card.isTotal && (
                                             <div className={`px-5 pb-5 pt-2 border-t ${isDark ? 'border-[#334155]' : 'border-slate-50'} animate-in slide-in-from-top-2 relative z-10`}>
                                                 {card.history.length === 0 ? (
