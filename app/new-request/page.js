@@ -1,5 +1,5 @@
 // ==========================================
-// ФАЙЛ №2: ЗАЯВКА (ОБЯЗАТЕЛЬНЫЕ ЗАПЧАСТИ + БЕЗЛИМИТ ФАЙЛЫ)
+// ФАЙЛ №2: ЗАЯВКА (АВТО-СЖАТИЕ ФОТО + БЕЗЛИМИТ ФАЙЛЫ + ПРИВЯЗКА)
 // ПУТЬ К ФАЙЛУ: app/new-request/page.js
 // ==========================================
 
@@ -8,12 +8,60 @@ import React, { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { ArrowLeft, Plus, Trash2, FileText, User, X, Flame, AlertTriangle, Calendar, Lock, CheckCircle, Loader2, Send, Search } from "lucide-react";
 
-// --- БЕЗОПАСНОЕ ПОДКЛЮЧЕНИЕ К БАЗЕ ---
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL; 
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const DEFAULT_COMPANY_ID = "a32814de-7f0e-4109-87ee-555e1a4f0509"; 
+
+// 🔥 ФУНКЦИЯ УМНОГО СЖАТИЯ ИЗОБРАЖЕНИЙ 🔥
+const compressImage = async (file, maxWidth = 1600, maxHeight = 1600, quality = 0.7) => {
+    // Если это не картинка (например, PDF), просто возвращаем как есть
+    if (!file.type.startsWith('image/')) return file;
+
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = () => {
+                let { width, height } = img;
+
+                // Сохраняем пропорции при уменьшении
+                if (width > maxWidth || height > maxHeight) {
+                    if (width > height) {
+                        height = Math.round((height * maxWidth) / width);
+                        width = maxWidth;
+                    } else {
+                        width = Math.round((width * maxHeight) / height);
+                        height = maxHeight;
+                    }
+                }
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                canvas.toBlob((blob) => {
+                    if (!blob) {
+                        resolve(file); // Если что-то пошло не так, вернем оригинал
+                        return;
+                    }
+                    const newFile = new File([blob], file.name, {
+                        type: file.type,
+                        lastModified: Date.now(),
+                    });
+                    resolve(newFile);
+                }, file.type, quality);
+            };
+            img.onerror = () => resolve(file); 
+        };
+        reader.onerror = () => resolve(file);
+    });
+};
 
 export default function NewRequest() {
   const [loading, setLoading] = useState(true);
@@ -109,7 +157,7 @@ export default function NewRequest() {
             return;
         }
 
-        // 🔥 ЖЕСТКАЯ ПРОВЕРКА НА ЗАПЧАСТИ 🔥
+        // ЖЕСТКАЯ ПРОВЕРКА НА ЗАПЧАСТИ
         if (costType.toLowerCase().includes("запчасть")) {
             const hasEmptyBinding = items.some(item => !item.binding || !item.binding.trim());
             if (hasEmptyBinding) {
@@ -126,23 +174,25 @@ export default function NewRequest() {
 
     setSending(true);
 
-    // 🔥 ПРЯМАЯ ЗАГРУЗКА ФАЙЛОВ В SUPABASE STORAGE (ОБХОД ЛИМИТОВ) 🔥
     let finalAttachmentUrls = "";
     if (selectedFiles.length > 0) {
         let uploadedUrls = [];
         
         try {
             for (const file of selectedFiles) {
-                const fileExt = file.name.split('.').pop();
+                // 🔥 СЖИМАЕМ ФАЙЛ ПЕРЕД ОТПРАВКОЙ 🔥
+                const compressedFile = await compressImage(file);
+                
+                const fileExt = compressedFile.name.split('.').pop();
                 const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
 
-                // Загружаем файл напрямую в бакет 'attachments'
+                // Загружаем сжатый файл напрямую в бакет 'attachments'
                 const { data, error } = await supabase.storage
                     .from('attachments')
-                    .upload(fileName, file, { cacheControl: '3600', upsert: false });
+                    .upload(fileName, compressedFile, { cacheControl: '3600', upsert: false });
 
                 if (error) {
-                    alert(`Ошибка загрузки файла ${file.name}: ` + error.message);
+                    alert(`Ошибка загрузки файла ${compressedFile.name}: ` + error.message);
                     setSending(false);
                     return;
                 }
@@ -151,7 +201,6 @@ export default function NewRequest() {
                 const { data: publicUrlData } = supabase.storage.from('attachments').getPublicUrl(fileName);
                 uploadedUrls.push(publicUrlData.publicUrl);
             }
-            // Объединяем все ссылки через запятую
             finalAttachmentUrls = uploadedUrls.join(', ');
         } catch (e) {
             alert("Сбой сети при загрузке файлов: " + e.message);
@@ -160,7 +209,6 @@ export default function NewRequest() {
         }
     }
 
-    // Сохраняем шапку заявки
     const requestData = {
         initiator_id: selectedEmp.id, 
         initiator: selectedEmp.name,  
@@ -185,7 +233,14 @@ export default function NewRequest() {
     const newRequestId = reqResult[0].id;
     const newReqNumber = reqResult[0].req_number || reqResult[0].id; 
 
-    // Сохраняем товары
+    // Записываем это действие в ИСТОРИЮ СОТРУДНИКА
+    supabase.from("v2_action_history").insert([{
+        employee_id: selectedEmp.id,
+        employee_name: selectedEmp.name,
+        action_type: 'НОВАЯ_ЗАЯВКА',
+        description: `Оформил заявку #${newReqNumber} (${costType})`
+    }]).then();
+
     if (type === "goods" && items.length > 0) {
         const itemsToInsert = items.map(item => ({
             request_id: newRequestId,
@@ -393,7 +448,7 @@ export default function NewRequest() {
                                                                     setActiveBindingId(item.id);
                                                                 }}
                                                                 onFocus={() => setActiveBindingId(item.id)}
-                                                                className={`w-full bg-white border rounded-xl p-3 pl-9 text-xs font-bold text-blue-700 outline-none focus:ring-2 focus:ring-blue-500 ${costType.toLowerCase().includes("запчасть") && !item.binding ? "border-red-300 ring-1 ring-red-100" : "border-slate-200"}`} 
+                                                                className={`w-full bg-white border rounded-xl p-3 pl-9 text-xs font-bold text-blue-700 outline-none focus:ring-2 focus:ring-blue-500 ${costType.toLowerCase().includes("запчасть") && !item.binding ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"}`} 
                                                                 placeholder={getBindingPlaceholder()} 
                                                             />
                                                         </div>
@@ -427,7 +482,7 @@ export default function NewRequest() {
                                                         )}
                                                     </div>
                                                 ) : (
-                                                    <input type="text" value={item.binding} onChange={(e) => updateItem(item.id, "binding", e.target.value)} className={`w-full bg-white border rounded-xl p-3 text-xs font-bold text-blue-700 ${costType.toLowerCase().includes("запчасть") && !item.binding ? "border-red-300 ring-1 ring-red-100" : "border-slate-200"}`} placeholder={getBindingPlaceholder()} />
+                                                    <input type="text" value={item.binding} onChange={(e) => updateItem(item.id, "binding", e.target.value)} className={`w-full bg-white border rounded-xl p-3 text-xs font-bold text-blue-700 ${costType.toLowerCase().includes("запчасть") && !item.binding ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"}`} placeholder={getBindingPlaceholder()} />
                                                 )}
                                             </div>
                                         </div>
