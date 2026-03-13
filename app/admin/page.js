@@ -1,5 +1,5 @@
 // ==========================================
-// ФАЙЛ: ПУЛЬТ АДМИНИСТРАТОРА (МЕГА-ПАНЕЛЬ)
+// ФАЙЛ: ПУЛЬТ АДМИНИСТРАТОРА (С ПРАВИЛЬНЫМ МАРШРУТОМ)
 // ПУТЬ: app/admin/page.js
 // ==========================================
 
@@ -94,6 +94,23 @@ export default function AdminDashboard() {
       tabActive: isDark ? "bg-rose-500/20 text-rose-400" : "bg-rose-100 text-rose-700",
       tabInactive: isDark ? "text-slate-400 hover:bg-[#1E293B]" : "text-slate-600 hover:bg-slate-100",
   };
+
+  // --- ЭТАПЫ МАРШРУТА ---
+  const workflowSteps = [
+    { stage: 0, role: "Инициатор", action: "Создание заявки", color: "text-blue-500" },
+    { stage: 1, role: "Начальник отдела", action: "Бюджет и Утверждение", color: "text-indigo-500" },
+    { stage: 2, role: "Директор", action: "Одобрение и Срочность", color: "text-indigo-500" },
+    { stage: 3, role: "Склад", action: "Проверка наличия ТМЦ", color: "text-amber-500" },
+    { stage: 4, role: "Ком. Директор", action: "Условия и Контрагент", color: "text-orange-500" },
+    { stage: 5, role: "Экономист", action: "Подтверждение плана", color: "text-rose-500" },
+    { stage: 6, role: "Фин. Директор", action: "Утверждение расходов", color: "text-purple-500" },
+    { stage: 7, role: "Юрист", action: "Загрузка проекта договора", color: "text-slate-400" },
+    { stage: 8, role: "Финансист", action: "Проверка проекта договора", color: "text-purple-500" },
+    { stage: 9, role: "Юрист", action: "Подписанный скан", color: "text-slate-400" },
+    { stage: 10, role: "Бухгалтерия", action: "Запрос на оплату", color: "text-emerald-500" },
+    { stage: 11, role: "Финансист", action: "Одобрение к оплате", color: "text-purple-500" },
+    { stage: 12, role: "Бухгалтерия", action: "Проведение платежа", color: "text-emerald-600" }
+  ];
 
   if (!isAuthenticated) {
       return (
@@ -285,19 +302,22 @@ export default function AdminDashboard() {
                 {/* ВКЛАДКА 4: МАРШРУТЫ (Визуализация) */}
                 {activeTab === "routes" && (
                     <div className="space-y-4">
-                        <div className={`${theme.cardBg} p-6 rounded-3xl border ${theme.cardBorder} text-center`}>
+                        <div className={`${theme.cardBg} p-6 rounded-3xl border ${theme.cardBorder} text-center shadow-sm`}>
                             <Route size={40} className="mx-auto text-purple-500 mb-4"/>
-                            <h2 className="text-lg font-black uppercase">Текущий маршрут согласования</h2>
-                            <p className={`text-xs ${theme.textMuted} mt-2 max-w-md mx-auto`}>Так выглядит жестко запрограммированный маршрут движения любой заявки в системе.</p>
+                            <h2 className="text-lg font-black uppercase">Утвержденный маршрут</h2>
+                            <p className={`text-xs ${theme.textMuted} mt-2 max-w-xl mx-auto`}>Полная цепочка согласования заявок (12 этапов). Обратите внимание: заявки на услуги автоматически минуют этап Склада.</p>
                             
-                            <div className="mt-8 flex flex-col md:flex-row items-center justify-center gap-4">
-                                {['Инициатор', 'Руководитель (Отдел)', 'Фин. Директор', 'Ген. Директор', 'Касса / Исполнение'].map((step, i) => (
-                                    <React.Fragment key={i}>
-                                        <div className={`px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest border ${i === 4 ? 'bg-emerald-500/20 text-emerald-500 border-emerald-500/30' : (isDark ? 'bg-[#0F172A] border-[#334155]' : 'bg-slate-50 border-slate-200')}`}>
-                                            {i+1}. {step}
-                                        </div>
-                                        {i < 4 && <div className="text-purple-500 rotate-90 md:rotate-0">➔</div>}
-                                    </React.Fragment>
+                            <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 text-left relative">
+                                {workflowSteps.map((step, i) => (
+                                    <div key={i} className={`p-4 rounded-2xl border relative ${
+                                        step.stage === 0 ? (isDark ? 'bg-blue-500/10 border-blue-500/30' : 'bg-blue-50 border-blue-200') : 
+                                        step.stage === 12 ? (isDark ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-emerald-50 border-emerald-200') : 
+                                        (isDark ? 'bg-[#0F172A] border-[#334155]' : 'bg-white border-slate-200 shadow-sm')
+                                    }`}>
+                                        <div className={`text-[10px] font-black mb-1 ${step.color}`}>{step.stage === 0 ? "СТАРТ" : `ЭТАП ${step.stage}`}</div>
+                                        <div className={`font-black text-sm uppercase leading-tight ${theme.textMain}`}>{step.role}</div>
+                                        <div className={`text-[10px] mt-1.5 font-bold ${theme.textMuted}`}>{step.action}</div>
+                                    </div>
                                 ))}
                             </div>
                         </div>
