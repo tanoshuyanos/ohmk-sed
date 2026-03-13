@@ -1,5 +1,5 @@
 // ==========================================
-// ФАЙЛ №2: ЗАЯВКА (АВТО-СЖАТИЕ ФОТО + БЕЗЛИМИТ ФАЙЛЫ + ПРИВЯЗКА)
+// ФАЙЛ №2: ЗАЯВКА (ВСЕ ПОЛЯ ОБЯЗАТЕЛЬНЫ + СЖАТИЕ ФОТО)
 // ПУТЬ К ФАЙЛУ: app/new-request/page.js
 // ==========================================
 
@@ -16,7 +16,6 @@ const DEFAULT_COMPANY_ID = "a32814de-7f0e-4109-87ee-555e1a4f0509";
 
 // 🔥 ФУНКЦИЯ УМНОГО СЖАТИЯ ИЗОБРАЖЕНИЙ 🔥
 const compressImage = async (file, maxWidth = 1600, maxHeight = 1600, quality = 0.7) => {
-    // Если это не картинка (например, PDF), просто возвращаем как есть
     if (!file.type.startsWith('image/')) return file;
 
     return new Promise((resolve) => {
@@ -28,7 +27,6 @@ const compressImage = async (file, maxWidth = 1600, maxHeight = 1600, quality = 
             img.onload = () => {
                 let { width, height } = img;
 
-                // Сохраняем пропорции при уменьшении
                 if (width > maxWidth || height > maxHeight) {
                     if (width > height) {
                         height = Math.round((height * maxWidth) / width);
@@ -47,7 +45,7 @@ const compressImage = async (file, maxWidth = 1600, maxHeight = 1600, quality = 
 
                 canvas.toBlob((blob) => {
                     if (!blob) {
-                        resolve(file); // Если что-то пошло не так, вернем оригинал
+                        resolve(file); 
                         return;
                     }
                     const newFile = new File([blob], file.name, {
@@ -148,22 +146,32 @@ export default function NewRequest() {
   };
 
   const sendRequest = async () => {
-    if (!costType || !selectedEmp) return;
+    // 🔥 СТРОГАЯ ПРОВЕРКА ВСЕХ ПОЛЕЙ 🔥
+    if (!selectedEmp) return;
+    
+    if (!costType) {
+        alert("⚠️ ОШИБКА: Пожалуйста, выберите Категорию / Тип услуги!");
+        return;
+    }
+    if (!reqDate) {
+        alert("⚠️ ОШИБКА: Пожалуйста, укажите требуемую дату (когда это нужно)!");
+        return;
+    }
+    if (!description.trim()) {
+        alert("⚠️ ОШИБКА: Пожалуйста, заполните подробное описание заявки (зачем это нужно, детали и т.д.)!");
+        return;
+    }
 
     if (type === "goods") {
-        const hasInvalidItems = items.some(item => !item.name.trim() || !item.qty || !item.unit);
-        if (hasInvalidItems) {
-            alert("⚠️ ОШИБКА: Пожалуйста, укажите Наименование, Количество и обязательно выберите Единицу измерения для всех добавленных товаров!");
+        if (items.length === 0) {
+            alert("⚠️ ОШИБКА: Добавьте хотя бы один товар в заявку!");
             return;
         }
-
-        // ЖЕСТКАЯ ПРОВЕРКА НА ЗАПЧАСТИ
-        if (costType.toLowerCase().includes("запчасть")) {
-            const hasEmptyBinding = items.some(item => !item.binding || !item.binding.trim());
-            if (hasEmptyBinding) {
-                alert("⚠️ ВНИМАНИЕ: Вы оформляете заявку на ЗАПЧАСТИ. Пожалуйста, укажите привязку к технике (Для кого/чего) для КАЖДОГО товара!");
-                return;
-            }
+        // Проверяем, чтобы у товаров были заполнены АБСОЛЮТНО ВСЕ поля, включая привязку
+        const hasInvalidItems = items.some(item => !item.name.trim() || !item.qty || !item.unit || !item.binding.trim());
+        if (hasInvalidItems) {
+            alert("⚠️ ОШИБКА В ТОВАРАХ: Пожалуйста, заполните абсолютно ВСЕ поля для каждого добавленного товара (Наименование, Кол-во, Ед.изм и Для кого/чего)!");
+            return;
         }
     } else if (type === "service") {
         if (!serviceName.trim()) {
@@ -180,13 +188,12 @@ export default function NewRequest() {
         
         try {
             for (const file of selectedFiles) {
-                // 🔥 СЖИМАЕМ ФАЙЛ ПЕРЕД ОТПРАВКОЙ 🔥
+                // СЖИМАЕМ ФАЙЛ ПЕРЕД ОТПРАВКОЙ
                 const compressedFile = await compressImage(file);
                 
                 const fileExt = compressedFile.name.split('.').pop();
                 const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
 
-                // Загружаем сжатый файл напрямую в бакет 'attachments'
                 const { data, error } = await supabase.storage
                     .from('attachments')
                     .upload(fileName, compressedFile, { cacheControl: '3600', upsert: false });
@@ -197,7 +204,6 @@ export default function NewRequest() {
                     return;
                 }
 
-                // Получаем публичную ссылку на загруженный файл
                 const { data: publicUrlData } = supabase.storage.from('attachments').getPublicUrl(fileName);
                 uploadedUrls.push(publicUrlData.publicUrl);
             }
@@ -233,7 +239,6 @@ export default function NewRequest() {
     const newRequestId = reqResult[0].id;
     const newReqNumber = reqResult[0].req_number || reqResult[0].id; 
 
-    // Записываем это действие в ИСТОРИЮ СОТРУДНИКА
     supabase.from("v2_action_history").insert([{
         employee_id: selectedEmp.id,
         employee_name: selectedEmp.name,
@@ -262,7 +267,7 @@ export default function NewRequest() {
     setSubmittedId(newReqNumber); 
   };
 
-  const getBindingPlaceholder = () => (costType.includes("авто") || costType.includes("с/х")) ? "Поиск по номеру или названию..." : "Для кого/чего?";
+  const getBindingPlaceholder = () => (costType.includes("авто") || costType.includes("с/х")) ? "Поиск по номеру или названию..." : "Укажите для кого/чего...";
   const setQuickDate = (offsetType) => { const date = new Date(); if (offsetType === "tomorrow") date.setDate(date.getDate() + 1); if (offsetType === "week") date.setDate(date.getDate() + 7); if (offsetType === "month") date.setMonth(date.getMonth() + 1); setReqDate(date.toISOString().split('T')[0]); };
 
   if (submittedId) {
@@ -317,7 +322,7 @@ export default function NewRequest() {
                 </div>
 
                 <div className="relative" ref={suggestionRef}>
-                    <label className="text-[10px] font-bold uppercase text-slate-400 block mb-2">ФИО Сотрудника</label>
+                    <label className="text-[10px] font-bold uppercase text-slate-400 block mb-2">ФИО Сотрудника <span className="text-red-500">*</span></label>
                     {!selectedEmp ? (
                         <>
                             <div className="relative">
@@ -357,7 +362,7 @@ export default function NewRequest() {
                 </div>
                 {isAuthenticated && (
                     <div className="animate-in fade-in slide-in-from-top-4">
-                        <label className="text-[10px] font-bold uppercase text-slate-400 block mb-2">Отдел</label>
+                        <label className="text-[10px] font-bold uppercase text-slate-400 block mb-2">Отдел <span className="text-red-500">*</span></label>
                         <select value={dept} onChange={(e) => setDept(e.target.value)} className="w-full border rounded-2xl p-4 font-bold text-slate-700 bg-slate-50 border-slate-200 cursor-pointer appearance-none">
                             {departments.map(d => <option key={d} value={d}>{d}</option>)}
                         </select>
@@ -375,7 +380,7 @@ export default function NewRequest() {
                             <button type="button" onClick={() => { setType("goods"); setCostType(""); }} className={`flex-1 py-4 rounded-xl text-xs font-black uppercase transition ${type === "goods" ? "bg-white shadow text-emerald-600" : "text-slate-500"}`}>Товар</button>
                             <button type="button" onClick={() => { setType("service"); setCostType(""); }} className={`flex-1 py-4 rounded-xl text-xs font-black uppercase transition ${type === "service" ? "bg-white shadow text-emerald-600" : "text-slate-500"}`}>Услуга</button>
                         </div>
-                        <label className="text-[10px] font-bold uppercase text-slate-400 block mb-2">{type === "goods" ? "Категория" : "Тип услуги"}</label>
+                        <label className="text-[10px] font-bold uppercase text-slate-400 block mb-2">{type === "goods" ? "Категория" : "Тип услуги"} <span className="text-red-500">*</span></label>
                         <select value={costType} onChange={(e) => setCostType(e.target.value)} className={`w-full border rounded-2xl p-4 font-bold text-slate-700 cursor-pointer appearance-none transition-all ${costType === "" ? "bg-blue-50 border-blue-400 animate-pulse" : "bg-slate-50 border-slate-200"}`}>
                             <option value="" disabled>👇 Выберите {type === "goods" ? "категорию" : "тип услуги"}</option>
                             {type === "goods" ? costCategories.map(c => <option key={c}>{c}</option>) : serviceTypes.map(s => <option key={s}>{s}</option>)}
@@ -383,7 +388,7 @@ export default function NewRequest() {
                     </div>
                     <div>
                         <label className={`text-[10px] font-bold uppercase block mb-2 ${urgency === "urgent" ? "text-red-600 animate-pulse" : "text-slate-400"}`}>
-                            {urgency === "urgent" ? "🔥 УРОВЕНЬ СРОЧНОСТИ 🔥" : "Срочность"}
+                            {urgency === "urgent" ? "🔥 УРОВЕНЬ СРОЧНОСТИ 🔥" : "Срочность"} <span className="text-red-500">*</span>
                         </label>
                         <select value={urgency} onChange={(e) => setUrgency(e.target.value)} className={`w-full border rounded-2xl p-4 font-black uppercase text-xs cursor-pointer appearance-none transition-all duration-300 ${urgency === "urgent" ? "bg-red-600 text-white border-red-600 scale-105" : "bg-slate-50 border-slate-200 text-slate-900"}`}>
                             <option value="normal">Не срочно</option>
@@ -400,18 +405,21 @@ export default function NewRequest() {
                         <div className="absolute top-0 left-0 w-1.5 h-full bg-purple-500 rounded-l-[24px]"></div>
                         <h2 className="text-sm font-black uppercase text-slate-400 pl-2">3. Детали</h2>
                         {type === "service" && (
-                            <div className="animate-in fade-in"><label className="text-[10px] font-bold uppercase text-slate-400 block mb-2">Название услуги</label><input type="text" value={serviceName} onChange={(e) => setServiceName(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 font-bold" placeholder="Ремонт..." /></div>
+                            <div className="animate-in fade-in"><label className="text-[10px] font-bold uppercase text-slate-400 block mb-2">Название услуги <span className="text-red-500">*</span></label><input type="text" value={serviceName} onChange={(e) => setServiceName(e.target.value)} className={`w-full bg-slate-50 border rounded-2xl p-4 font-bold outline-none focus:ring-2 focus:ring-purple-500 ${!serviceName ? "border-red-300 ring-1 ring-red-100" : "border-slate-200"}`} placeholder="Ремонт..." /></div>
                         )}
                         <div>
-                            <label className="text-[10px] font-bold uppercase text-slate-400 block mb-2">Дата {type === "goods" ? "поставки" : "выполнения"}</label>
+                            <label className="text-[10px] font-bold uppercase text-slate-400 block mb-2">Дата {type === "goods" ? "поставки" : "выполнения"} <span className="text-red-500">*</span></label>
                             <div className="flex gap-2 mb-2 overflow-x-auto pb-1 no-scrollbar">
                                 <button type="button" onClick={() => setQuickDate("tomorrow")} className="px-3 py-1.5 bg-purple-50 text-purple-600 rounded-lg text-[10px] font-black uppercase whitespace-nowrap hover:bg-purple-100 transition">Завтра</button>
                                 <button type="button" onClick={() => setQuickDate("week")} className="px-3 py-1.5 bg-purple-50 text-purple-600 rounded-lg text-[10px] font-black uppercase whitespace-nowrap hover:bg-purple-100 transition">+Неделя</button>
                                 <button type="button" onClick={() => setQuickDate("month")} className="px-3 py-1.5 bg-purple-50 text-purple-600 rounded-lg text-[10px] font-black uppercase whitespace-nowrap hover:bg-purple-100 transition">+Месяц</button>
                             </div>
-                            <div className="relative"><Calendar className="absolute left-4 top-4 text-slate-400" size={20} /><input type="date" value={reqDate} onChange={(e) => setReqDate(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-4 font-bold text-slate-600" /></div>
+                            <div className="relative"><Calendar className="absolute left-4 top-4 text-slate-400" size={20} /><input type="date" value={reqDate} onChange={(e) => setReqDate(e.target.value)} className={`w-full bg-slate-50 border rounded-2xl py-4 pl-12 pr-4 font-bold text-slate-600 outline-none focus:ring-2 focus:ring-purple-500 ${!reqDate ? "border-red-300 ring-1 ring-red-100" : "border-slate-200"}`} /></div>
                         </div>
-                        <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows="4" className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 outline-none focus:ring-2 focus:ring-purple-500" placeholder="Подробное описание..."></textarea>
+                        <div>
+                            <label className="text-[10px] font-bold uppercase text-slate-400 block mb-2">Подробное описание <span className="text-red-500">*</span></label>
+                            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows="4" className={`w-full bg-slate-50 border rounded-2xl p-4 outline-none focus:ring-2 focus:ring-purple-500 ${!description.trim() ? "border-red-300 ring-1 ring-red-100" : "border-slate-200"}`} placeholder="Для чего это нужно, особенности, важные детали..."></textarea>
+                        </div>
                     </div>
 
                     {type === "goods" && (
@@ -427,15 +435,25 @@ export default function NewRequest() {
                                     <div key={item.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 relative" style={{ zIndex: 50 - index }}>
                                         <div className="absolute top-2 right-2 text-[10px] font-black text-slate-300">#{index + 1}</div>
                                         <div className="grid grid-cols-4 gap-2">
-                                            <div className="col-span-4"><input type="text" value={item.name} onChange={(e) => updateItem(item.id, "name", e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl p-3 text-xs font-bold" placeholder="Наименование" /></div>
-                                            <div className="col-span-1">
-                                                <input type="text" inputMode="decimal" value={item.qty} onChange={(e) => updateItem(item.id, "qty", e.target.value.replace(/[^0-9.,]/g, ''))} className="w-full bg-white border border-slate-200 rounded-xl p-3 text-xs text-center font-bold" placeholder="Кол-во" />
+                                            <div className="col-span-4">
+                                                <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block">Наименование <span className="text-red-500">*</span></label>
+                                                <input type="text" value={item.name} onChange={(e) => updateItem(item.id, "name", e.target.value)} className={`w-full bg-white border rounded-xl p-3 text-xs font-bold outline-none focus:border-orange-500 ${!item.name.trim() ? "border-red-300" : "border-slate-200"}`} placeholder="Что покупаем?" />
                                             </div>
-                                            <div className="col-span-2"><select value={item.unit} onChange={(e) => updateItem(item.id, "unit", e.target.value)} className={`w-full border rounded-xl p-3 text-xs font-bold cursor-pointer appearance-none transition-all ${item.unit === "" ? "bg-blue-50 border-blue-400 text-blue-600" : "bg-white border-slate-200 text-slate-600"}`}><option value="" disabled>Ед.изм</option>{units.map(u => <option key={u}>{u}</option>)}</select></div>
-                                            <div className="col-span-1 flex justify-center"><button type="button" onClick={() => removeItem(item.id)} className="p-2 text-red-300 hover:bg-white hover:text-red-500 rounded-full"><Trash2 size={20} /></button></div>
+                                            <div className="col-span-1">
+                                                <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block">Кол-во <span className="text-red-500">*</span></label>
+                                                <input type="text" inputMode="decimal" value={item.qty} onChange={(e) => updateItem(item.id, "qty", e.target.value.replace(/[^0-9.,]/g, ''))} className={`w-full bg-white border rounded-xl p-3 text-xs text-center font-bold outline-none focus:border-orange-500 ${!item.qty ? "border-red-300" : "border-slate-200"}`} placeholder="0" />
+                                            </div>
+                                            <div className="col-span-2">
+                                                <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block">Ед.изм <span className="text-red-500">*</span></label>
+                                                <select value={item.unit} onChange={(e) => updateItem(item.id, "unit", e.target.value)} className={`w-full border rounded-xl p-3 text-xs font-bold cursor-pointer appearance-none outline-none focus:border-orange-500 ${!item.unit ? "bg-red-50 border-red-300 text-red-600" : "bg-white border-slate-200 text-slate-600"}`}><option value="" disabled>Выбрать</option>{units.map(u => <option key={u}>{u}</option>)}</select>
+                                            </div>
+                                            <div className="col-span-1 flex items-end justify-center pb-1">
+                                                <button type="button" onClick={() => removeItem(item.id)} className="p-2 text-red-300 hover:bg-white hover:text-red-500 rounded-full transition"><Trash2 size={20} /></button>
+                                            </div>
                                             
                                             {/* БЛОК ПРИВЯЗКИ ТЕХНИКИ ИЛИ ОБЪЕКТА */}
-                                            <div className="col-span-4">
+                                            <div className="col-span-4 mt-1">
+                                                <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block">Для кого/чего (Привязка) <span className="text-red-500">*</span></label>
                                                 {(costType.includes("авто") || costType.includes("с/х")) ? (
                                                     <div className="relative" ref={activeBindingId === item.id ? bindingRef : null}>
                                                         <div className="relative">
@@ -448,7 +466,7 @@ export default function NewRequest() {
                                                                     setActiveBindingId(item.id);
                                                                 }}
                                                                 onFocus={() => setActiveBindingId(item.id)}
-                                                                className={`w-full bg-white border rounded-xl p-3 pl-9 text-xs font-bold text-blue-700 outline-none focus:ring-2 focus:ring-blue-500 ${costType.toLowerCase().includes("запчасть") && !item.binding ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"}`} 
+                                                                className={`w-full bg-white border rounded-xl p-3 pl-9 text-xs font-bold text-blue-700 outline-none focus:ring-2 focus:ring-blue-500 ${!item.binding.trim() ? "border-red-300 ring-1 ring-red-100" : "border-slate-200"}`} 
                                                                 placeholder={getBindingPlaceholder()} 
                                                             />
                                                         </div>
@@ -482,7 +500,7 @@ export default function NewRequest() {
                                                         )}
                                                     </div>
                                                 ) : (
-                                                    <input type="text" value={item.binding} onChange={(e) => updateItem(item.id, "binding", e.target.value)} className={`w-full bg-white border rounded-xl p-3 text-xs font-bold text-blue-700 ${costType.toLowerCase().includes("запчасть") && !item.binding ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"}`} placeholder={getBindingPlaceholder()} />
+                                                    <input type="text" value={item.binding} onChange={(e) => updateItem(item.id, "binding", e.target.value)} className={`w-full bg-white border rounded-xl p-3 text-xs font-bold text-blue-700 outline-none focus:border-blue-500 ${!item.binding.trim() ? "border-red-300 ring-1 ring-red-100" : "border-slate-200"}`} placeholder={getBindingPlaceholder()} />
                                                 )}
                                             </div>
                                         </div>
