@@ -1,5 +1,5 @@
 // ==========================================
-// ФАЙЛ: ПУЛЬТ АДМИНИСТРАТОРА (СО СКЛАДАМИ И ИСПОЛНИТЕЛЯМИ)
+// ФАЙЛ: ПУЛЬТ АДМИНИСТРАТОРА (ВСЕ 5 ВКЛАДОК ПОЛНОСТЬЮ)
 // ПУТЬ: app/admin/page.js
 // ==========================================
 
@@ -279,7 +279,78 @@ export default function AdminDashboard() {
         ) : (
             <div className="animate-in fade-in zoom-in-95 duration-300">
                 
-                {/* ВКЛАДКА: СКЛАДЫ (НОВОЕ) */}
+                {/* ВКЛАДКА 1: КОНСТРУКТОР МАРШРУТОВ */}
+                {activeTab === "routes" && (
+                    <div className="space-y-6 relative">
+                        <div className={`${theme.cardBg} p-5 rounded-2xl border ${theme.cardBorder} flex justify-between items-center sticky top-[140px] z-20 shadow-sm backdrop-blur-xl bg-opacity-90`}>
+                            <div>
+                                <h2 className="font-black text-sm uppercase text-purple-500 flex items-center gap-2"><Route size={18}/> Конструктор маршрута</h2>
+                            </div>
+                            <button onClick={() => setEditingStep({ isNew: true, role: '', action_name: '', condition_type: 'all', color: 'text-blue-500', executor_type: 'specific' })} className="px-4 py-2 bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-xl text-xs font-black flex items-center gap-1 transition">
+                                <Plus size={16}/> Добавить этап
+                            </button>
+                        </div>
+                        
+                        <div className="space-y-3 pl-4 sm:pl-8 relative border-l-2 border-dashed border-purple-200 dark:border-purple-900/50 pb-8">
+                            <div className={`${theme.cardBg} p-4 rounded-2xl border ${theme.cardBorder} relative shadow-sm`}>
+                                <div className="absolute -left-[26px] sm:-left-[42px] top-1/2 -translate-y-1/2 w-4 h-4 bg-purple-500 rounded-full border-4 border-white dark:border-[#0B1121]"></div>
+                                <div className="text-[10px] font-black text-blue-500 mb-1">СТАРТ</div>
+                                <div className="font-black text-sm uppercase">Инициатор</div>
+                            </div>
+
+                            {workflow.map((step, index) => (
+                                <div key={step.id || index} className={`${theme.cardBg} p-4 rounded-2xl border ${theme.cardBorder} relative flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-all hover:border-purple-300 shadow-sm`}>
+                                    <div className="absolute -left-[26px] sm:-left-[42px] top-1/2 -translate-y-1/2 w-4 h-4 bg-slate-300 dark:bg-slate-700 rounded-full border-4 border-white dark:border-[#0B1121]"></div>
+                                    
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 ${theme.textMuted}`}>ЭТАП {step.step_order}</span>
+                                            {step.condition_type === 'only_goods' && <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-700">📦 Только Товары</span>}
+                                            {step.condition_type === 'only_services' && <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-pink-100 text-pink-700">🛠 Только Услуги</span>}
+                                        </div>
+                                        <div className="font-black text-sm uppercase">{step.role}</div>
+                                        <div className={`text-xs mt-0.5 ${theme.textMuted} font-medium`}>{step.action_name}</div>
+                                        
+                                        <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400">
+                                            <User size={10}/> {getExecutorName(step)}
+                                        </div>
+                                        {step.executor_type === 'specific' && !step.executor_id && (
+                                            <span className="ml-2 text-[10px] text-red-500 font-bold animate-pulse">Укажите человека!</span>
+                                        )}
+                                    </div>
+
+                                    <div className="flex items-center gap-1 sm:gap-2 w-full sm:w-auto justify-end bg-slate-50 dark:bg-[#0F172A] p-1.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                                        <button onClick={() => moveStep(index, 'up')} disabled={index === 0} className="p-2 text-slate-400 hover:text-blue-500 hover:bg-white dark:hover:bg-[#1E293B] rounded-lg disabled:opacity-30 transition"><ArrowUp size={16}/></button>
+                                        <button onClick={() => moveStep(index, 'down')} disabled={index === workflow.length - 1} className="p-2 text-slate-400 hover:text-blue-500 hover:bg-white dark:hover:bg-[#1E293B] rounded-lg disabled:opacity-30 transition"><ArrowDown size={16}/></button>
+                                        <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1"></div>
+                                        <button onClick={() => setEditingStep(step)} className="p-2 text-slate-400 hover:text-amber-500 hover:bg-white dark:hover:bg-[#1E293B] rounded-lg transition"><Edit2 size={16}/></button>
+                                        <button onClick={() => deleteStep(index)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-white dark:hover:bg-[#1E293B] rounded-lg transition"><Trash2 size={16}/></button>
+                                    </div>
+                                </div>
+                            ))}
+
+                            <div className={`${theme.cardBg} p-4 rounded-2xl border ${theme.cardBorder} relative shadow-sm opacity-60`}>
+                                <div className="absolute -left-[26px] sm:-left-[42px] top-1/2 -translate-y-1/2 w-4 h-4 bg-emerald-500 rounded-full border-4 border-white dark:border-[#0B1121]"></div>
+                                <div className="text-[10px] font-black text-emerald-500 mb-1">ФИНИШ</div>
+                                <div className="font-black text-sm uppercase">Архив / Исполнено</div>
+                            </div>
+                        </div>
+
+                        {isWorkflowModified && (
+                            <div className="fixed bottom-6 left-0 w-full px-4 flex justify-center z-50 animate-in slide-in-from-bottom-10">
+                                <div className="bg-white dark:bg-slate-800 p-3 rounded-2xl shadow-2xl border border-rose-500 ring-4 ring-rose-500/20 flex items-center gap-4">
+                                    <span className="text-xs font-bold text-slate-700 dark:text-slate-200 pl-2">Маршрут изменен!</span>
+                                    <button onClick={saveWorkflowToDB} disabled={savingId === "workflow"} className="px-6 py-3 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-black text-xs uppercase shadow-lg shadow-rose-500/40 flex items-center gap-2 transition">
+                                        {savingId === "workflow" ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>}
+                                        Сохранить для всех
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* ВКЛАДКА 2: СКЛАДЫ */}
                 {activeTab === "warehouses" && (
                     <div className="space-y-4">
                         <div className={`${theme.cardBg} p-5 rounded-2xl border ${theme.cardBorder} flex items-center gap-4 mb-6`}>
@@ -302,9 +373,9 @@ export default function AdminDashboard() {
                                         </div>
                                     </div>
                                     <div className="p-5 flex-1">
-                                        <label className={`text-[10px] font-bold uppercase ${theme.textMuted} block mb-1.5 ml-1`}>Ответственный Кладовщик (Исполнитель)</label>
+                                        <label className={`text-[10px] font-bold uppercase ${theme.textMuted} block mb-1.5 ml-1`}>Ответственный Кладовщик</label>
                                         <select value={wh.manager_id || ""} onChange={(e) => handleUpdateWarehouseManager(wh.id, e.target.value)} className={`w-full ${theme.inputBg} border ${theme.cardBorder} rounded-xl p-3 text-xs font-bold ${theme.textMain} outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer appearance-none`}>
-                                            <option value="">Не назначен (Система выдаст ошибку маршрута)</option>
+                                            <option value="">Не назначен (Будет ошибка маршрута)</option>
                                             {activeEmployees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
                                         </select>
                                     </div>
@@ -319,76 +390,132 @@ export default function AdminDashboard() {
                     </div>
                 )}
 
-                {/* ВКЛАДКА: КОНСТРУКТОР МАРШРУТОВ */}
-                {activeTab === "routes" && (
-                    <div className="space-y-6 relative">
-                        <div className={`${theme.cardBg} p-5 rounded-2xl border ${theme.cardBorder} flex justify-between items-center sticky top-[140px] z-20 shadow-sm backdrop-blur-xl bg-opacity-90`}>
+                {/* ВКЛАДКА 3: СТРУКТУРА (ОТДЕЛЫ И ЗАМЫ) */}
+                {activeTab === "departments" && (
+                    <div className="space-y-4">
+                        <div className={`${theme.cardBg} p-5 rounded-2xl border ${theme.cardBorder} flex items-center gap-4 mb-6`}>
+                            <div className="p-3 bg-blue-500/10 text-blue-500 rounded-xl"><Building2 size={24}/></div>
                             <div>
-                                <h2 className="font-black text-sm uppercase text-purple-500 flex items-center gap-2"><Route size={18}/> Конструктор маршрута</h2>
+                                <h2 className="font-black text-sm uppercase">Управление отделами</h2>
+                                <p className={`text-xs ${theme.textMuted} mt-1`}>Назначайте руководителей и передавайте права замам на время отпуска.</p>
                             </div>
-                            <button onClick={() => setEditingStep({ isNew: true, role: '', action_name: '', condition_type: 'all', color: 'text-blue-500', executor_type: 'specific' })} className="px-4 py-2 bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-xl text-xs font-black flex items-center gap-1 transition">
-                                <Plus size={16}/> Добавить этап
-                            </button>
                         </div>
                         
-                        <div className="space-y-3 pl-4 sm:pl-8 relative border-l-2 border-dashed border-purple-200 dark:border-purple-900/50 pb-8">
-                            {/* СТАРТОВЫЙ БЛОК */}
-                            <div className={`${theme.cardBg} p-4 rounded-2xl border ${theme.cardBorder} relative shadow-sm`}>
-                                <div className="absolute -left-[26px] sm:-left-[42px] top-1/2 -translate-y-1/2 w-4 h-4 bg-purple-500 rounded-full border-4 border-white dark:border-[#0B1121]"></div>
-                                <div className="text-[10px] font-black text-blue-500 mb-1">СТАРТ</div>
-                                <div className="font-black text-sm uppercase">Инициатор</div>
-                            </div>
-
-                            {workflow.map((step, index) => (
-                                <div key={step.id || index} className={`${theme.cardBg} p-4 rounded-2xl border ${theme.cardBorder} relative flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-all hover:border-purple-300 shadow-sm`}>
-                                    <div className="absolute -left-[26px] sm:-left-[42px] top-1/2 -translate-y-1/2 w-4 h-4 bg-slate-300 dark:bg-slate-700 rounded-full border-4 border-white dark:border-[#0B1121]"></div>
-                                    
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 ${theme.textMuted}`}>ЭТАП {step.step_order}</span>
-                                            {step.condition_type === 'only_goods' && <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-700">📦 Только Товары</span>}
-                                            {step.condition_type === 'only_services' && <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-pink-100 text-pink-700">🛠 Только Услуги</span>}
-                                        </div>
-                                        <div className="font-black text-sm uppercase">{step.role}</div>
-                                        <div className={`text-xs mt-0.5 ${theme.textMuted} font-medium`}>{step.action_name}</div>
-                                        
-                                        {/* ВЫВОД КТО ИСПОЛНИТЕЛЬ */}
-                                        <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400">
-                                            <User size={10}/> {getExecutorName(step)}
-                                        </div>
-                                        {step.executor_type === 'specific' && !step.executor_id && (
-                                            <span className="ml-2 text-[10px] text-red-500 font-bold animate-pulse">Укажите человека!</span>
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                            {departments.map((dept) => (
+                                <div key={dept.id} className={`${theme.cardBg} rounded-[24px] border ${theme.cardBorder} shadow-sm overflow-hidden flex flex-col transition hover:border-rose-500/50`}>
+                                    <div className={`p-4 border-b ${theme.cardBorder} flex justify-between items-center ${dept.is_head_absent ? (isDark ? "bg-amber-500/10" : "bg-amber-50") : (isDark ? "bg-[#0F172A]" : "bg-slate-50")}`}>
+                                        <h3 className="font-black uppercase text-sm">{dept.name}</h3>
+                                        {dept.is_head_absent ? (
+                                            <span className="bg-amber-500 text-white text-[9px] font-black uppercase px-2 py-1 rounded-md flex items-center gap-1 shadow-sm"><UserX size={12}/> И.О.</span>
+                                        ) : (
+                                            <span className="bg-emerald-500 text-white text-[9px] font-black uppercase px-2 py-1 rounded-md flex items-center gap-1 shadow-sm"><CheckCircle2 size={12}/> Штат</span>
                                         )}
                                     </div>
-
-                                    {/* Панель управления этапом */}
-                                    <div className="flex items-center gap-1 sm:gap-2 w-full sm:w-auto justify-end bg-slate-50 dark:bg-[#0F172A] p-1.5 rounded-xl border border-slate-100 dark:border-slate-800">
-                                        <button onClick={() => moveStep(index, 'up')} disabled={index === 0} className="p-2 text-slate-400 hover:text-blue-500 hover:bg-white dark:hover:bg-[#1E293B] rounded-lg disabled:opacity-30 transition"><ArrowUp size={16}/></button>
-                                        <button onClick={() => moveStep(index, 'down')} disabled={index === workflow.length - 1} className="p-2 text-slate-400 hover:text-blue-500 hover:bg-white dark:hover:bg-[#1E293B] rounded-lg disabled:opacity-30 transition"><ArrowDown size={16}/></button>
-                                        <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1"></div>
-                                        <button onClick={() => setEditingStep(step)} className="p-2 text-slate-400 hover:text-amber-500 hover:bg-white dark:hover:bg-[#1E293B] rounded-lg transition"><Edit2 size={16}/></button>
-                                        <button onClick={() => deleteStep(index)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-white dark:hover:bg-[#1E293B] rounded-lg transition"><Trash2 size={16}/></button>
+                                    <div className="p-5 flex-1 space-y-4">
+                                        <div>
+                                            <label className={`text-[10px] font-bold uppercase ${theme.textMuted} block mb-1.5 ml-1`}>Руководитель</label>
+                                            <select value={dept.head_id || ""} onChange={(e) => handleUpdateDeptField(dept.id, 'head_id', e.target.value)} className={`w-full ${theme.inputBg} border ${theme.cardBorder} rounded-xl p-3 text-xs font-bold ${theme.textMain} outline-none focus:ring-2 focus:ring-rose-500 cursor-pointer appearance-none`}>
+                                                <option value="">Не назначен</option>
+                                                {activeEmployees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className={`text-[10px] font-bold uppercase ${theme.textMuted} block mb-1.5 ml-1`}>Заместитель (И.О.)</label>
+                                            <select value={dept.deputy_id || ""} onChange={(e) => handleUpdateDeptField(dept.id, 'deputy_id', e.target.value)} className={`w-full ${theme.inputBg} border ${theme.cardBorder} rounded-xl p-3 text-xs font-bold ${theme.textMain} outline-none focus:ring-2 focus:ring-rose-500 cursor-pointer appearance-none`}>
+                                                <option value="">Нет заместителя</option>
+                                                {activeEmployees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+                                            </select>
+                                        </div>
+                                        <div className={`p-3 rounded-xl border ${theme.cardBorder} flex items-center justify-between cursor-pointer transition ${dept.is_head_absent ? (isDark ? "bg-amber-500/10 border-amber-500/30" : "bg-amber-50 border-amber-200") : ""}`} onClick={() => handleUpdateDeptField(dept.id, 'is_head_absent', !dept.is_head_absent)}>
+                                            <div className="flex items-center gap-2">
+                                                <Users size={16} className={dept.is_head_absent ? "text-amber-500" : theme.textMuted}/>
+                                                <div>
+                                                    <p className={`text-xs font-black ${dept.is_head_absent ? (isDark ? "text-amber-400" : "text-amber-700") : theme.textMain}`}>Начальник отсутствует</p>
+                                                    <p className={`text-[9px] font-bold ${theme.textMuted}`}>Права передаются заму</p>
+                                                </div>
+                                            </div>
+                                            {dept.is_head_absent ? <ToggleRight size={32} className="text-amber-500"/> : <ToggleLeft size={32} className={theme.textMuted}/>}
+                                        </div>
+                                    </div>
+                                    <div className={`p-4 border-t ${theme.cardBorder} ${isDark ? 'bg-[#0F172A]' : 'bg-slate-50'}`}>
+                                        <button onClick={() => handleSaveDepartment(dept)} disabled={savingId === dept.id} className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2">
+                                            {savingId === dept.id ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} {savingId === dept.id ? "Сохранение..." : "Сохранить"}
+                                        </button>
                                     </div>
                                 </div>
                             ))}
                         </div>
-
-                        {isWorkflowModified && (
-                            <div className="fixed bottom-6 left-0 w-full px-4 flex justify-center z-50 animate-in slide-in-from-bottom-10">
-                                <div className="bg-white dark:bg-slate-800 p-3 rounded-2xl shadow-2xl border border-rose-500 ring-4 ring-rose-500/20 flex items-center gap-4">
-                                    <span className="text-xs font-bold text-slate-700 dark:text-slate-200 pl-2">Маршрут изменен!</span>
-                                    <button onClick={saveWorkflowToDB} disabled={savingId === "workflow"} className="px-6 py-3 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-black text-xs uppercase shadow-lg shadow-rose-500/40 flex items-center gap-2 transition">
-                                        {savingId === "workflow" ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>}
-                                        Сохранить для всех
-                                    </button>
-                                </div>
-                            </div>
-                        )}
                     </div>
                 )}
 
-                {/* (Остальные вкладки) */}
-                {activeTab === "departments" && ( <div className="p-10 text-center text-slate-400">Вкладка "Структура" временно скрыта в коде для экономии, но работает!</div> )}
+                {/* ВКЛАДКА 4: БД СОТРУДНИКОВ */}
+                {activeTab === "employees" && (
+                    <div className={`${theme.cardBg} rounded-[24px] border ${theme.cardBorder} overflow-hidden shadow-sm`}>
+                        <div className={`p-5 border-b ${theme.cardBorder} flex flex-col sm:flex-row justify-between items-center gap-4`}>
+                            <h2 className="font-black uppercase text-sm flex items-center gap-2"><Users className="text-emerald-500" size={18}/> База Людей ({employees.length})</h2>
+                            <div className="relative w-full sm:w-64">
+                                <Search className="absolute left-3 top-2.5 text-slate-400" size={16}/>
+                                <input type="text" value={searchEmp} onChange={e => setSearchEmp(e.target.value)} placeholder="Поиск по ФИО..." className={`w-full ${theme.inputBg} border ${theme.cardBorder} rounded-xl py-2 pl-9 pr-4 text-xs font-bold outline-none focus:border-emerald-500`} />
+                            </div>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs">
+                                <thead className={`text-[10px] uppercase ${theme.textMuted} ${isDark ? 'bg-[#0F172A]' : 'bg-slate-50'}`}>
+                                    <tr><th className="p-4 font-black">ФИО</th><th className="p-4 font-black">Должность</th><th className="p-4 font-black">Отдел</th><th className="p-4 font-black text-center">Доступ (Активен)</th></tr>
+                                </thead>
+                                <tbody>
+                                    {employees.filter(e => e.name?.toLowerCase().includes(searchEmp.toLowerCase())).map(emp => (
+                                        <tr key={emp.id} className={`border-b ${theme.cardBorder} hover:${isDark ? 'bg-[#0F172A]' : 'bg-slate-50'}`}>
+                                            <td className={`p-4 font-bold ${!emp.is_active && 'opacity-50 line-through'}`}>{emp.name}</td>
+                                            <td className={`p-4 ${theme.textMuted}`}>{emp.position || '-'}</td>
+                                            <td className="p-4"><span className={`px-2 py-1 rounded-md text-[9px] font-black ${isDark ? 'bg-[#0B1121] text-indigo-400' : 'bg-indigo-50 text-indigo-600'}`}>{emp.department || '-'}</span></td>
+                                            <td className="p-4 text-center">
+                                                <button onClick={() => toggleEmployeeActive(emp)} className={`p-1.5 rounded-lg transition ${emp.is_active ? 'bg-emerald-500/20 text-emerald-500' : 'bg-rose-500/20 text-rose-500'}`} title={emp.is_active ? "Отключить доступ (Уволен/Декрет)" : "Включить доступ"}>
+                                                    {emp.is_active ? <ToggleRight size={20}/> : <ToggleLeft size={20}/>}
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
+                {/* ВКЛАДКА 5: БД ТЕХНИКИ */}
+                {activeTab === "equipment" && (
+                    <div className={`${theme.cardBg} rounded-[24px] border ${theme.cardBorder} overflow-hidden shadow-sm`}>
+                        <div className={`p-5 border-b ${theme.cardBorder} flex flex-col sm:flex-row justify-between items-center gap-4`}>
+                            <h2 className="font-black uppercase text-sm flex items-center gap-2"><Tractor className="text-orange-500" size={18}/> Автопарк ({equipment.length})</h2>
+                            <div className="relative w-full sm:w-64">
+                                <Search className="absolute left-3 top-2.5 text-slate-400" size={16}/>
+                                <input type="text" value={searchEq} onChange={e => setSearchEq(e.target.value)} placeholder="Поиск (название, госномер)..." className={`w-full ${theme.inputBg} border ${theme.cardBorder} rounded-xl py-2 pl-9 pr-4 text-xs font-bold outline-none focus:border-orange-500`} />
+                            </div>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs">
+                                <thead className={`text-[10px] uppercase ${theme.textMuted} ${isDark ? 'bg-[#0F172A]' : 'bg-slate-50'}`}>
+                                    <tr><th className="p-4 font-black">Марка / Название</th><th className="p-4 font-black">Госномер</th><th className="p-4 font-black">Тип</th><th className="p-4 font-black text-center">Статус (В строю)</th></tr>
+                                </thead>
+                                <tbody>
+                                    {equipment.filter(eq => (eq.name + eq.inventory_number).toLowerCase().includes(searchEq.toLowerCase())).map(eq => (
+                                        <tr key={eq.id} className={`border-b ${theme.cardBorder} hover:${isDark ? 'bg-[#0F172A]' : 'bg-slate-50'}`}>
+                                            <td className={`p-4 font-bold ${!eq.is_active && 'opacity-50 line-through'}`}>{eq.name}</td>
+                                            <td className="p-4"><span className={`px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-wider border ${isDark ? 'border-slate-700 text-slate-300' : 'border-slate-200 text-slate-700'}`}>{eq.inventory_number || 'Б/Н'}</span></td>
+                                            <td className={`p-4 ${theme.textMuted}`}>{eq.type || '-'}</td>
+                                            <td className="p-4 text-center">
+                                                <button onClick={() => toggleEquipmentActive(eq)} className={`p-1.5 rounded-lg transition ${eq.is_active ? 'bg-orange-500/20 text-orange-500' : 'bg-slate-500/20 text-slate-500'}`} title={eq.is_active ? "Списать / В ремонт" : "Вернуть в строй"}>
+                                                    {eq.is_active ? <ToggleRight size={20}/> : <ToggleLeft size={20}/>}
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
 
             </div>
         )}
