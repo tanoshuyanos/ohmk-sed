@@ -1,5 +1,5 @@
 // ==========================================
-// ФАЙЛ: ПУЛЬТ АДМИНИСТРАТОРА (ВСЕ 5 ВКЛАДОК ПОЛНОСТЬЮ)
+// ФАЙЛ: ПУЛЬТ АДМИНИСТРАТОРА (С РЕДАКТИРОВАНИЕМ БАЗ)
 // ПУТЬ: app/admin/page.js
 // ==========================================
 
@@ -32,10 +32,13 @@ export default function AdminDashboard() {
   const [equipment, setEquipment] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   
-  // Конструктор маршрутов
   const [workflow, setWorkflow] = useState([]);
   const [isWorkflowModified, setIsWorkflowModified] = useState(false);
   const [editingStep, setEditingStep] = useState(null); 
+  
+  // Модалки для редактирования Людей и Техники
+  const [editingEmployee, setEditingEmployee] = useState(null);
+  const [editingEquipment, setEditingEquipment] = useState(null);
   
   const [searchEmp, setSearchEmp] = useState("");
   const [searchEq, setSearchEq] = useState("");
@@ -84,16 +87,71 @@ export default function AdminDashboard() {
       setTimeout(() => setSavingId(null), 500);
   };
 
-  // --- ЛОГИКА СОТРУДНИКОВ И ТЕХНИКИ ---
+  // --- ЛОГИКА СОТРУДНИКОВ (CRUD) ---
   const toggleEmployeeActive = async (emp) => {
       const newVal = !emp.is_active;
       setEmployees(employees.map(e => e.id === emp.id ? { ...e, is_active: newVal } : e));
       await supabase.from("v2_employees").update({ is_active: newVal }).eq("id", emp.id);
   };
+
+  const handleSaveEmployee = async () => {
+      if (!editingEmployee.name?.trim()) return alert("ФИО обязательно!");
+      setSavingId("emp_save");
+
+      const payload = {
+          name: editingEmployee.name,
+          position: editingEmployee.position,
+          department: editingEmployee.department,
+          pin_code: editingEmployee.pin_code,
+          password: editingEmployee.pin_code // Синхронизируем старое поле password
+      };
+
+      if (editingEmployee.isNew) {
+          payload.is_active = true;
+          const { data, error } = await supabase.from("v2_employees").insert([payload]).select();
+          if (error) alert("Ошибка: " + error.message);
+          else setEmployees([...employees, data[0]].sort((a,b) => a.name.localeCompare(b.name)));
+      } else {
+          const { error } = await supabase.from("v2_employees").update(payload).eq("id", editingEmployee.id);
+          if (error) alert("Ошибка: " + error.message);
+          else setEmployees(employees.map(e => e.id === editingEmployee.id ? { ...e, ...payload } : e));
+      }
+      
+      setSavingId(null);
+      setEditingEmployee(null);
+  };
+
+  // --- ЛОГИКА ТЕХНИКИ (CRUD) ---
   const toggleEquipmentActive = async (eq) => {
       const newVal = !eq.is_active;
       setEquipment(equipment.map(e => e.id === eq.id ? { ...e, is_active: newVal } : e));
       await supabase.from("v2_equipment").update({ is_active: newVal }).eq("id", eq.id);
+  };
+
+  const handleSaveEquipment = async () => {
+      if (!editingEquipment.name?.trim()) return alert("Марка/Название обязательно!");
+      setSavingId("eq_save");
+
+      const payload = {
+          name: editingEquipment.name,
+          inventory_number: editingEquipment.inventory_number,
+          type: editingEquipment.type,
+          department: editingEquipment.department
+      };
+
+      if (editingEquipment.isNew) {
+          payload.is_active = true;
+          const { data, error } = await supabase.from("v2_equipment").insert([payload]).select();
+          if (error) alert("Ошибка: " + error.message);
+          else setEquipment([...equipment, data[0]].sort((a,b) => a.name.localeCompare(b.name)));
+      } else {
+          const { error } = await supabase.from("v2_equipment").update(payload).eq("id", editingEquipment.id);
+          if (error) alert("Ошибка: " + error.message);
+          else setEquipment(equipment.map(e => e.id === editingEquipment.id ? { ...e, ...payload } : e));
+      }
+      
+      setSavingId(null);
+      setEditingEquipment(null);
   };
 
   // --- ЛОГИКА КОНСТРУКТОРА МАРШРУТОВ ---
@@ -140,11 +198,7 @@ export default function AdminDashboard() {
       
       let newWf = [...workflow];
       if (editingStep.isNew) {
-          newWf.push({
-              id: Date.now(),
-              step_order: newWf.length + 1,
-              ...editingStep
-          });
+          newWf.push({ id: Date.now(), step_order: newWf.length + 1, ...editingStep });
       } else {
           newWf = newWf.map(s => s.id === editingStep.id ? { ...s, ...editingStep } : s);
       }
@@ -195,12 +249,11 @@ export default function AdminDashboard() {
   return (
     <div className={`min-h-screen ${theme.bgMain} ${theme.textMain} font-sans pb-32 transition-colors duration-500`}>
       
-      {/* МОДАЛКА РЕДАКТИРОВАНИЯ ЭТАПА */}
+      {/* МОДАЛКА РЕДАКТИРОВАНИЯ ЭТАПА МАРШРУТА */}
       {editingStep && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
               <div className={`${theme.cardBg} w-full max-w-md rounded-[32px] border ${theme.cardBorder} p-6 shadow-2xl animate-in zoom-in-95`}>
                   <h3 className="font-black text-lg mb-4">{editingStep.isNew ? "Новый этап" : "Редактировать этап"}</h3>
-                  
                   <div className="space-y-4">
                       <div>
                           <label className={`text-[10px] font-bold uppercase ${theme.textMuted} block mb-1`}>Роль (Название этапа)</label>
@@ -210,8 +263,6 @@ export default function AdminDashboard() {
                           <label className={`text-[10px] font-bold uppercase ${theme.textMuted} block mb-1`}>Действие (Что он делает)</label>
                           <input type="text" value={editingStep.action_name} onChange={e => setEditingStep({...editingStep, action_name: e.target.value})} className={`w-full ${theme.inputBg} border ${theme.cardBorder} rounded-xl p-3 text-sm font-bold outline-none focus:border-purple-500`} placeholder="Например: Проверка договора" />
                       </div>
-                      
-                      {/* НАЗНАЧЕНИЕ ИСПОЛНИТЕЛЯ */}
                       <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/20">
                           <label className={`text-[10px] font-black uppercase text-purple-600 block mb-2 flex items-center gap-1`}><User size={12}/> Кто выполняет этот этап?</label>
                           <select value={editingStep.executor_type || 'specific'} onChange={e => setEditingStep({...editingStep, executor_type: e.target.value, executor_id: null})} className={`w-full bg-white dark:bg-[#0B1121] border ${theme.cardBorder} rounded-xl p-3 text-xs font-bold outline-none focus:border-purple-500 mb-2`}>
@@ -219,7 +270,6 @@ export default function AdminDashboard() {
                               <option value="auto_dept">Авто: Начальник отдела (из заявки)</option>
                               <option value="auto_warehouse">Авто: Профильный склад (по категории)</option>
                           </select>
-                          
                           {editingStep.executor_type === 'specific' && (
                               <select value={editingStep.executor_id || ''} onChange={e => setEditingStep({...editingStep, executor_id: e.target.value})} className={`w-full bg-white dark:bg-[#0B1121] border ${!editingStep.executor_id ? 'border-red-400' : theme.cardBorder} rounded-xl p-3 text-xs font-bold outline-none focus:border-purple-500`}>
                                   <option value="" disabled>Выберите сотрудника...</option>
@@ -227,7 +277,6 @@ export default function AdminDashboard() {
                               </select>
                           )}
                       </div>
-
                       <div>
                           <label className={`text-[10px] font-bold uppercase ${theme.textMuted} block mb-1`}>Условие (Когда этот этап нужен)</label>
                           <select value={editingStep.condition_type || 'all'} onChange={e => setEditingStep({...editingStep, condition_type: e.target.value})} className={`w-full ${theme.inputBg} border ${theme.cardBorder} rounded-xl p-3 text-sm font-bold outline-none focus:border-purple-500`}>
@@ -237,10 +286,81 @@ export default function AdminDashboard() {
                           </select>
                       </div>
                   </div>
-
                   <div className="flex gap-2 mt-6">
                       <button onClick={() => setEditingStep(null)} className="flex-1 py-3 rounded-xl font-bold border border-slate-500 text-slate-500">Отмена</button>
                       <button onClick={handleSaveEditedStep} className="flex-1 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-xl font-bold shadow-lg shadow-purple-500/30">Сохранить</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* МОДАЛКА РЕДАКТИРОВАНИЯ СОТРУДНИКА */}
+      {editingEmployee && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+              <div className={`${theme.cardBg} w-full max-w-md rounded-[32px] border ${theme.cardBorder} p-6 shadow-2xl animate-in zoom-in-95`}>
+                  <h3 className="font-black text-lg mb-4 flex items-center gap-2"><Users className="text-emerald-500"/> {editingEmployee.isNew ? "Новый сотрудник" : "Редактировать профиль"}</h3>
+                  <div className="space-y-4">
+                      <div>
+                          <label className={`text-[10px] font-bold uppercase ${theme.textMuted} block mb-1`}>ФИО *</label>
+                          <input type="text" value={editingEmployee.name || ''} onChange={e => setEditingEmployee({...editingEmployee, name: e.target.value})} className={`w-full ${theme.inputBg} border ${theme.cardBorder} rounded-xl p-3 text-sm font-bold outline-none focus:border-emerald-500`} placeholder="Иванов И.И." />
+                      </div>
+                      <div>
+                          <label className={`text-[10px] font-bold uppercase ${theme.textMuted} block mb-1`}>Должность</label>
+                          <input type="text" value={editingEmployee.position || ''} onChange={e => setEditingEmployee({...editingEmployee, position: e.target.value})} className={`w-full ${theme.inputBg} border ${theme.cardBorder} rounded-xl p-3 text-sm font-bold outline-none focus:border-emerald-500`} placeholder="Водитель" />
+                      </div>
+                      <div>
+                          <label className={`text-[10px] font-bold uppercase ${theme.textMuted} block mb-1`}>Подразделение (Отдел)</label>
+                          <select value={editingEmployee.department || ''} onChange={e => setEditingEmployee({...editingEmployee, department: e.target.value})} className={`w-full ${theme.inputBg} border ${theme.cardBorder} rounded-xl p-3 text-sm font-bold outline-none focus:border-emerald-500`}>
+                              <option value="">Без отдела</option>
+                              {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                          </select>
+                      </div>
+                      <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                          <label className={`text-[10px] font-black uppercase text-blue-500 block mb-1`}>PIN-код (Для входа в систему)</label>
+                          <input type="text" value={editingEmployee.pin_code || ''} onChange={e => setEditingEmployee({...editingEmployee, pin_code: e.target.value})} className={`w-full bg-white dark:bg-[#0B1121] border ${theme.cardBorder} rounded-xl p-3 text-sm font-bold tracking-widest outline-none focus:border-blue-500`} placeholder="1234" />
+                      </div>
+                  </div>
+                  <div className="flex gap-2 mt-6">
+                      <button onClick={() => setEditingEmployee(null)} className="flex-1 py-3 rounded-xl font-bold border border-slate-500 text-slate-500">Отмена</button>
+                      <button onClick={handleSaveEmployee} disabled={savingId === "emp_save"} className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2">
+                          {savingId === "emp_save" ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} Сохранить
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* МОДАЛКА РЕДАКТИРОВАНИЯ ТЕХНИКИ */}
+      {editingEquipment && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+              <div className={`${theme.cardBg} w-full max-w-md rounded-[32px] border ${theme.cardBorder} p-6 shadow-2xl animate-in zoom-in-95`}>
+                  <h3 className="font-black text-lg mb-4 flex items-center gap-2"><Tractor className="text-orange-500"/> {editingEquipment.isNew ? "Новая техника" : "Редактировать машину"}</h3>
+                  <div className="space-y-4">
+                      <div>
+                          <label className={`text-[10px] font-bold uppercase ${theme.textMuted} block mb-1`}>Марка / Название *</label>
+                          <input type="text" value={editingEquipment.name || ''} onChange={e => setEditingEquipment({...editingEquipment, name: e.target.value})} className={`w-full ${theme.inputBg} border ${theme.cardBorder} rounded-xl p-3 text-sm font-bold outline-none focus:border-orange-500`} placeholder="КамАЗ 65115" />
+                      </div>
+                      <div>
+                          <label className={`text-[10px] font-bold uppercase ${theme.textMuted} block mb-1`}>Госномер / Инв. номер</label>
+                          <input type="text" value={editingEquipment.inventory_number || ''} onChange={e => setEditingEquipment({...editingEquipment, inventory_number: e.target.value})} className={`w-full ${theme.inputBg} border ${theme.cardBorder} rounded-xl p-3 text-sm font-bold outline-none focus:border-orange-500`} placeholder="123 ABC 16" />
+                      </div>
+                      <div>
+                          <label className={`text-[10px] font-bold uppercase ${theme.textMuted} block mb-1`}>Тип (Класс)</label>
+                          <input type="text" value={editingEquipment.type || ''} onChange={e => setEditingEquipment({...editingEquipment, type: e.target.value})} className={`w-full ${theme.inputBg} border ${theme.cardBorder} rounded-xl p-3 text-sm font-bold outline-none focus:border-orange-500`} placeholder="Грузовые / Спецтехника" />
+                      </div>
+                      <div>
+                          <label className={`text-[10px] font-bold uppercase ${theme.textMuted} block mb-1`}>Привязка к отделу (Опционально)</label>
+                          <select value={editingEquipment.department || ''} onChange={e => setEditingEquipment({...editingEquipment, department: e.target.value})} className={`w-full ${theme.inputBg} border ${theme.cardBorder} rounded-xl p-3 text-sm font-bold outline-none focus:border-orange-500`}>
+                              <option value="">Общая / Без привязки</option>
+                              {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                          </select>
+                      </div>
+                  </div>
+                  <div className="flex gap-2 mt-6">
+                      <button onClick={() => setEditingEquipment(null)} className="flex-1 py-3 rounded-xl font-bold border border-slate-500 text-slate-500">Отмена</button>
+                      <button onClick={handleSaveEquipment} disabled={savingId === "eq_save"} className="flex-1 py-3 bg-orange-600 hover:bg-orange-500 text-white rounded-xl font-bold shadow-lg shadow-orange-500/30 flex items-center justify-center gap-2">
+                          {savingId === "eq_save" ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} Сохранить
+                      </button>
                   </div>
               </div>
           </div>
@@ -279,7 +399,7 @@ export default function AdminDashboard() {
         ) : (
             <div className="animate-in fade-in zoom-in-95 duration-300">
                 
-                {/* ВКЛАДКА 1: КОНСТРУКТОР МАРШРУТОВ */}
+                {/* ВКЛАДКА 1: МАРШРУТЫ */}
                 {activeTab === "routes" && (
                     <div className="space-y-6 relative">
                         <div className={`${theme.cardBg} p-5 rounded-2xl border ${theme.cardBorder} flex justify-between items-center sticky top-[140px] z-20 shadow-sm backdrop-blur-xl bg-opacity-90`}>
@@ -301,7 +421,6 @@ export default function AdminDashboard() {
                             {workflow.map((step, index) => (
                                 <div key={step.id || index} className={`${theme.cardBg} p-4 rounded-2xl border ${theme.cardBorder} relative flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-all hover:border-purple-300 shadow-sm`}>
                                     <div className="absolute -left-[26px] sm:-left-[42px] top-1/2 -translate-y-1/2 w-4 h-4 bg-slate-300 dark:bg-slate-700 rounded-full border-4 border-white dark:border-[#0B1121]"></div>
-                                    
                                     <div className="flex-1">
                                         <div className="flex items-center gap-2 mb-1">
                                             <span className={`text-[10px] font-black px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 ${theme.textMuted}`}>ЭТАП {step.step_order}</span>
@@ -310,7 +429,6 @@ export default function AdminDashboard() {
                                         </div>
                                         <div className="font-black text-sm uppercase">{step.role}</div>
                                         <div className={`text-xs mt-0.5 ${theme.textMuted} font-medium`}>{step.action_name}</div>
-                                        
                                         <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400">
                                             <User size={10}/> {getExecutorName(step)}
                                         </div>
@@ -318,7 +436,6 @@ export default function AdminDashboard() {
                                             <span className="ml-2 text-[10px] text-red-500 font-bold animate-pulse">Укажите человека!</span>
                                         )}
                                     </div>
-
                                     <div className="flex items-center gap-1 sm:gap-2 w-full sm:w-auto justify-end bg-slate-50 dark:bg-[#0F172A] p-1.5 rounded-xl border border-slate-100 dark:border-slate-800">
                                         <button onClick={() => moveStep(index, 'up')} disabled={index === 0} className="p-2 text-slate-400 hover:text-blue-500 hover:bg-white dark:hover:bg-[#1E293B] rounded-lg disabled:opacity-30 transition"><ArrowUp size={16}/></button>
                                         <button onClick={() => moveStep(index, 'down')} disabled={index === workflow.length - 1} className="p-2 text-slate-400 hover:text-blue-500 hover:bg-white dark:hover:bg-[#1E293B] rounded-lg disabled:opacity-30 transition"><ArrowDown size={16}/></button>
@@ -341,8 +458,7 @@ export default function AdminDashboard() {
                                 <div className="bg-white dark:bg-slate-800 p-3 rounded-2xl shadow-2xl border border-rose-500 ring-4 ring-rose-500/20 flex items-center gap-4">
                                     <span className="text-xs font-bold text-slate-700 dark:text-slate-200 pl-2">Маршрут изменен!</span>
                                     <button onClick={saveWorkflowToDB} disabled={savingId === "workflow"} className="px-6 py-3 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-black text-xs uppercase shadow-lg shadow-rose-500/40 flex items-center gap-2 transition">
-                                        {savingId === "workflow" ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>}
-                                        Сохранить для всех
+                                        {savingId === "workflow" ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} Сохранить для всех
                                     </button>
                                 </div>
                             </div>
@@ -357,10 +473,9 @@ export default function AdminDashboard() {
                             <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl"><Package size={24}/></div>
                             <div>
                                 <h2 className="font-black text-sm uppercase">Управление Складами</h2>
-                                <p className={`text-xs ${theme.textMuted} mt-1`}>Назначьте ответственных кладовщиков. Система сама направит им заявку в зависимости от категории товара.</p>
+                                <p className={`text-xs ${theme.textMuted} mt-1`}>Назначьте ответственных кладовщиков. Система сама направит им заявку.</p>
                             </div>
                         </div>
-                        
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {warehouses.map((wh) => (
                                 <div key={wh.id} className={`${theme.cardBg} rounded-[24px] border ${theme.cardBorder} shadow-sm flex flex-col`}>
@@ -375,7 +490,7 @@ export default function AdminDashboard() {
                                     <div className="p-5 flex-1">
                                         <label className={`text-[10px] font-bold uppercase ${theme.textMuted} block mb-1.5 ml-1`}>Ответственный Кладовщик</label>
                                         <select value={wh.manager_id || ""} onChange={(e) => handleUpdateWarehouseManager(wh.id, e.target.value)} className={`w-full ${theme.inputBg} border ${theme.cardBorder} rounded-xl p-3 text-xs font-bold ${theme.textMain} outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer appearance-none`}>
-                                            <option value="">Не назначен (Будет ошибка маршрута)</option>
+                                            <option value="">Не назначен</option>
                                             {activeEmployees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
                                         </select>
                                     </div>
@@ -390,7 +505,7 @@ export default function AdminDashboard() {
                     </div>
                 )}
 
-                {/* ВКЛАДКА 3: СТРУКТУРА (ОТДЕЛЫ И ЗАМЫ) */}
+                {/* ВКЛАДКА 3: СТРУКТУРА */}
                 {activeTab === "departments" && (
                     <div className="space-y-4">
                         <div className={`${theme.cardBg} p-5 rounded-2xl border ${theme.cardBorder} flex items-center gap-4 mb-6`}>
@@ -400,16 +515,15 @@ export default function AdminDashboard() {
                                 <p className={`text-xs ${theme.textMuted} mt-1`}>Назначайте руководителей и передавайте права замам на время отпуска.</p>
                             </div>
                         </div>
-                        
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                             {departments.map((dept) => (
                                 <div key={dept.id} className={`${theme.cardBg} rounded-[24px] border ${theme.cardBorder} shadow-sm overflow-hidden flex flex-col transition hover:border-rose-500/50`}>
                                     <div className={`p-4 border-b ${theme.cardBorder} flex justify-between items-center ${dept.is_head_absent ? (isDark ? "bg-amber-500/10" : "bg-amber-50") : (isDark ? "bg-[#0F172A]" : "bg-slate-50")}`}>
                                         <h3 className="font-black uppercase text-sm">{dept.name}</h3>
                                         {dept.is_head_absent ? (
-                                            <span className="bg-amber-500 text-white text-[9px] font-black uppercase px-2 py-1 rounded-md flex items-center gap-1 shadow-sm"><UserX size={12}/> И.О.</span>
+                                            <span className="bg-amber-500 text-white text-[9px] font-black uppercase px-2 py-1 rounded-md flex items-center gap-1"><UserX size={12}/> И.О.</span>
                                         ) : (
-                                            <span className="bg-emerald-500 text-white text-[9px] font-black uppercase px-2 py-1 rounded-md flex items-center gap-1 shadow-sm"><CheckCircle2 size={12}/> Штат</span>
+                                            <span className="bg-emerald-500 text-white text-[9px] font-black uppercase px-2 py-1 rounded-md flex items-center gap-1"><CheckCircle2 size={12}/> Штат</span>
                                         )}
                                     </div>
                                     <div className="p-5 flex-1 space-y-4">
@@ -440,7 +554,7 @@ export default function AdminDashboard() {
                                     </div>
                                     <div className={`p-4 border-t ${theme.cardBorder} ${isDark ? 'bg-[#0F172A]' : 'bg-slate-50'}`}>
                                         <button onClick={() => handleSaveDepartment(dept)} disabled={savingId === dept.id} className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2">
-                                            {savingId === dept.id ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} {savingId === dept.id ? "Сохранение..." : "Сохранить"}
+                                            {savingId === dept.id ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} Сохранить
                                         </button>
                                     </div>
                                 </div>
@@ -449,20 +563,25 @@ export default function AdminDashboard() {
                     </div>
                 )}
 
-                {/* ВКЛАДКА 4: БД СОТРУДНИКОВ */}
+                {/* ВКЛАДКА 4: БД СОТРУДНИКОВ (С РЕДАКТИРОВАНИЕМ) */}
                 {activeTab === "employees" && (
                     <div className={`${theme.cardBg} rounded-[24px] border ${theme.cardBorder} overflow-hidden shadow-sm`}>
                         <div className={`p-5 border-b ${theme.cardBorder} flex flex-col sm:flex-row justify-between items-center gap-4`}>
                             <h2 className="font-black uppercase text-sm flex items-center gap-2"><Users className="text-emerald-500" size={18}/> База Людей ({employees.length})</h2>
-                            <div className="relative w-full sm:w-64">
-                                <Search className="absolute left-3 top-2.5 text-slate-400" size={16}/>
-                                <input type="text" value={searchEmp} onChange={e => setSearchEmp(e.target.value)} placeholder="Поиск по ФИО..." className={`w-full ${theme.inputBg} border ${theme.cardBorder} rounded-xl py-2 pl-9 pr-4 text-xs font-bold outline-none focus:border-emerald-500`} />
+                            <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
+                                <div className="relative w-full sm:w-64">
+                                    <Search className="absolute left-3 top-2.5 text-slate-400" size={16}/>
+                                    <input type="text" value={searchEmp} onChange={e => setSearchEmp(e.target.value)} placeholder="Поиск по ФИО..." className={`w-full ${theme.inputBg} border ${theme.cardBorder} rounded-xl py-2 pl-9 pr-4 text-xs font-bold outline-none focus:border-emerald-500`} />
+                                </div>
+                                <button onClick={() => setEditingEmployee({ isNew: true, name: '', position: '', department: '', pin_code: '' })} className="w-full sm:w-auto px-4 py-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded-xl text-xs font-black flex items-center justify-center gap-1 transition">
+                                    <Plus size={16}/> Добавить
+                                </button>
                             </div>
                         </div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-xs">
                                 <thead className={`text-[10px] uppercase ${theme.textMuted} ${isDark ? 'bg-[#0F172A]' : 'bg-slate-50'}`}>
-                                    <tr><th className="p-4 font-black">ФИО</th><th className="p-4 font-black">Должность</th><th className="p-4 font-black">Отдел</th><th className="p-4 font-black text-center">Доступ (Активен)</th></tr>
+                                    <tr><th className="p-4 font-black">ФИО</th><th className="p-4 font-black">Должность</th><th className="p-4 font-black">Отдел</th><th className="p-4 font-black text-center">Действия</th></tr>
                                 </thead>
                                 <tbody>
                                     {employees.filter(e => e.name?.toLowerCase().includes(searchEmp.toLowerCase())).map(emp => (
@@ -470,10 +589,15 @@ export default function AdminDashboard() {
                                             <td className={`p-4 font-bold ${!emp.is_active && 'opacity-50 line-through'}`}>{emp.name}</td>
                                             <td className={`p-4 ${theme.textMuted}`}>{emp.position || '-'}</td>
                                             <td className="p-4"><span className={`px-2 py-1 rounded-md text-[9px] font-black ${isDark ? 'bg-[#0B1121] text-indigo-400' : 'bg-indigo-50 text-indigo-600'}`}>{emp.department || '-'}</span></td>
-                                            <td className="p-4 text-center">
-                                                <button onClick={() => toggleEmployeeActive(emp)} className={`p-1.5 rounded-lg transition ${emp.is_active ? 'bg-emerald-500/20 text-emerald-500' : 'bg-rose-500/20 text-rose-500'}`} title={emp.is_active ? "Отключить доступ (Уволен/Декрет)" : "Включить доступ"}>
-                                                    {emp.is_active ? <ToggleRight size={20}/> : <ToggleLeft size={20}/>}
-                                                </button>
+                                            <td className="p-4">
+                                                <div className="flex items-center justify-center gap-2">
+                                                    <button onClick={() => setEditingEmployee({ ...emp })} className="p-1.5 rounded-lg bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition" title="Редактировать">
+                                                        <Edit2 size={16}/>
+                                                    </button>
+                                                    <button onClick={() => toggleEmployeeActive(emp)} className={`p-1.5 rounded-lg transition ${emp.is_active ? 'bg-emerald-500/20 text-emerald-500' : 'bg-rose-500/20 text-rose-500'}`} title={emp.is_active ? "Отключить доступ (Уволен/Декрет)" : "Включить доступ"}>
+                                                        {emp.is_active ? <ToggleRight size={16}/> : <ToggleLeft size={16}/>}
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
@@ -483,20 +607,25 @@ export default function AdminDashboard() {
                     </div>
                 )}
 
-                {/* ВКЛАДКА 5: БД ТЕХНИКИ */}
+                {/* ВКЛАДКА 5: БД ТЕХНИКИ (С РЕДАКТИРОВАНИЕМ) */}
                 {activeTab === "equipment" && (
                     <div className={`${theme.cardBg} rounded-[24px] border ${theme.cardBorder} overflow-hidden shadow-sm`}>
                         <div className={`p-5 border-b ${theme.cardBorder} flex flex-col sm:flex-row justify-between items-center gap-4`}>
                             <h2 className="font-black uppercase text-sm flex items-center gap-2"><Tractor className="text-orange-500" size={18}/> Автопарк ({equipment.length})</h2>
-                            <div className="relative w-full sm:w-64">
-                                <Search className="absolute left-3 top-2.5 text-slate-400" size={16}/>
-                                <input type="text" value={searchEq} onChange={e => setSearchEq(e.target.value)} placeholder="Поиск (название, госномер)..." className={`w-full ${theme.inputBg} border ${theme.cardBorder} rounded-xl py-2 pl-9 pr-4 text-xs font-bold outline-none focus:border-orange-500`} />
+                            <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
+                                <div className="relative w-full sm:w-64">
+                                    <Search className="absolute left-3 top-2.5 text-slate-400" size={16}/>
+                                    <input type="text" value={searchEq} onChange={e => setSearchEq(e.target.value)} placeholder="Поиск (название, госномер)..." className={`w-full ${theme.inputBg} border ${theme.cardBorder} rounded-xl py-2 pl-9 pr-4 text-xs font-bold outline-none focus:border-orange-500`} />
+                                </div>
+                                <button onClick={() => setEditingEquipment({ isNew: true, name: '', inventory_number: '', type: '', department: '' })} className="w-full sm:w-auto px-4 py-2 bg-orange-100 text-orange-700 hover:bg-orange-200 rounded-xl text-xs font-black flex items-center justify-center gap-1 transition">
+                                    <Plus size={16}/> Добавить
+                                </button>
                             </div>
                         </div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-xs">
                                 <thead className={`text-[10px] uppercase ${theme.textMuted} ${isDark ? 'bg-[#0F172A]' : 'bg-slate-50'}`}>
-                                    <tr><th className="p-4 font-black">Марка / Название</th><th className="p-4 font-black">Госномер</th><th className="p-4 font-black">Тип</th><th className="p-4 font-black text-center">Статус (В строю)</th></tr>
+                                    <tr><th className="p-4 font-black">Марка / Название</th><th className="p-4 font-black">Госномер</th><th className="p-4 font-black">Тип</th><th className="p-4 font-black text-center">Действия</th></tr>
                                 </thead>
                                 <tbody>
                                     {equipment.filter(eq => (eq.name + eq.inventory_number).toLowerCase().includes(searchEq.toLowerCase())).map(eq => (
@@ -504,10 +633,15 @@ export default function AdminDashboard() {
                                             <td className={`p-4 font-bold ${!eq.is_active && 'opacity-50 line-through'}`}>{eq.name}</td>
                                             <td className="p-4"><span className={`px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-wider border ${isDark ? 'border-slate-700 text-slate-300' : 'border-slate-200 text-slate-700'}`}>{eq.inventory_number || 'Б/Н'}</span></td>
                                             <td className={`p-4 ${theme.textMuted}`}>{eq.type || '-'}</td>
-                                            <td className="p-4 text-center">
-                                                <button onClick={() => toggleEquipmentActive(eq)} className={`p-1.5 rounded-lg transition ${eq.is_active ? 'bg-orange-500/20 text-orange-500' : 'bg-slate-500/20 text-slate-500'}`} title={eq.is_active ? "Списать / В ремонт" : "Вернуть в строй"}>
-                                                    {eq.is_active ? <ToggleRight size={20}/> : <ToggleLeft size={20}/>}
-                                                </button>
+                                            <td className="p-4">
+                                                <div className="flex items-center justify-center gap-2">
+                                                    <button onClick={() => setEditingEquipment({ ...eq })} className="p-1.5 rounded-lg bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition" title="Редактировать">
+                                                        <Edit2 size={16}/>
+                                                    </button>
+                                                    <button onClick={() => toggleEquipmentActive(eq)} className={`p-1.5 rounded-lg transition ${eq.is_active ? 'bg-orange-500/20 text-orange-500' : 'bg-slate-500/20 text-slate-500'}`} title={eq.is_active ? "Списать / В ремонт" : "Вернуть в строй"}>
+                                                        {eq.is_active ? <ToggleRight size={16}/> : <ToggleLeft size={16}/>}
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
