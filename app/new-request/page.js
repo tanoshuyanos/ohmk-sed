@@ -1,5 +1,5 @@
 // ==========================================
-// ФАЙЛ №2: ЗАЯВКА (ВСЕ ПОЛЯ ОБЯЗАТЕЛЬНЫ + СЖАТИЕ ФОТО)
+// ФАЙЛ №2: ЗАЯВКА (ПОДРАЗДЕЛЕНИЕ ВО 2 ШАГЕ + ВСЕ ПРОВЕРКИ)
 // ПУТЬ К ФАЙЛУ: app/new-request/page.js
 // ==========================================
 
@@ -153,6 +153,10 @@ export default function NewRequest() {
         alert("⚠️ ОШИБКА: Пожалуйста, выберите Категорию / Тип услуги!");
         return;
     }
+    if (!dept) {
+        alert("⚠️ ОШИБКА: Пожалуйста, выберите Подразделение, на которое пойдет затрата!");
+        return;
+    }
     if (!reqDate) {
         alert("⚠️ ОШИБКА: Пожалуйста, укажите требуемую дату (когда это нужно)!");
         return;
@@ -243,7 +247,7 @@ export default function NewRequest() {
         employee_id: selectedEmp.id,
         employee_name: selectedEmp.name,
         action_type: 'НОВАЯ_ЗАЯВКА',
-        description: `Оформил заявку #${newReqNumber} (${costType})`
+        description: `Оформил заявку #${newReqNumber} (${costType}) для ${dept}`
     }]).then();
 
     if (type === "goods" && items.length > 0) {
@@ -360,14 +364,6 @@ export default function NewRequest() {
                         </div>
                     )}
                 </div>
-                {isAuthenticated && (
-                    <div className="animate-in fade-in slide-in-from-top-4">
-                        <label className="text-[10px] font-bold uppercase text-slate-400 block mb-2">Отдел <span className="text-red-500">*</span></label>
-                        <select value={dept} onChange={(e) => setDept(e.target.value)} className="w-full border rounded-2xl p-4 font-bold text-slate-700 bg-slate-50 border-slate-200 cursor-pointer appearance-none">
-                            {departments.map(d => <option key={d} value={d}>{d}</option>)}
-                        </select>
-                    </div>
-                )}
             </div>
 
             {/* ШАГ 2: ПАРАМЕТРЫ */}
@@ -381,16 +377,26 @@ export default function NewRequest() {
                             <button type="button" onClick={() => { setType("service"); setCostType(""); }} className={`flex-1 py-4 rounded-xl text-xs font-black uppercase transition ${type === "service" ? "bg-white shadow text-emerald-600" : "text-slate-500"}`}>Услуга</button>
                         </div>
                         <label className="text-[10px] font-bold uppercase text-slate-400 block mb-2">{type === "goods" ? "Категория" : "Тип услуги"} <span className="text-red-500">*</span></label>
-                        <select value={costType} onChange={(e) => setCostType(e.target.value)} className={`w-full border rounded-2xl p-4 font-bold text-slate-700 cursor-pointer appearance-none transition-all ${costType === "" ? "bg-blue-50 border-blue-400 animate-pulse" : "bg-slate-50 border-slate-200"}`}>
+                        <select value={costType} onChange={(e) => setCostType(e.target.value)} className={`w-full border rounded-2xl p-4 font-bold text-slate-700 cursor-pointer appearance-none transition-all outline-none focus:ring-2 focus:ring-blue-500 ${costType === "" ? "bg-blue-50 border-blue-400 animate-pulse" : "bg-slate-50 border-slate-200"}`}>
                             <option value="" disabled>👇 Выберите {type === "goods" ? "категорию" : "тип услуги"}</option>
                             {type === "goods" ? costCategories.map(c => <option key={c}>{c}</option>) : serviceTypes.map(s => <option key={s}>{s}</option>)}
                         </select>
                     </div>
+
+                    {/* 🔥 НОВОЕ МЕСТО ДЛЯ ОТДЕЛА 🔥 */}
+                    <div className="animate-in fade-in slide-in-from-top-2">
+                        <label className="text-[10px] font-bold uppercase text-slate-400 block mb-2">Подразделение (Для какого отдела) <span className="text-red-500">*</span></label>
+                        <select value={dept} onChange={(e) => setDept(e.target.value)} className={`w-full border rounded-2xl p-4 font-bold text-slate-700 cursor-pointer appearance-none transition-all outline-none focus:ring-2 focus:ring-blue-500 ${!dept ? "bg-blue-50 border-blue-400" : "bg-slate-50 border-slate-200"}`}>
+                            <option value="" disabled>👇 Выберите подразделение</option>
+                            {departments.map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                    </div>
+
                     <div>
                         <label className={`text-[10px] font-bold uppercase block mb-2 ${urgency === "urgent" ? "text-red-600 animate-pulse" : "text-slate-400"}`}>
                             {urgency === "urgent" ? "🔥 УРОВЕНЬ СРОЧНОСТИ 🔥" : "Срочность"} <span className="text-red-500">*</span>
                         </label>
-                        <select value={urgency} onChange={(e) => setUrgency(e.target.value)} className={`w-full border rounded-2xl p-4 font-black uppercase text-xs cursor-pointer appearance-none transition-all duration-300 ${urgency === "urgent" ? "bg-red-600 text-white border-red-600 scale-105" : "bg-slate-50 border-slate-200 text-slate-900"}`}>
+                        <select value={urgency} onChange={(e) => setUrgency(e.target.value)} className={`w-full border rounded-2xl p-4 font-black uppercase text-xs cursor-pointer appearance-none transition-all duration-300 outline-none ${urgency === "urgent" ? "bg-red-600 text-white border-red-600 scale-105" : "bg-slate-50 border-slate-200 text-slate-900 focus:ring-2 focus:ring-blue-500"}`}>
                             <option value="normal">Не срочно</option>
                             <option value="urgent">🔥 СРОЧНО (ПОЗВОНЯТ) 🔥</option>
                         </select>
